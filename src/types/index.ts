@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   name: string;
@@ -80,4 +79,21 @@ export interface Session {
   duration: string;
   status: 'upcoming' | 'ongoing' | 'completed';
   emargements?: Emargement[];
+}
+
+// Ajouter les nouveaux types pour les fonctionnalités
+export interface Feature {
+  title: string;
+  description?: string;
+  category: string;
+}
+
+export interface PricingPlan {
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  features: string[];
+  cta: string;
+  highlighted: boolean;
 }
