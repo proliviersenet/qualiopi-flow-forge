@@ -20,9 +20,9 @@ const HeroSection = () => {
                   Commencer gratuitement
                 </Button>
               </Link>
-              <Link to="/demo">
+              <Link to="/mockup">
                 <Button variant="outline" size="lg" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border-white/30">
-                  Voir la démo
+                  Voir la maquette
                 </Button>
               </Link>
             </div>

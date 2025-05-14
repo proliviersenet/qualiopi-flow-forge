@@ -16,9 +16,9 @@ const CtaSection = () => {
               S'inscrire gratuitement
             </Button>
           </Link>
-          <Link to="/demo">
+          <Link to="/mockup">
             <Button size="lg" variant="outline" className="border-white text-white hover:bg-blue-700">
-              Voir la démonstration
+              Voir la maquette
             </Button>
           </Link>
         </div>

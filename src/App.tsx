@@ -14,6 +14,7 @@ import Clients from "./pages/Clients";
 import Documents from "./pages/Documents";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
+import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/documents" element={<Documents />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
+          <Route path="/mockup" element={<Mockup />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
