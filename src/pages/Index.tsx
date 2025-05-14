@@ -97,7 +97,7 @@ const Index = () => {
                   </Link>
                   <Link to="/demo">
                     <Button variant="outline" size="lg" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border-white/30">
-                      Demander une démo
+                      Voir la démo
                     </Button>
                   </Link>
                 </div>
@@ -236,9 +236,9 @@ const Index = () => {
                   S'inscrire gratuitement
                 </Button>
               </Link>
-              <Link to="/contact">
+              <Link to="/demo">
                 <Button size="lg" variant="outline" className="border-white text-white hover:bg-blue-700">
-                  Nous contacter
+                  Voir la démonstration
                 </Button>
               </Link>
             </div>
