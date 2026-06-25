@@ -14,29 +14,32 @@ const Register = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [siretLoading, setSiretLoading] = useState(false);
+  const [siretTrouve, setSiretTrouve] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
+    siret: "",
+    siren: "",
+    raisonSociale: "",
+    nomComplet: "",
+    adresse: "",
+    codeNaf: "",
     email: "",
+    telephone: "",
     password: "",
     confirmPassword: "",
     role: "formateur_certifie",
-    siret: "",
-    raisonSociale: "",
-    adresse: "",
-    codeNaf: "",
-    telephone: "",
+    nda: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleRoleChange = (value: string) => {
-    setFormData({ ...formData, role: value });
+    setFormData(prev => ({ ...prev, role: value }));
   };
 
-  // Autocomplétion via proxy Supabase (contourne le CORS de l'API INSEE)
+  // Étape 1 — Recherche SIRET et pré-remplissage automatique
   const fetchSiret = async () => {
     const siret = formData.siret.replace(/\s/g, "");
     if (siret.length !== 14) {
@@ -44,40 +47,48 @@ const Register = () => {
       return;
     }
     setSiretLoading(true);
+    setSiretTrouve(false);
     try {
-      // API Annuaire des Entreprises — open data, sans token, CORS ouvert
       const resp = await fetch(
         `https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`,
         { headers: { "Accept": "application/json" } }
       );
       if (!resp.ok) throw new Error("Erreur lors de la recherche");
       const json = await resp.json();
-      if (!json.results?.length) throw new Error("Entreprise non trouvée pour ce SIRET");
-      const data = {
-        raison_sociale: json.results[0].nom_raison_sociale || json.results[0].nom_complet,
-        adresse_complete: json.results[0].siege?.adresse || "",
-        code_naf: json.results[0].activite_principale || "",
-      };
-      if (!data.raison_sociale) throw new Error("Entreprise non trouvée");
+      if (!json.results?.length) throw new Error("Entreprise non trouvée");
+
+      const r = json.results[0];
+      const siege = r.siege || {};
+
+      // Récupérer le NDA si disponible dans l'API
+      const nda = r.complements?.liste_id_organisme_formation?.[0] || "";
+
+      // Pré-remplir TOUS les champs automatiquement
       setFormData(prev => ({
         ...prev,
-        raisonSociale: data.raison_sociale,
-        adresse: data.adresse_complete,
-        codeNaf: data.code_naf,
+        siret,
+        siren: r.siren || siret.slice(0, 9),
+        raisonSociale: r.nom_raison_sociale || r.nom_complet || "",
+        nomComplet: r.nom_raison_sociale || r.nom_complet || "",
+        adresse: siege.adresse || "",
+        codeNaf: r.activite_principale || "",
+        nda,
       }));
-      toast({ title: "Entreprise trouvée", description: data.raison_sociale });
+      setSiretTrouve(true);
+      toast({ title: "Entreprise trouvée !", description: `${r.nom_raison_sociale || r.nom_complet} — données pré-remplies` });
     } catch (err) {
-      toast({ title: "SIRET non trouvé", description: err instanceof Error ? err.message : "Vérifiez le numéro ou saisissez manuellement", variant: "destructive" });
+      toast({ title: "SIRET non trouvé", description: err instanceof Error ? err.message : "Vérifiez le numéro", variant: "destructive" });
     } finally {
       setSiretLoading(false);
     }
   };
 
+  // Étape 2 — Création de l'espace (auth + organisme + profil)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
-      toast({ title: "Erreur", description: "Veuillez remplir tous les champs obligatoires", variant: "destructive" });
+    if (!formData.email || !formData.password || !formData.confirmPassword) {
+      toast({ title: "Erreur", description: "Email et mot de passe obligatoires", variant: "destructive" });
       return;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -85,7 +96,11 @@ const Register = () => {
       return;
     }
     if (formData.password.length < 8) {
-      toast({ title: "Erreur", description: "Le mot de passe doit contenir au moins 8 caractères", variant: "destructive" });
+      toast({ title: "Erreur", description: "Mot de passe : 8 caractères minimum", variant: "destructive" });
+      return;
+    }
+    if (!formData.siret) {
+      toast({ title: "SIRET requis", description: "Recherchez votre entreprise par SIRET pour créer votre espace", variant: "destructive" });
       return;
     }
 
@@ -95,44 +110,41 @@ const Register = () => {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: { nom_complet: formData.name }
-        }
+        options: { data: { nom_complet: formData.raisonSociale || formData.email } }
       });
-
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erreur lors de la création du compte");
 
-      // 2. Créer l'organisme si SIRET fourni
-      if (formData.siret && authData.user) {
-        await supabase.from("organismes").insert({
+      // 2. Créer l'organisme avec toutes les données SIRET
+      const { data: orgData, error: orgError } = await supabase
+        .from("organismes")
+        .insert({
           owner_user_id: authData.user.id,
-          siret: formData.siret.replace(/\s/g, ""),
-          siren: formData.siret.replace(/\s/g, "").slice(0, 9),
+          siret: formData.siret,
+          siren: formData.siren,
           raison_sociale: formData.raisonSociale,
           adresse: formData.adresse,
           code_naf: formData.codeNaf,
+          nda: formData.nda,
           email_contact: formData.email,
           telephone: formData.telephone,
-          nda: "",
-        });
-      }
+        })
+        .select("id")
+        .single();
 
-      // 3. Mettre à jour le profil avec le rôle
-      if (authData.user) {
-        await supabase.from("profiles").upsert({
-          id: authData.user.id,
-          email: formData.email,
-          nom_complet: formData.name,
-          role: formData.role,
-        });
-      }
+      if (orgError) throw orgError;
 
-      toast({
-        title: "Inscription réussie !",
-        description: "Votre espace QalioFlex est prêt.",
+      // 3. Mettre à jour le profil avec le rôle et l'organisme
+      await supabase.from("profiles").upsert({
+        id: authData.user.id,
+        email: formData.email,
+        nom_complet: formData.raisonSociale || formData.email,
+        role: formData.role,
+        organisme_id: orgData?.id,
+        onboarding_complete: true,
       });
 
+      toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — ${formData.raisonSociale}` });
       navigate("/dashboard");
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Une erreur est survenue";
@@ -157,82 +169,126 @@ const Register = () => {
             <CardHeader>
               <CardTitle>Créer votre espace formateur</CardTitle>
               <CardDescription>
-                Inscription gratuite — votre espace Qualiopi est prêt en 2 minutes
+                Commencez par votre SIRET — vos informations sont pré-remplies automatiquement
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">
 
-                {/* Identité */}
+                {/* ÉTAPE 1 — SIRET */}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nom complet *</Label>
-                  <Input id="name" name="name" placeholder="Olivier Senet" value={formData.name} onChange={handleChange} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email professionnel *</Label>
-                  <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="telephone">Téléphone</Label>
-                  <Input id="telephone" name="telephone" placeholder="06 07 46 74 09" value={formData.telephone} onChange={handleChange} />
-                </div>
-
-                {/* SIRET + autocomplétion */}
-                <div className="space-y-2">
-                  <Label htmlFor="siret">SIRET — complétion automatique</Label>
+                  <Label htmlFor="siret">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">1</span>
+                      SIRET de votre entreprise *
+                    </span>
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       id="siret" name="siret"
-                      placeholder="89278745800017"
+                      placeholder="14 chiffres — ex : 89278745800017"
                       maxLength={14}
                       value={formData.siret}
                       onChange={handleChange}
                       className="flex-1"
                     />
                     <Button type="button" variant="outline" onClick={fetchSiret} disabled={siretLoading}>
-                      {siretLoading ? "..." : "Rechercher"}
+                      {siretLoading ? "Recherche..." : "Rechercher"}
                     </Button>
                   </div>
                 </div>
 
-                {formData.raisonSociale && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-                    <strong>{formData.raisonSociale}</strong><br />
-                    {formData.adresse}<br />
-                    NAF : {formData.codeNaf}
+                {/* Résultat SIRET — données auto-remplies */}
+                {siretTrouve && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
+                      <span>✓</span> Entreprise trouvée — informations pré-remplies
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs text-gray-500">Raison sociale</Label>
+                        <p className="text-sm font-medium">{formData.raisonSociale}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-gray-500">Adresse</Label>
+                        <p className="text-sm">{formData.adresse}</p>
+                      </div>
+                      <div className="flex gap-4">
+                        <div>
+                          <Label className="text-xs text-gray-500">Code NAF</Label>
+                          <p className="text-sm">{formData.codeNaf}</p>
+                        </div>
+                        {formData.nda && (
+                          <div>
+                            <Label className="text-xs text-gray-500">NDA Formation</Label>
+                            <p className="text-sm font-medium text-blue-600">{formData.nda}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* Rôle */}
-                <div className="space-y-2">
-                  <Label>Je suis *</Label>
-                  <RadioGroup value={formData.role} onValueChange={handleRoleChange} className="flex flex-col space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="formateur_certifie" id="formateur_certifie" />
-                      <Label htmlFor="formateur_certifie">Formateur indépendant certifié Qualiopi</Label>
+                {/* ÉTAPE 2 — Email + Tel */}
+                {siretTrouve && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">2</span>
+                          Email professionnel *
+                        </span>
+                      </Label>
+                      <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="of_complet" id="of_complet" />
-                      <Label htmlFor="of_complet">Organisme de formation (OF)</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="telephone">Téléphone</Label>
+                      <Input id="telephone" name="telephone" placeholder="06 07 46 74 09" value={formData.telephone} onChange={handleChange} />
                     </div>
-                  </RadioGroup>
-                </div>
 
-                {/* Mot de passe */}
-                <div className="space-y-2">
-                  <Label htmlFor="password">Mot de passe *</Label>
-                  <Input id="password" name="password" type="password" placeholder="8 caractères minimum" value={formData.password} onChange={handleChange} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-                  <Input id="confirmPassword" name="confirmPassword" type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={handleChange} required />
-                </div>
+                    {/* Rôle */}
+                    <div className="space-y-2">
+                      <Label>Je suis *</Label>
+                      <RadioGroup value={formData.role} onValueChange={handleRoleChange} className="flex flex-col space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="formateur_certifie" id="formateur_certifie" />
+                          <Label htmlFor="formateur_certifie">Formateur indépendant certifié Qualiopi</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="of_complet" id="of_complet" />
+                          <Label htmlFor="of_complet">Organisme de formation (OF)</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    {/* Mot de passe */}
+                    <div className="space-y-2">
+                      <Label htmlFor="password">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">3</span>
+                          Mot de passe *
+                        </span>
+                      </Label>
+                      <Input id="password" name="password" type="password" placeholder="8 caractères minimum" value={formData.password} onChange={handleChange} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
+                      <Input id="confirmPassword" name="confirmPassword" type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={handleChange} required />
+                    </div>
+                  </>
+                )}
 
               </CardContent>
               <CardFooter className="flex flex-col">
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Création de votre espace..." : "Créer mon espace QalioFlex"}
-                </Button>
+                {siretTrouve ? (
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? "Création de votre espace..." : `Créer l'espace ${formData.raisonSociale}`}
+                  </Button>
+                ) : (
+                  <p className="text-sm text-gray-500 text-center">
+                    Saisissez votre SIRET et cliquez sur Rechercher pour commencer
+                  </p>
+                )}
                 <p className="mt-4 text-center text-sm text-gray-600">
                   Déjà un compte ?{" "}
                   <Link to="/login" className="text-blue-600 hover:underline">Se connecter</Link>
