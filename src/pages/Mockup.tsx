@@ -18,7 +18,7 @@ const Mockup = () => {
             <div className="w-10 h-10 rounded-md bg-blue-600 mr-3 flex items-center justify-center">
               <span className="text-white font-bold">FP</span>
             </div>
-            <h1 className="text-xl font-bold text-blue-600">FormationPro</h1>
+            <h1 className="text-xl font-bold text-blue-600">QalioFlex</h1>
           </div>
           <div className="flex space-x-4">
             <div className="w-8 h-8 rounded-full bg-gray-200"></div>

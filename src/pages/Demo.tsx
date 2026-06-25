@@ -56,7 +56,7 @@ const Demo = () => {
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Démonstration de FormationPro</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Démonstration de QalioFlex</h1>
             <p className="text-lg text-gray-600">
               Découvrez les fonctionnalités clés de notre application pour gérer vos formations
             </p>
@@ -402,7 +402,7 @@ const Demo = () => {
                     </div>
                     <div>
                       <h2 className="text-2xl font-semibold">Conformité Qualiopi</h2>
-                      <p className="text-gray-600">Gérez facilement votre certification qualité avec FormationPro</p>
+                      <p className="text-gray-600">Gérez facilement votre certification qualité avec QalioFlex</p>
                     </div>
                   </div>
                   

@@ -37,7 +37,7 @@ const Header = ({ user, onLogout }: HeaderProps) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link to="/" className="flex items-center">
-              <span className="text-blue-600 text-2xl font-bold">FormationPro</span>
+              <span className="text-blue-600 text-2xl font-bold">QalioFlex</span>
             </Link>
           </div>
 

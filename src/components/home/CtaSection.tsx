@@ -8,7 +8,7 @@ const CtaSection = () => {
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-3xl font-bold mb-6">Prêt à simplifier votre gestion administrative ?</h2>
         <p className="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
-          Rejoignez des centaines de formateurs qui ont déjà transformé leur façon de gérer leurs formations avec FormationPro.
+          Rejoignez des centaines de formateurs qui ont déjà transformé leur façon de gérer leurs formations avec QalioFlex.
         </p>
         <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
           <Link to="/register">

@@ -77,7 +77,7 @@ const FeaturesSection = () => {
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold text-gray-900">Toutes les fonctionnalités dont vous avez besoin</h2>
           <p className="mt-4 text-xl text-gray-600">
-            FormationPro vous offre des outils puissants pour gérer vos formations en toute simplicité
+            QalioFlex vous offre des outils puissants pour gérer vos formations en toute simplicité
           </p>
         </div>
         
