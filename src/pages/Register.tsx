@@ -45,10 +45,20 @@ const Register = () => {
     }
     setSiretLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("sirene-proxy", {
-        body: { siret },
-      });
-      if (error || data?.error) throw new Error(data?.error || error?.message || "Entreprise non trouvée");
+      // API Annuaire des Entreprises — open data, sans token, CORS ouvert
+      const resp = await fetch(
+        `https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`,
+        { headers: { "Accept": "application/json" } }
+      );
+      if (!resp.ok) throw new Error("Erreur lors de la recherche");
+      const json = await resp.json();
+      if (!json.results?.length) throw new Error("Entreprise non trouvée pour ce SIRET");
+      const data = {
+        raison_sociale: json.results[0].nom_raison_sociale || json.results[0].nom_complet,
+        adresse_complete: json.results[0].siege?.adresse || "",
+        code_naf: json.results[0].activite_principale || "",
+      };
+      if (!data.raison_sociale) throw new Error("Entreprise non trouvée");
       setFormData(prev => ({
         ...prev,
         raisonSociale: data.raison_sociale,
