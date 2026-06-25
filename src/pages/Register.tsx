@@ -36,7 +36,7 @@ const Register = () => {
     setFormData({ ...formData, role: value });
   };
 
-  // Autocomplétion via API Sirene INSEE
+  // Autocomplétion via proxy Supabase (contourne le CORS de l'API INSEE)
   const fetchSiret = async () => {
     const siret = formData.siret.replace(/\s/g, "");
     if (siret.length !== 14) {
@@ -45,29 +45,19 @@ const Register = () => {
     }
     setSiretLoading(true);
     try {
-      const resp = await fetch(
-        `https://api.insee.fr/entreprises/sirene/V3.11/siret/${siret}`,
-        { headers: { "Authorization": "Bearer 6240282d-6270-4698-8028-2d6270f69821", "Accept": "application/json" } }
-      );
-      if (!resp.ok) throw new Error("Entreprise non trouvée");
-      const data = await resp.json();
-      const u = data.etablissement;
-      const nom = u.uniteLegale?.denominationUniteLegale ||
-        `${u.uniteLegale?.prenomUsuelUniteLegale || ""} ${u.uniteLegale?.nomUniteLegale || ""}`.trim();
-      const naf = u.uniteLegale?.activitePrincipaleUniteLegale || "";
-      const cp = u.adresseEtablissement?.codePostalEtablissement || "";
-      const ville = u.adresseEtablissement?.libelleCommuneEtablissement || "";
-      const voie = u.adresseEtablissement?.libelleVoieEtablissement || "";
-      const numVoie = u.adresseEtablissement?.numeroVoieEtablissement || "";
+      const { data, error } = await supabase.functions.invoke("sirene-proxy", {
+        body: { siret },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Entreprise non trouvée");
       setFormData(prev => ({
         ...prev,
-        raisonSociale: nom,
-        adresse: `${numVoie} ${voie}, ${cp} ${ville}`.trim(),
-        codeNaf: naf,
+        raisonSociale: data.raison_sociale,
+        adresse: data.adresse_complete,
+        codeNaf: data.code_naf,
       }));
-      toast({ title: "Entreprise trouvée", description: nom });
-    } catch {
-      toast({ title: "SIRET non trouvé", description: "Vérifiez le numéro ou saisissez manuellement", variant: "destructive" });
+      toast({ title: "Entreprise trouvée", description: data.raison_sociale });
+    } catch (err) {
+      toast({ title: "SIRET non trouvé", description: err instanceof Error ? err.message : "Vérifiez le numéro ou saisissez manuellement", variant: "destructive" });
     } finally {
       setSiretLoading(false);
     }
