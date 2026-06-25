@@ -50,7 +50,7 @@ const Login = () => {
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
             <Link to="/" className="inline-block">
-              <span className="text-blue-600 text-2xl font-bold">QalioFlex</span>
+              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
               <span className="text-gray-400 text-xs block">by ExSenCo</span>
             </Link>
           </div>
@@ -68,7 +68,7 @@ const Login = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Mot de passe</Label>
-                    <Link to="/reset-password" className="text-xs text-blue-600 hover:underline">Mot de passe oublié ?</Link>
+                    <Link to="/reset-password" className="text-xs text-exsenco-blue hover:underline">Mot de passe oublié ?</Link>
                   </div>
                   <div className="relative">
                     <Input
@@ -97,7 +97,7 @@ const Login = () => {
                 </Button>
                 <p className="mt-4 text-center text-sm text-gray-600">
                   Pas encore de compte ?{" "}
-                  <Link to="/register" className="text-blue-600 hover:underline">Créer mon espace</Link>
+                  <Link to="/register" className="text-exsenco-blue hover:underline">Créer mon espace</Link>
                 </p>
               </CardFooter>
             </form>

@@ -132,7 +132,7 @@ const Demo = () => {
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex flex-col items-center">
-                      <div className="text-4xl font-bold text-blue-600 mb-2">12</div>
+                      <div className="text-4xl font-bold text-exsenco-blue mb-2">12</div>
                       <div className="text-gray-500 text-center">Formations actives</div>
                     </div>
                   </CardContent>
@@ -140,7 +140,7 @@ const Demo = () => {
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex flex-col items-center">
-                      <div className="text-4xl font-bold text-blue-600 mb-2">245</div>
+                      <div className="text-4xl font-bold text-exsenco-blue mb-2">245</div>
                       <div className="text-gray-500 text-center">Participants total</div>
                     </div>
                   </CardContent>
@@ -148,7 +148,7 @@ const Demo = () => {
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex flex-col items-center">
-                      <div className="text-4xl font-bold text-blue-600 mb-2">95%</div>
+                      <div className="text-4xl font-bold text-exsenco-blue mb-2">95%</div>
                       <div className="text-gray-500 text-center">Taux de satisfaction</div>
                     </div>
                   </CardContent>
@@ -220,11 +220,11 @@ const Demo = () => {
                       <CardContent className="p-4">
                         <h3 className="font-medium mb-1">Conventions</h3>
                         <div className="flex justify-between items-center">
-                          <span className="text-2xl font-bold text-blue-600">85%</span>
+                          <span className="text-2xl font-bold text-exsenco-blue">85%</span>
                           <span className="text-sm text-gray-500">17/20</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: "85%" }}></div>
+                          <div className="bg-exsenco-blue h-2.5 rounded-full" style={{ width: "85%" }}></div>
                         </div>
                       </CardContent>
                     </Card>
@@ -232,11 +232,11 @@ const Demo = () => {
                       <CardContent className="p-4">
                         <h3 className="font-medium mb-1">Questionnaires</h3>
                         <div className="flex justify-between items-center">
-                          <span className="text-2xl font-bold text-blue-600">70%</span>
+                          <span className="text-2xl font-bold text-exsenco-blue">70%</span>
                           <span className="text-sm text-gray-500">14/20</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: "70%" }}></div>
+                          <div className="bg-exsenco-blue h-2.5 rounded-full" style={{ width: "70%" }}></div>
                         </div>
                       </CardContent>
                     </Card>
@@ -244,11 +244,11 @@ const Demo = () => {
                       <CardContent className="p-4">
                         <h3 className="font-medium mb-1">Émargements</h3>
                         <div className="flex justify-between items-center">
-                          <span className="text-2xl font-bold text-blue-600">100%</span>
+                          <span className="text-2xl font-bold text-exsenco-blue">100%</span>
                           <span className="text-sm text-gray-500">20/20</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: "100%" }}></div>
+                          <div className="bg-exsenco-blue h-2.5 rounded-full" style={{ width: "100%" }}></div>
                         </div>
                       </CardContent>
                     </Card>
@@ -256,11 +256,11 @@ const Demo = () => {
                       <CardContent className="p-4">
                         <h3 className="font-medium mb-1">Évaluations</h3>
                         <div className="flex justify-between items-center">
-                          <span className="text-2xl font-bold text-blue-600">90%</span>
+                          <span className="text-2xl font-bold text-exsenco-blue">90%</span>
                           <span className="text-sm text-gray-500">18/20</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: "90%" }}></div>
+                          <div className="bg-exsenco-blue h-2.5 rounded-full" style={{ width: "90%" }}></div>
                         </div>
                       </CardContent>
                     </Card>
@@ -309,7 +309,7 @@ const Demo = () => {
                                 document.status === "Envoyé" 
                                   ? "bg-green-100 text-green-800"
                                   : document.status === "Téléchargé"
-                                  ? "bg-blue-100 text-blue-800"
+                                  ? "bg-exsenco-orange-light text-blue-800"
                                   : document.status === "En attente"
                                   ? "bg-yellow-100 text-yellow-800"
                                   : "bg-gray-100 text-gray-800"
@@ -394,7 +394,7 @@ const Demo = () => {
                 <CardContent className="p-6">
                   <div className="flex items-center mb-6">
                     <div className="mr-4">
-                      <div className="bg-blue-600 p-3 rounded-full">
+                      <div className="bg-exsenco-blue p-3 rounded-full">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
@@ -476,7 +476,7 @@ const Demo = () => {
                           <p className="font-bold">85%</p>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: "85%" }}></div>
+                          <div className="bg-exsenco-blue h-2.5 rounded-full" style={{ width: "85%" }}></div>
                         </div>
                       </div>
                       

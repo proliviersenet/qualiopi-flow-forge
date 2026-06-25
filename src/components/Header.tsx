@@ -37,22 +37,22 @@ const Header = ({ user, onLogout }: HeaderProps) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link to="/" className="flex items-center">
-              <span className="text-blue-600 text-2xl font-bold">QalioFlex</span>
+              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
             </Link>
           </div>
 
           {!isMobile && (
             <nav className="hidden md:flex items-center space-x-6">
-              <Link to="/dashboard" className="text-gray-700 hover:text-blue-600 font-medium">
+              <Link to="/dashboard" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Tableau de bord
               </Link>
-              <Link to="/formations" className="text-gray-700 hover:text-blue-600 font-medium">
+              <Link to="/formations" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Formations
               </Link>
-              <Link to="/clients" className="text-gray-700 hover:text-blue-600 font-medium">
+              <Link to="/clients" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Clients
               </Link>
-              <Link to="/documents" className="text-gray-700 hover:text-blue-600 font-medium">
+              <Link to="/documents" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Documents
               </Link>
             </nav>
@@ -65,7 +65,7 @@ const Header = ({ user, onLogout }: HeaderProps) => {
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={user.profileImage} alt={user.name} />
-                      <AvatarFallback className="bg-blue-600 text-white">
+                      <AvatarFallback className="bg-exsenco-blue text-white">
                         {user.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -129,28 +129,28 @@ const Header = ({ user, onLogout }: HeaderProps) => {
           <nav className="mt-4 pb-4 flex flex-col space-y-2">
             <Link
               to="/dashboard"
-              className="text-gray-700 hover:text-blue-600 font-medium py-2 px-4 rounded hover:bg-gray-50"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
               onClick={() => setShowMobileMenu(false)}
             >
               Tableau de bord
             </Link>
             <Link
               to="/formations"
-              className="text-gray-700 hover:text-blue-600 font-medium py-2 px-4 rounded hover:bg-gray-50"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
               onClick={() => setShowMobileMenu(false)}
             >
               Formations
             </Link>
             <Link
               to="/clients"
-              className="text-gray-700 hover:text-blue-600 font-medium py-2 px-4 rounded hover:bg-gray-50"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
               onClick={() => setShowMobileMenu(false)}
             >
               Clients
             </Link>
             <Link
               to="/documents"
-              className="text-gray-700 hover:text-blue-600 font-medium py-2 px-4 rounded hover:bg-gray-50"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
               onClick={() => setShowMobileMenu(false)}
             >
               Documents

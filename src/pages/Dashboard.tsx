@@ -262,14 +262,14 @@ const Dashboard = () => {
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                           s.statut === 'terminee' ? 'bg-green-100 text-green-700' :
-                          s.statut === 'en_cours' ? 'bg-blue-100 text-blue-700' :
+                          s.statut === 'en_cours' ? 'bg-exsenco-orange-light text-exsenco-blue' :
                           'bg-gray-100 text-gray-600'
                         }`}>{s.statut as string}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm">Aucune session pour l'instant. <a href="/formations/creation" className="text-blue-600 hover:underline">Créer votre première formation</a></p>
+                  <p className="text-gray-500 text-sm">Aucune session pour l'instant. <a href="/formations/creation" className="text-exsenco-blue hover:underline">Créer votre première formation</a></p>
                 )}
               </Card>
             </TabsContent>
@@ -279,10 +279,10 @@ const Dashboard = () => {
                 <h3 className="text-lg font-medium mb-2">Conformité Qualiopi</h3>
                 <p className="text-sm text-gray-500 mb-4">Indicateurs validés dans votre checklist</p>
                 <div className="flex items-center gap-4">
-                  <div className="text-4xl font-bold text-blue-600">{stats.indicateursOk}</div>
+                  <div className="text-4xl font-bold text-exsenco-blue">{stats.indicateursOk}</div>
                   <div className="text-gray-500 text-sm">indicateurs validés<br />sur 32 au référentiel</div>
                   <div className="flex-1 bg-gray-200 rounded-full h-3">
-                    <div className="bg-blue-600 h-3 rounded-full transition-all" style={{ width: `${(stats.indicateursOk / 32) * 100}%` }}></div>
+                    <div className="bg-exsenco-blue h-3 rounded-full transition-all" style={{ width: `${(stats.indicateursOk / 32) * 100}%` }}></div>
                   </div>
                   <div className="text-sm font-medium">{Math.round((stats.indicateursOk / 32) * 100)}%</div>
                 </div>

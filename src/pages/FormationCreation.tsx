@@ -106,7 +106,7 @@ const FormationCreation = () => {
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center mb-6">
-            <Link to="/formations" className="text-blue-600 hover:text-blue-800 mr-2">
+            <Link to="/formations" className="text-exsenco-blue hover:text-blue-800 mr-2">
               &larr; Retour aux formations
             </Link>
           </div>
@@ -118,14 +118,14 @@ const FormationCreation = () => {
               {[1, 2, 3].map((step) => (
                 <div 
                   key={step} 
-                  className={`flex flex-col items-center ${step < currentStep ? "text-blue-600" : step === currentStep ? "text-blue-800" : "text-gray-400"}`}
+                  className={`flex flex-col items-center ${step < currentStep ? "text-exsenco-blue" : step === currentStep ? "text-blue-800" : "text-gray-400"}`}
                 >
                   <div 
                     className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 
                       ${step < currentStep 
-                        ? "bg-blue-600 text-white" 
+                        ? "bg-exsenco-blue text-white" 
                         : step === currentStep 
-                        ? "bg-blue-100 text-blue-800 border-2 border-blue-600" 
+                        ? "bg-exsenco-orange-light text-blue-800 border-2 border-exsenco-blue" 
                         : "bg-gray-100 text-gray-400"}`}
                   >
                     {step < currentStep ? (
@@ -145,7 +145,7 @@ const FormationCreation = () => {
             
             <div className="h-2 bg-gray-200 rounded-full max-w-3xl mx-auto">
               <div 
-                className="h-full bg-blue-600 rounded-full transition-all" 
+                className="h-full bg-exsenco-blue rounded-full transition-all" 
                 style={{ width: `${(currentStep - 1) * 50}%` }}  
               ></div>
             </div>

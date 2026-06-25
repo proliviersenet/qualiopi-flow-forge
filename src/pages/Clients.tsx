@@ -223,7 +223,7 @@ const Clients = () => {
                         <div className="flex items-center">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
                             checked={selectedClients.length === filteredClients.length && filteredClients.length > 0}
                             onChange={selectAllClients}
                           />
@@ -249,7 +249,7 @@ const Clients = () => {
                           <TableCell>
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
                               checked={selectedClients.includes(client.id)}
                               onChange={() => toggleSelectClient(client.id)}
                             />
@@ -259,7 +259,7 @@ const Clients = () => {
                               <div className="flex flex-col">
                                 <Link 
                                   to={`/clients/${client.id}`}
-                                  className="font-medium text-blue-600 hover:text-blue-800"
+                                  className="font-medium text-exsenco-blue hover:text-blue-800"
                                 >
                                   {client.name}
                                 </Link>

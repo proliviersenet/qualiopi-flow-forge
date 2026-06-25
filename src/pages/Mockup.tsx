@@ -15,10 +15,10 @@ const Mockup = () => {
       <div className="bg-white py-4 px-6 border-b border-gray-200 sticky top-0 z-10">
         <div className="flex justify-between items-center">
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-md bg-blue-600 mr-3 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-exsenco-blue mr-3 flex items-center justify-center">
               <span className="text-white font-bold">FP</span>
             </div>
-            <h1 className="text-xl font-bold text-blue-600">QalioFlex</h1>
+            <h1 className="text-xl font-bold text-exsenco-blue">QalioFlex</h1>
           </div>
           <div className="flex space-x-4">
             <div className="w-8 h-8 rounded-full bg-gray-200"></div>
@@ -33,7 +33,7 @@ const Mockup = () => {
         <div className="hidden md:block w-64 bg-white border-r border-gray-200 p-4">
           <div className="space-y-6">
             <div className="space-y-2">
-              <div className="px-3 py-2 rounded-md bg-blue-50 text-blue-700 font-medium">Dashboard</div>
+              <div className="px-3 py-2 rounded-md bg-orange-50 text-exsenco-blue font-medium">Dashboard</div>
               <div className="px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">Formations</div>
               <div className="px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">Participants</div>
               <div className="px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">Documents</div>
@@ -69,7 +69,7 @@ const Mockup = () => {
                   <Card key={i} className="shadow-sm">
                     <CardContent className="p-6">
                       <div className="flex flex-col items-center text-center">
-                        <div className="text-3xl font-bold text-blue-600 mb-1">
+                        <div className="text-3xl font-bold text-exsenco-blue mb-1">
                           {i === 0 ? '12' : i === 1 ? '245' : '95%'}
                         </div>
                         <div className="text-gray-500">{title}</div>
@@ -113,8 +113,8 @@ const Mockup = () => {
                         {action: "Évaluation complétée", user: "Sophie Bernard", time: "il y a 1j"}
                       ].map((activity, i) => (
                         <div key={i} className="flex items-start">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3 mt-1">
-                            <span className="text-blue-600 text-xs font-bold">{activity.action[0]}</span>
+                          <div className="w-8 h-8 rounded-full bg-exsenco-orange-light flex items-center justify-center mr-3 mt-1">
+                            <span className="text-exsenco-blue text-xs font-bold">{activity.action[0]}</span>
                           </div>
                           <div>
                             <div className="font-medium">{activity.action}</div>
@@ -135,7 +135,7 @@ const Mockup = () => {
                         <div className="text-gray-500 mb-2">Graphique de satisfaction</div>
                         <div className="flex items-end justify-center h-32 space-x-4 px-6">
                           {[75, 82, 90, 85, 95].map((height, i) => (
-                            <div key={i} className="w-6 bg-blue-600" style={{ height: `${height}%` }}></div>
+                            <div key={i} className="w-6 bg-exsenco-blue" style={{ height: `${height}%` }}></div>
                           ))}
                         </div>
                         <div className="text-gray-500 mt-2 text-sm">Dernières 5 formations</div>
@@ -371,21 +371,21 @@ const Mockup = () => {
                       <div className="space-y-3">
                         <div className="p-3 bg-gray-50 rounded-md flex items-center justify-between">
                           <div className="flex items-center">
-                            <div className="w-6 h-8 bg-blue-100 mr-3"></div>
+                            <div className="w-6 h-8 bg-exsenco-orange-light mr-3"></div>
                             <span>Convention de formation</span>
                           </div>
                           <span className="text-green-600 text-sm">✓ Signé</span>
                         </div>
                         <div className="p-3 bg-gray-50 rounded-md flex items-center justify-between">
                           <div className="flex items-center">
-                            <div className="w-6 h-8 bg-blue-100 mr-3"></div>
+                            <div className="w-6 h-8 bg-exsenco-orange-light mr-3"></div>
                             <span>Questionnaire pré-formation</span>
                           </div>
                           <span className="text-yellow-600 text-sm">En attente</span>
                         </div>
                         <div className="p-3 bg-gray-50 rounded-md flex items-center justify-between">
                           <div className="flex items-center">
-                            <div className="w-6 h-8 bg-blue-100 mr-3"></div>
+                            <div className="w-6 h-8 bg-exsenco-orange-light mr-3"></div>
                             <span>Attestation de présence</span>
                           </div>
                           <span className="text-gray-600 text-sm">Non généré</span>
@@ -427,7 +427,7 @@ const Mockup = () => {
                       <Card key={i} className="shadow-sm">
                         <CardContent className="p-4">
                           <div className="flex items-center mb-2">
-                            <div className="w-8 h-10 bg-blue-100 mr-3"></div>
+                            <div className="w-8 h-10 bg-exsenco-orange-light mr-3"></div>
                             <div className="font-medium">{doc}</div>
                           </div>
                           <div className="flex justify-end mt-4">

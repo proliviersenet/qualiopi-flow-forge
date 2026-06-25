@@ -291,7 +291,7 @@ const FormationCard = ({ formation, onDelete, onDuplicate }: FormationCardProps)
         <div className="p-6 flex-grow">
           <div className="flex justify-between items-start mb-3">
             <Link to={`/formations/${formation.id}`}>
-              <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+              <h3 className="text-lg font-semibold text-exsenco-blue hover:text-blue-800 transition-colors">
                 {formation.title}
               </h3>
             </Link>

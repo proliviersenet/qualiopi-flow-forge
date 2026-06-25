@@ -10,7 +10,7 @@ const Footer = () => {
         <div className="md:flex md:justify-between">
           <div className="mb-6 md:mb-0">
             <Link to="/" className="flex items-center">
-              <span className="text-blue-600 text-xl font-bold">QalioFlex</span>
+              <span className="text-exsenco-blue text-xl font-bold">QalioFlex</span>
             </Link>
             <p className="mt-2 text-sm text-gray-600 max-w-md">
               La plateforme qui simplifie la gestion administrative des formations

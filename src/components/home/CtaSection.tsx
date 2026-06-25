@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 const CtaSection = () => {
   return (
-    <section className="py-16 bg-blue-600 text-white">
+    <section className="py-16 bg-exsenco-blue text-white">
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-3xl font-bold mb-6">Prêt à simplifier votre gestion administrative ?</h2>
         <p className="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
@@ -12,12 +12,12 @@ const CtaSection = () => {
         </p>
         <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
           <Link to="/register">
-            <Button size="lg" variant="default" className="bg-white text-blue-600 hover:bg-blue-50">
+            <Button size="lg" variant="default" className="bg-white text-exsenco-blue hover:bg-orange-50">
               S'inscrire gratuitement
             </Button>
           </Link>
           <Link to="/mockup">
-            <Button size="lg" variant="outline" className="border-white text-white hover:bg-blue-700">
+            <Button size="lg" variant="outline" className="border-white text-white hover:bg-exsenco-blue">
               Voir la maquette
             </Button>
           </Link>

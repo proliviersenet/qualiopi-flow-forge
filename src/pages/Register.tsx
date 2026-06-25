@@ -163,7 +163,7 @@ const Register = () => {
         <div className="w-full max-w-lg">
           <div className="mb-6 text-center">
             <Link to="/" className="inline-block">
-              <span className="text-blue-600 text-2xl font-bold">QalioFlex</span>
+              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
               <span className="text-gray-400 text-xs block">by ExSenCo</span>
             </Link>
           </div>
@@ -182,7 +182,7 @@ const Register = () => {
                 <div className="space-y-2">
                   <Label htmlFor="siret">
                     <span className="inline-flex items-center gap-1">
-                      <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">1</span>
+                      <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">1</span>
                       SIRET de votre entreprise *
                     </span>
                   </Label>
@@ -224,7 +224,7 @@ const Register = () => {
                         {formData.nda && (
                           <div>
                             <Label className="text-xs text-gray-500">NDA Formation</Label>
-                            <p className="text-sm font-medium text-blue-600">{formData.nda}</p>
+                            <p className="text-sm font-medium text-exsenco-blue">{formData.nda}</p>
                           </div>
                         )}
                       </div>
@@ -238,7 +238,7 @@ const Register = () => {
                     <div className="space-y-2">
                       <Label htmlFor="email">
                         <span className="inline-flex items-center gap-1">
-                          <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">2</span>
+                          <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">2</span>
                           Email professionnel *
                         </span>
                       </Label>
@@ -268,7 +268,7 @@ const Register = () => {
                     <div className="space-y-2">
                       <Label htmlFor="password">
                         <span className="inline-flex items-center gap-1">
-                          <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">3</span>
+                          <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">3</span>
                           Mot de passe *
                         </span>
                       </Label>
@@ -304,7 +304,7 @@ const Register = () => {
                 )}
                 <p className="mt-4 text-center text-sm text-gray-600">
                   Déjà un compte ?{" "}
-                  <Link to="/login" className="text-blue-600 hover:underline">Se connecter</Link>
+                  <Link to="/login" className="text-exsenco-blue hover:underline">Se connecter</Link>
                 </p>
               </CardFooter>
             </form>

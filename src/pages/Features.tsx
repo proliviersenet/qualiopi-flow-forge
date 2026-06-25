@@ -165,8 +165,8 @@ const Features = () => {
                   {featuresList.gestionAdministrative.map((feature, index) => (
                     <Card key={index} className="h-full">
                       <CardHeader className="flex flex-row items-center gap-4">
-                        <div className="bg-blue-100 p-2 rounded-full">
-                          <Check className="h-5 w-5 text-blue-600" />
+                        <div className="bg-exsenco-orange-light p-2 rounded-full">
+                          <Check className="h-5 w-5 text-exsenco-blue" />
                         </div>
                         <CardTitle className="text-lg">{feature}</CardTitle>
                       </CardHeader>
@@ -258,7 +258,7 @@ const Features = () => {
                   key={index} 
                   className={`flex flex-col h-full ${plan.highlighted ? 'border-blue-500 border-2 shadow-xl' : ''}`}
                 >
-                  <CardHeader className={plan.highlighted ? 'bg-blue-50' : ''}>
+                  <CardHeader className={plan.highlighted ? 'bg-orange-50' : ''}>
                     <CardTitle className="text-2xl">{plan.name}</CardTitle>
                     <div className="mt-4">
                       <span className="text-4xl font-bold">{plan.price}</span>
@@ -278,7 +278,7 @@ const Features = () => {
                   </CardContent>
                   <CardFooter>
                     <Button 
-                      className={`w-full py-6 ${plan.highlighted ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                      className={`w-full py-6 ${plan.highlighted ? 'bg-exsenco-blue hover:bg-exsenco-blue' : ''}`}
                       variant={plan.highlighted ? "default" : "outline"}
                     >
                       {plan.cta}
@@ -291,7 +291,7 @@ const Features = () => {
         </section>
 
         {/* CTA Final */}
-        <section className="py-16 px-4 bg-blue-600 text-white">
+        <section className="py-16 px-4 bg-exsenco-blue text-white">
           <div className="container mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">
               Prêt à simplifier la gestion de votre organisme de formation ?
@@ -299,7 +299,7 @@ const Features = () => {
             <p className="text-xl mb-8 max-w-3xl mx-auto">
               Rejoignez des centaines d'organismes de formation qui utilisent notre plateforme pour automatiser leur gestion administrative et garantir leur conformité Qualiopi.
             </p>
-            <Button size="lg" variant="secondary" className="text-blue-600 text-lg px-8 py-6">
+            <Button size="lg" variant="secondary" className="text-exsenco-blue text-lg px-8 py-6">
               Essayer gratuitement pendant 14 jours
             </Button>
           </div>

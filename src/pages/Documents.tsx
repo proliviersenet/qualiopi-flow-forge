@@ -88,7 +88,7 @@ const mockDocuments: Document[] = [
 const getDocumentTypeLabel = (type: string) => {
   switch (type) {
     case "cours":
-      return { label: "Cours", color: "bg-blue-100 text-blue-800" };
+      return { label: "Cours", color: "bg-exsenco-orange-light text-blue-800" };
     case "support":
       return { label: "Support", color: "bg-green-100 text-green-800" };
     case "evaluation":
@@ -256,7 +256,7 @@ const Documents = () => {
                           <div className="flex items-center">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
                               checked={selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0}
                               onChange={selectAllDocuments}
                             />
@@ -285,7 +285,7 @@ const Documents = () => {
                               <TableCell>
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
                                   checked={selectedDocuments.includes(doc.id)}
                                   onChange={() => toggleSelectDocument(doc.id)}
                                 />
@@ -309,7 +309,7 @@ const Documents = () => {
                                   <div className="font-medium">
                                     <Link 
                                       to={`/documents/${doc.id}`}
-                                      className="text-blue-600 hover:text-blue-800"
+                                      className="text-exsenco-blue hover:text-blue-800"
                                     >
                                       {doc.title}
                                     </Link>
