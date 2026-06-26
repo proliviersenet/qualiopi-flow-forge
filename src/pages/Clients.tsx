@@ -1,332 +1,163 @@
-
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { User } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock data for demonstration
-const mockUser = {
-  name: "Jean Dupont",
-  email: "jean@formationpro.fr",
-  profileImage: "",
-};
-
-const mockClients: User[] = [
-  {
-    id: "1",
-    name: "Marie Martin",
-    email: "marie.martin@example.com",
-    role: "client",
-    profileImage: "",
-  },
-  {
-    id: "2",
-    name: "Paul Bernard",
-    email: "paul.bernard@example.com",
-    role: "client",
-    profileImage: "",
-  },
-  {
-    id: "3",
-    name: "Sophie Petit",
-    email: "sophie.petit@example.com",
-    role: "client",
-    profileImage: "",
-  },
-  {
-    id: "4",
-    name: "Thomas Dubois",
-    email: "thomas.dubois@example.com",
-    role: "client",
-    profileImage: "",
-  },
-  {
-    id: "5",
-    name: "Julie Laurent",
-    email: "julie.laurent@example.com",
-    role: "client",
-    profileImage: "",
-  },
-];
+interface Client {
+  id: string;
+  raison_sociale: string;
+  siret: string;
+  contact_nom: string;
+  contact_email: string;
+  adresse: string;
+  created_at: string;
+}
 
 const Clients = () => {
   const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const navigate = useNavigate();
+  const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [siretLoading, setSiretLoading] = useState(false);
+  const [formData, setFormData] = useState({ siret: "", raison_sociale: "", adresse: "", contact_nom: "", contact_email: "" });
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
 
-  const filteredClients = mockClients.filter((client) =>
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate("/login"); return; }
+      setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
+      const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
+      if (profile?.organisme_id) {
+        setOrganismeId(profile.organisme_id);
+        const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
+        setClients(data || []);
+      }
+      setLoading(false);
+    };
+    init();
+  }, [navigate]);
+
+  const fetchSiret = async () => {
+    const siret = formData.siret.replace(/\s/g, "");
+    if (siret.length !== 14) { toast({ title: "SIRET invalide", variant: "destructive" }); return; }
+    setSiretLoading(true);
+    try {
+      const resp = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`);
+      const json = await resp.json();
+      if (!json.results?.length) throw new Error("Non trouvé");
+      const r = json.results[0];
+      setFormData(prev => ({ ...prev, siret, raison_sociale: r.nom_raison_sociale || r.nom_complet, adresse: r.siege?.adresse || "" }));
+      toast({ title: "Client trouvé", description: r.nom_raison_sociale || r.nom_complet });
+    } catch { toast({ title: "SIRET non trouvé", variant: "destructive" }); }
+    finally { setSiretLoading(false); }
+  };
+
+  const ajouterClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!organismeId) return;
+    const { data, error } = await supabase.from("clients").insert({
+      organisme_id: organismeId,
+      siret: formData.siret,
+      siren: formData.siret.slice(0, 9),
+      raison_sociale: formData.raison_sociale,
+      adresse: formData.adresse,
+      contact_nom: formData.contact_nom,
+      contact_email: formData.contact_email,
+    }).select().single();
+    if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
+    setClients(prev => [data, ...prev]);
+    setShowForm(false);
+    setFormData({ siret: "", raison_sociale: "", adresse: "", contact_nom: "", contact_email: "" });
+    toast({ title: "Client ajouté", description: formData.raison_sociale });
+  };
+
+  const filtres = clients.filter(c =>
+    c.raison_sociale?.toLowerCase().includes(search.toLowerCase()) ||
+    c.contact_nom?.toLowerCase().includes(search.toLowerCase()) ||
+    c.siret?.includes(search)
   );
-
-  const toggleSelectClient = (clientId: string) => {
-    if (selectedClients.includes(clientId)) {
-      setSelectedClients(selectedClients.filter(id => id !== clientId));
-    } else {
-      setSelectedClients([...selectedClients, clientId]);
-    }
-  };
-
-  const selectAllClients = () => {
-    if (selectedClients.length === filteredClients.length) {
-      setSelectedClients([]);
-    } else {
-      setSelectedClients(filteredClients.map(client => client.id));
-    }
-  };
-
-  const handleDeleteClient = (id: string) => {
-    toast({
-      title: "Client supprimé",
-      description: "Le client a été supprimé avec succès",
-    });
-  };
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header user={mockUser} />
-
-      <main className="flex-grow bg-gray-50 py-8">
+      <Header user={user || { name: "", email: "", profileImage: "" }} />
+      <main className="flex-grow bg-gray-50 py-6">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold mb-4 md:mb-0">Mes clients</h1>
-            <div className="flex gap-2">
-              <Link to="/clients/import">
-                <Button variant="outline">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"
-                    />
-                  </svg>
-                  Importer
-                </Button>
-              </Link>
-              <Link to="/clients/creation">
-                <Button>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  Nouveau client
-                </Button>
-              </Link>
-            </div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">Mes clients</h1>
+            <Button className="btn-cta font-bold" onClick={() => setShowForm(!showForm)}>
+              + Ajouter un client
+            </Button>
           </div>
 
-          <Card className="mb-6">
-            <CardContent className="p-4">
-              <div className="flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-grow">
-                  <Input
-                    type="text"
-                    placeholder="Rechercher un client..."
-                    className="pr-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  <svg
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+          {showForm && (
+            <Card className="mb-6 p-5">
+              <h3 className="font-medium mb-4" style={{ color: "#25245e" }}>Nouveau client</h3>
+              <form onSubmit={ajouterClient} className="space-y-3">
+                <div className="flex gap-2">
+                  <Input placeholder="SIRET (14 chiffres)" value={formData.siret} onChange={e => setFormData(p => ({ ...p, siret: e.target.value }))} className="flex-1" maxLength={14} />
+                  <Button type="button" variant="outline" onClick={fetchSiret} disabled={siretLoading}>{siretLoading ? "..." : "Rechercher"}</Button>
                 </div>
-                <div className="flex gap-2 md:justify-end">
-                  <Button variant="outline" size="sm" disabled={selectedClients.length === 0}>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Envoyer un e-mail
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={selectedClients.length === 0}>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
-                      />
-                    </svg>
-                    Exporter
-                  </Button>
+                {formData.raison_sociale && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                    <strong>{formData.raison_sociale}</strong><br />{formData.adresse}
+                  </div>
+                )}
+                <Input placeholder="Nom du contact" value={formData.contact_nom} onChange={e => setFormData(p => ({ ...p, contact_nom: e.target.value }))} />
+                <Input placeholder="Email du contact" type="email" value={formData.contact_email} onChange={e => setFormData(p => ({ ...p, contact_email: e.target.value }))} />
+                <div className="flex gap-2">
+                  <Button type="submit" className="btn-cta">Enregistrer</Button>
+                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annuler</Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </form>
+            </Card>
+          )}
 
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
-                            checked={selectedClients.length === filteredClients.length && filteredClients.length > 0}
-                            onChange={selectAllClients}
-                          />
-                        </div>
-                      </TableHead>
-                      <TableHead>Nom</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Formations</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredClients.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-6">
-                          Aucun client trouvé
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredClients.map((client) => (
-                        <TableRow key={client.id}>
-                          <TableCell>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 text-exsenco-blue focus:ring-blue-500"
-                              checked={selectedClients.includes(client.id)}
-                              onChange={() => toggleSelectClient(client.id)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="flex flex-col">
-                                <Link 
-                                  to={`/clients/${client.id}`}
-                                  className="font-medium text-exsenco-blue hover:text-blue-800"
-                                >
-                                  {client.name}
-                                </Link>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{client.email}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{Math.floor(Math.random() * 5)}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
-                              Actif
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                  </svg>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem asChild>
-                                  <Link to={`/clients/${client.id}`}>
-                                    Voir le profil
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link to={`/clients/${client.id}/edit`}>
-                                    Modifier
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link to={`/clients/${client.id}/formations`}>
-                                    Voir les formations
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-red-600 focus:text-red-600"
-                                  onClick={() => handleDeleteClient(client.id)}
-                                >
-                                  Supprimer
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="mb-4">
+            <Input placeholder="Rechercher un client..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-md" />
+          </div>
+
+          {loading ? (
+            <div className="text-center py-16 text-gray-400">Chargement...</div>
+          ) : clients.length === 0 ? (
+            <Card className="p-12 text-center">
+              <p className="text-4xl mb-4">🏢</p>
+              <p className="text-lg font-medium text-gray-700 mb-2">Aucun client pour l'instant</p>
+              <p className="text-gray-500 mb-6">Ajoutez vos premiers clients pour les associer à vos sessions de formation.</p>
+              <Button className="btn-cta font-bold" onClick={() => setShowForm(true)}>Ajouter mon premier client</Button>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtres.map(client => (
+                <Card key={client.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: "#25245e" }}>
+                        {(client.raison_sociale || "?")[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{client.raison_sociale}</p>
+                        {client.siret && <p className="text-xs text-gray-400">SIRET : {client.siret}</p>}
+                      </div>
+                    </div>
+                    {client.adresse && <p className="text-xs text-gray-500 mb-2">📍 {client.adresse}</p>}
+                    {client.contact_nom && <p className="text-xs text-gray-500 mb-1">👤 {client.contact_nom}</p>}
+                    {client.contact_email && <p className="text-xs text-gray-500">✉️ {client.contact_email}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </main>
-
       <Footer />
     </div>
   );
