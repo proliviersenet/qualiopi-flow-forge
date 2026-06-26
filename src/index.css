@@ -91,3 +91,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* CTA orange feu ExSenCo — à utiliser sur tous les boutons d'action principale */
+.btn-cta {
+  background-color: #f2901e !important;
+  color: #ffffff !important;
+  border-color: #f2901e !important;
+}
+.btn-cta:hover {
+  background-color: #d97c10 !important;
+  border-color: #d97c10 !important;
+}
