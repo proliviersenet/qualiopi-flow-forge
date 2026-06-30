@@ -24,6 +24,10 @@ interface Formation {
 const Formations = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [formations, setFormations] = useState<Formation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +105,7 @@ const Formations = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header user={user || { name: "", email: "", profileImage: "" }} />
+      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
       <main className="flex-grow bg-gray-50 py-6">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">

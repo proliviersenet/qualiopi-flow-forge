@@ -42,6 +42,10 @@ const TYPE_LABELS: Record<string, string> = {
 const Documents = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [signatures, setSignatures] = useState<Signature[]>([]);
@@ -138,7 +142,7 @@ const Documents = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header user={user || { name: "", email: "", profileImage: "" }} />
+      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
       <main className="flex-grow bg-gray-50 py-6">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">

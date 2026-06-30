@@ -15,6 +15,10 @@ const COLORS = ['#4CAF50', '#8BC34A', '#FFC107', '#FF9800', '#F44336'];
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [organisme, setOrganisme] = useState<Record<string, unknown> | null>(null);
   const [stats, setStats] = useState({
@@ -183,7 +187,7 @@ const Dashboard = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header user={user || { name: '', email: '', profileImage: '' }} />
+      <Header user={user || { name: '', email: '', profileImage: '' }} onLogout={handleLogout} />
       <main className="flex-grow bg-gray-50 py-6">
         <div className="container mx-auto px-4">
 
