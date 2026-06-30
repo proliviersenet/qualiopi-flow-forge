@@ -1,74 +1,123 @@
 
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-
-const mockUser = {
-  name: "Jean Dupont",
-  email: "jean@formationpro.fr",
-  profileImage: "",
-};
+import { supabase } from "@/integrations/supabase/client";
 
 const FormationCreation = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
   const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    objectives: "",
-    duration: "",
-    price: "",
-    targetAudience: "",
-    prerequisites: "",
+    titre: "",
+    programme: "",
+    objectifs: "",
+    duree: "",
+    tarif: "",
+    modalites: "",
+    prerequis: "",
+    document_mode: "numerique",
   });
+
+  // Auth + récupération de l'organisme rattaché au profil, comme sur Formations.tsx
+  useEffect(() => {
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate("/login"); return; }
+      setUser({
+        name: session.user.user_metadata?.nom_complet || session.user.email || "",
+        email: session.user.email || "",
+        profileImage: "",
+      });
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organisme_id")
+        .eq("id", session.user.id)
+        .single();
+
+      if (profile?.organisme_id) {
+        setOrganismeId(profile.organisme_id);
+      } else {
+        toast({
+          title: "Aucun organisme rattaché",
+          description: "Votre profil n'est lié à aucun organisme. Impossible de créer une formation.",
+          variant: "destructive",
+        });
+      }
+      setCheckingSession(false);
+    };
+    init();
+  }, [navigate, toast]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string) => (value: string) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const nextStep = () => {
-    // Simple validation for each step
     if (currentStep === 1) {
-      if (!formData.title || !formData.description) {
+      if (!formData.titre) {
         toast({
-          title: "Champs requis",
-          description: "Veuillez remplir tous les champs obligatoires",
+          title: "Champ requis",
+          description: "Le titre de la formation est obligatoire.",
           variant: "destructive",
         });
         return;
       }
     }
-    
-    setCurrentStep(currentStep + 1);
+    setCurrentStep((s) => s + 1);
   };
 
-  const prevStep = () => {
-    setCurrentStep(currentStep - 1);
-  };
+  const prevStep = () => setCurrentStep((s) => s - 1);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent, statut: "draft" | "publie") => {
     e.preventDefault();
-    
-    // Final validation
-    if (!formData.title || !formData.description || !formData.duration) {
+
+    if (!formData.titre) {
       toast({
         title: "Erreur",
-        description: "Veuillez remplir tous les champs obligatoires",
+        description: "Le titre de la formation est obligatoire.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!organismeId) {
+      toast({
+        title: "Erreur",
+        description: "Aucun organisme rattaché à votre compte.",
         variant: "destructive",
       });
       return;
@@ -76,33 +125,54 @@ const FormationCreation = () => {
 
     setIsLoading(true);
 
-    try {
-      // Ici vous intégreriez votre logique d'enregistrement réelle
-      // Simulating API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast({
-        title: "Formation créée",
-        description: "Votre formation a été créée avec succès!",
-      });
-      
-      // Rediriger vers la liste des formations
-      window.location.href = "/formations";
-    } catch (error) {
+    const { error } = await supabase.from("formations").insert({
+      organisme_id: organismeId,
+      titre: formData.titre,
+      objectifs: formData.objectifs || null,
+      programme: formData.programme || null,
+      modalites: formData.modalites || null,
+      prerequis: formData.prerequis || null,
+      duree: formData.duree || null,
+      tarif: formData.tarif || null,
+      document_mode: formData.document_mode,
+      statut,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue. Veuillez réessayer.",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
+      return;
     }
+
+    toast({
+      title: "Formation créée",
+      description: statut === "publie" ? "Votre formation a été publiée avec succès !" : "Votre formation a été enregistrée en brouillon.",
+    });
+
+    navigate("/formations");
   };
+
+  if (checkingSession) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+        <main className="flex-grow flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Chargement...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header user={mockUser} />
-      
+      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center mb-6">
@@ -110,22 +180,22 @@ const FormationCreation = () => {
               &larr; Retour aux formations
             </Link>
           </div>
-          
+
           <h1 className="text-3xl font-bold mb-6">Créer une nouvelle formation</h1>
-          
+
           <div className="mb-8">
             <div className="flex justify-between items-center max-w-3xl mx-auto mb-4">
               {[1, 2, 3].map((step) => (
-                <div 
-                  key={step} 
+                <div
+                  key={step}
                   className={`flex flex-col items-center ${step < currentStep ? "text-exsenco-blue" : step === currentStep ? "text-blue-800" : "text-gray-400"}`}
                 >
-                  <div 
+                  <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 
-                      ${step < currentStep 
-                        ? "bg-exsenco-blue text-white" 
-                        : step === currentStep 
-                        ? "bg-exsenco-orange-light text-blue-800 border-2 border-exsenco-blue" 
+                      ${step < currentStep
+                        ? "bg-exsenco-blue text-white"
+                        : step === currentStep
+                        ? "bg-exsenco-orange-light text-blue-800 border-2 border-exsenco-blue"
                         : "bg-gray-100 text-gray-400"}`}
                   >
                     {step < currentStep ? (
@@ -142,53 +212,52 @@ const FormationCreation = () => {
                 </div>
               ))}
             </div>
-            
+
             <div className="h-2 bg-gray-200 rounded-full max-w-3xl mx-auto">
-              <div 
-                className="h-full bg-exsenco-blue rounded-full transition-all" 
-                style={{ width: `${(currentStep - 1) * 50}%` }}  
+              <div
+                className="h-full bg-exsenco-blue rounded-full transition-all"
+                style={{ width: `${(currentStep - 1) * 50}%` }}
               ></div>
             </div>
           </div>
-          
+
           <Card className="max-w-3xl mx-auto">
             <CardContent className="pt-6">
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={(e) => handleSubmit(e, "publie")}>
                 {currentStep === 1 && (
                   <div className="space-y-6">
                     <h2 className="text-xl font-semibold mb-4">Informations générales</h2>
-                    
+
                     <div className="space-y-2">
-                      <Label htmlFor="title">Titre de la formation <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="titre">Titre de la formation <span className="text-red-500">*</span></Label>
                       <Input
-                        id="title"
-                        name="title"
-                        value={formData.title}
+                        id="titre"
+                        name="titre"
+                        value={formData.titre}
                         onChange={handleChange}
                         placeholder="ex: Formation Excel Avancé"
                         required
                       />
                     </div>
-                    
+
                     <div className="space-y-2">
-                      <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="programme">Programme</Label>
                       <Textarea
-                        id="description"
-                        name="description"
-                        value={formData.description}
+                        id="programme"
+                        name="programme"
+                        value={formData.programme}
                         onChange={handleChange}
-                        placeholder="Décrivez votre formation en détail..."
+                        placeholder="Décrivez le déroulé et le contenu de votre formation..."
                         rows={5}
-                        required
                       />
                     </div>
-                    
+
                     <div className="space-y-2">
-                      <Label htmlFor="objectives">Objectifs pédagogiques</Label>
+                      <Label htmlFor="objectifs">Objectifs pédagogiques</Label>
                       <Textarea
-                        id="objectives"
-                        name="objectives"
-                        value={formData.objectives}
+                        id="objectifs"
+                        name="objectifs"
+                        value={formData.objectifs}
                         onChange={handleChange}
                         placeholder="Listez les objectifs pédagogiques..."
                         rows={3}
@@ -196,137 +265,166 @@ const FormationCreation = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {currentStep === 2 && (
                   <div className="space-y-6">
                     <h2 className="text-xl font-semibold mb-4">Détails de la formation</h2>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="duration">Durée <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="duree">Durée</Label>
                         <Input
-                          id="duration"
-                          name="duration"
-                          value={formData.duration}
+                          id="duree"
+                          name="duree"
+                          value={formData.duree}
                           onChange={handleChange}
                           placeholder="ex: 3 jours (21h)"
-                          required
                         />
                       </div>
-                      
+
                       <div className="space-y-2">
-                        <Label htmlFor="price">Prix</Label>
+                        <Label htmlFor="tarif">Tarif</Label>
                         <Input
-                          id="price"
-                          name="price"
-                          type="number"
-                          value={formData.price}
+                          id="tarif"
+                          name="tarif"
+                          value={formData.tarif}
                           onChange={handleChange}
-                          placeholder="ex: 1500"
+                          placeholder="ex: 1500 € net de taxes"
                         />
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2">
-                      <Label htmlFor="targetAudience">Public visé</Label>
+                      <Label htmlFor="modalites">Modalités</Label>
                       <Textarea
-                        id="targetAudience"
-                        name="targetAudience"
-                        value={formData.targetAudience}
+                        id="modalites"
+                        name="modalites"
+                        value={formData.modalites}
                         onChange={handleChange}
-                        placeholder="À qui s'adresse cette formation..."
+                        placeholder="Présentiel / distanciel, public visé, accessibilité..."
                         rows={3}
                       />
                     </div>
-                    
+
                     <div className="space-y-2">
-                      <Label htmlFor="prerequisites">Prérequis</Label>
+                      <Label htmlFor="prerequis">Prérequis</Label>
                       <Textarea
-                        id="prerequisites"
-                        name="prerequisites"
-                        value={formData.prerequisites}
+                        id="prerequis"
+                        name="prerequis"
+                        value={formData.prerequis}
                         onChange={handleChange}
                         placeholder="Connaissances préalables nécessaires..."
                         rows={3}
                       />
                     </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="document_mode">Mode de gestion documentaire</Label>
+                      <Select value={formData.document_mode} onValueChange={handleSelectChange("document_mode")}>
+                        <SelectTrigger id="document_mode">
+                          <SelectValue placeholder="Choisir un mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="numerique">Numérique (signature électronique)</SelectItem>
+                          <SelectItem value="papier">Papier</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
-                
+
                 {currentStep === 3 && (
                   <div className="space-y-6">
                     <h2 className="text-xl font-semibold mb-4">Confirmation</h2>
-                    
+
                     <div className="bg-gray-50 p-4 rounded-md space-y-4">
                       <div>
                         <h3 className="font-medium text-gray-700">Titre</h3>
-                        <p>{formData.title}</p>
+                        <p>{formData.titre}</p>
                       </div>
-                      
-                      <div>
-                        <h3 className="font-medium text-gray-700">Description</h3>
-                        <p className="text-sm">{formData.description}</p>
-                      </div>
-                      
-                      {formData.objectives && (
+
+                      {formData.programme && (
                         <div>
-                          <h3 className="font-medium text-gray-700">Objectifs</h3>
-                          <p className="text-sm">{formData.objectives}</p>
+                          <h3 className="font-medium text-gray-700">Programme</h3>
+                          <p className="text-sm">{formData.programme}</p>
                         </div>
                       )}
-                      
-                      <div className="grid grid-cols-2 gap-4">
+
+                      {formData.objectifs && (
                         <div>
-                          <h3 className="font-medium text-gray-700">Durée</h3>
-                          <p>{formData.duration}</p>
+                          <h3 className="font-medium text-gray-700">Objectifs</h3>
+                          <p className="text-sm">{formData.objectifs}</p>
                         </div>
-                        
-                        {formData.price && (
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {formData.duree && (
                           <div>
-                            <h3 className="font-medium text-gray-700">Prix</h3>
-                            <p>{formData.price} €</p>
+                            <h3 className="font-medium text-gray-700">Durée</h3>
+                            <p>{formData.duree}</p>
+                          </div>
+                        )}
+                        {formData.tarif && (
+                          <div>
+                            <h3 className="font-medium text-gray-700">Tarif</h3>
+                            <p>{formData.tarif}</p>
                           </div>
                         )}
                       </div>
-                      
-                      {formData.targetAudience && (
+
+                      {formData.modalites && (
                         <div>
-                          <h3 className="font-medium text-gray-700">Public visé</h3>
-                          <p className="text-sm">{formData.targetAudience}</p>
+                          <h3 className="font-medium text-gray-700">Modalités</h3>
+                          <p className="text-sm">{formData.modalites}</p>
                         </div>
                       )}
-                      
-                      {formData.prerequisites && (
+
+                      {formData.prerequis && (
                         <div>
                           <h3 className="font-medium text-gray-700">Prérequis</h3>
-                          <p className="text-sm">{formData.prerequisites}</p>
+                          <p className="text-sm">{formData.prerequis}</p>
                         </div>
                       )}
+
+                      <div>
+                        <h3 className="font-medium text-gray-700">Mode de gestion documentaire</h3>
+                        <p className="text-sm">{formData.document_mode === "numerique" ? "Numérique (signature électronique)" : "Papier"}</p>
+                      </div>
                     </div>
-                    
+
                     <div className="border-t pt-4">
                       <p className="text-sm text-gray-600">
-                        En cliquant sur "Créer la formation", vous certifiez que les informations fournies sont exactes et conformes au référentiel Qualiopi.
+                        Vous pouvez enregistrer cette formation en brouillon pour la finaliser plus tard, ou la publier directement.
                       </p>
                     </div>
                   </div>
                 )}
-                
+
                 <div className="flex justify-between mt-8">
                   {currentStep > 1 && (
                     <Button type="button" variant="outline" onClick={prevStep}>
                       Retour
                     </Button>
                   )}
-                  
+
                   {currentStep < 3 ? (
                     <Button type="button" onClick={nextStep} className="ml-auto">
                       Continuer
                     </Button>
                   ) : (
-                    <Button type="submit" disabled={isLoading} className="ml-auto">
-                      {isLoading ? "Création en cours..." : "Créer la formation"}
-                    </Button>
+                    <div className="ml-auto flex gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isLoading}
+                        onClick={(e) => handleSubmit(e, "draft")}
+                      >
+                        {isLoading ? "Enregistrement..." : "Enregistrer en brouillon"}
+                      </Button>
+                      <Button type="submit" disabled={isLoading} className="btn-cta font-bold">
+                        {isLoading ? "Publication..." : "Publier la formation"}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </form>
@@ -334,7 +432,7 @@ const FormationCreation = () => {
           </Card>
         </div>
       </main>
-      
+
       <Footer />
     </div>
   );
