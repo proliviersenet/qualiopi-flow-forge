@@ -36,7 +36,7 @@ const FormationCreation = () => {
     tarif: "",
     modalites: "",
     prerequis: "",
-    document_mode: "numerique",
+    document_mode: "auto",
   });
 
   // Auth + récupération de l'organisme rattaché au profil, comme sur Formations.tsx
@@ -325,8 +325,8 @@ const FormationCreation = () => {
                           <SelectValue placeholder="Choisir un mode" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="numerique">Numérique (signature électronique)</SelectItem>
-                          <SelectItem value="papier">Papier</SelectItem>
+                          <SelectItem value="auto">Automatique (génération + signature électronique)</SelectItem>
+                          <SelectItem value="import">Import manuel (documents papier ou externes)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -388,7 +388,7 @@ const FormationCreation = () => {
 
                       <div>
                         <h3 className="font-medium text-gray-700">Mode de gestion documentaire</h3>
-                        <p className="text-sm">{formData.document_mode === "numerique" ? "Numérique (signature électronique)" : "Papier"}</p>
+                        <p className="text-sm">{formData.document_mode === "auto" ? "Automatique (génération + signature électronique)" : "Import manuel (documents papier ou externes)"}</p>
                       </div>
                     </div>
 
