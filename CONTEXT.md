@@ -1,7 +1,7 @@
 # CONTEXT.md — QalioFlex
 
 > Fichier de contexte à coller à la racine du repo, à donner à n'importe quelle session Claude (web, Claude Code, etc.) pour reprendre le projet sans perte d'information.
-> Dernière mise à jour : 30 juin 2026
+> Dernière mise à jour : 30 juin 2026 (session 2 — FormationCreation branchée)
 
 ---
 
@@ -87,7 +87,7 @@ Puis préciser la tâche du jour — voir §8 "Roadmap" pour la liste des priori
 | Formations | ✅ CRUD branché Supabase — **bouton logout fixé le 30/06** |
 | Clients | ✅ CRUD + autocomplétion SIRET — **bouton logout fixé le 30/06** |
 | Documents | ✅ Liste avec statut signatures DocuSign — **bouton logout fixé le 30/06** |
-| FormationCreation | ❌ Encore statique (maquette Lovable), pas branchée Supabase |
+| FormationCreation | ✅ CRUD branché Supabase — **formulaire mappé sur le schéma réel, insert réel, boutons Brouillon / Publier, onLogout câblé — livré le 30/06** |
 | Module BPF | ❌ Existe en base (table `bpf`) mais pas de page réelle |
 | Module pré-audit | ❌ Edge function `lancer-preaudit` déployée mais pas de page réelle |
 
@@ -118,7 +118,21 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 
 **Statut** : ✅ Flux complet testé en prod sur qualioflex.fr — reset password → email reçu → connexion OK.
 
-### 🔧 Bouton "Se déconnecter" inactif (résolu le 30/06/2026)
+### ✅ FormationCreation.tsx branchée Supabase (livré le 30/06/2026)
+**Situation initiale** : page 100% statique (maquette Lovable). Le `handleSubmit` faisait un `setTimeout(1500ms)` pour simuler un appel API, rien n'était sauvegardé en base. `mockUser` codé en dur, pas de session, pas d'`onLogout`.
+
+**Ce qui a été fait (commit `e022df5`)** :
+- Schéma de la table `formations` vérifié directement en base (9 colonnes : `titre`*, `objectifs`, `programme`, `modalites`, `prerequis`, `duree`, `tarif`, `document_mode`*, `statut`*)
+- Formulaire réécrit et mappé exactement sur ces colonnes
+- Récupération de `organisme_id` via `profiles` (même pattern que `Formations.tsx`)
+- `supabase.from('formations').insert(...)` réel avec gestion d'erreur via toast
+- Deux boutons en step 3 : **Enregistrer en brouillon** (`statut: "draft"`) et **Publier** (`statut: "publie"`)
+- `Header` passé avec `onLogout` (cohérence avec le fix du 30/06)
+- Garde de session : redirection `/login` si non connecté, écran de chargement intermédiaire
+
+**Statut** : ✅ Poussé sur GitHub (commit `e022df5`), déploiement Vercel automatique déclenché. À tester en prod sur qualioflex.fr.
+
+
 **Symptôme** : clic sur "Se déconnecter" dans le menu utilisateur (Header) ne faisait rien.
 
 **Diagnostic** : le composant `Header.tsx` attend une prop `onLogout: () => void`, appelée par le bouton (`onClick={onLogout}`). Cette prop n'était **jamais transmise** par les pages parentes (`Dashboard.tsx`, `Clients.tsx`, `Documents.tsx`, `Formations.tsx`) — `<Header user={...} />` sans `onLogout`. Le clic appelait donc `undefined()`, silencieusement ignoré par React.
@@ -134,8 +148,9 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 1. ~~Vérifier l'email reset password via Brevo~~ ✅ Fait
 2. **Tester le flux complet** inscription → session → documents → questionnaires (en cours — inscription et login validés, reste session/documents/questionnaires)
 3. Affiner la charte graphique — bouton "Inscription" du header en orange feu (`#f2901e`)
-4. Brancher **FormationCreation.tsx** sur Supabase (encore statique/Lovable)
-5. Brancher le **module BPF** et le **pré-audit** en pages réelles (edge function déjà prête pour le pré-audit)
+4. ~~Brancher **FormationCreation.tsx** sur Supabase~~ ✅ Fait (commit `e022df5`, 30/06)
+5. Tester en prod la création d'une formation (brouillon + publication) sur qualioflex.fr
+6. Brancher le **module BPF** et le **pré-audit** en pages réelles (edge function `lancer-preaudit` déjà prête)
 6. Réactiver la **confirmation email** avant lancement public (actuellement désactivée volontairement pour les tests)
 7. Rédiger les **CGV/CGU**
 8. Intégrer **Stripe** pour la facturation (roadmap V2)
