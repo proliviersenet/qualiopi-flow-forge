@@ -12,6 +12,8 @@ import Formations from "./pages/Formations";
 import FormationCreation from "./pages/FormationCreation";
 import Clients from "./pages/Clients";
 import Documents from "./pages/Documents";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -35,6 +37,8 @@ const App = () => (
           <Route path="/formations/creation" element={<FormationCreation />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
           <Route path="/mockup" element={<Mockup />} />
