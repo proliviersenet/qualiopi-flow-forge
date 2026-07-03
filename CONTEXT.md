@@ -158,7 +158,10 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 6. Brancher le **module BPF** et le **pré-audit** en pages réelles (edge function `lancer-preaudit` déjà prête)
 6. Réactiver la **confirmation email** avant lancement public (actuellement désactivée volontairement pour les tests)
 7. Rédiger les **CGV/CGU**
-8. Intégrer **Stripe** pour la facturation (roadmap V2)
+8. Intégrer **Stripe** pour la facturation — deux usages :
+   - **Abonnement récurrent** (plan mensuel/annuel formateur)
+   - **Paiement ponctuel** 10 € frais récupération données lors suppression de compte (placeholder déjà en place dans Settings.tsx → étape "payment")
+   - Alternative à Stripe à évaluer : **Paddle** (moins cher hors EU, gère la TVA automatiquement) ou **Lemon Squeezy** (idem, tout-en-un, adapté SaaS indie)
 
 ### Roadmap V2 (pivot)
 - Formateurs portés sous certification Qualiopi ExSenCo
