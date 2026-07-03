@@ -161,7 +161,8 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 8. Intégrer **Stripe** pour la facturation — deux usages :
    - **Abonnement récurrent** (plan mensuel/annuel formateur)
    - **Paiement ponctuel** 10 € frais récupération données lors suppression de compte (placeholder déjà en place dans Settings.tsx → étape "payment")
-   - Alternative à Stripe à évaluer : **Paddle** (moins cher hors EU, gère la TVA automatiquement) ou **Lemon Squeezy** (idem, tout-en-un, adapté SaaS indie)
+   - Stripe retenu vs Lemon Squeezy/Paddle : clients 100% France B2B, TVA autoliquidée, frais Stripe ~1,75€/abo vs ~2,50€ MoR — pas d'avantage fiscal pour un MoR dans ce contexte
+   - **Après intégration Stripe** : générer et stocker les **factures d'utilisation QalioFlex** dans l'espace "Mon compte" de chaque formateur (PDF aux couleurs de la charte ExSenCo, mentions légales complètes, téléchargeable pour la comptabilité) — déclenchées via webhook Stripe à chaque paiement réussi
 
 ### Roadmap V2 (pivot)
 - Formateurs portés sous certification Qualiopi ExSenCo
