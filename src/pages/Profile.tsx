@@ -14,7 +14,7 @@ const Profile = () => {
   const navigate = useNavigate();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
-  const [organisme, setOrganisme] = useState<Record<string, string> | null>(null);
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -26,10 +26,13 @@ const Profile = () => {
   const [orgForm, setOrgForm] = useState({
     raison_sociale: "",
     siret: "",
+    siren: "",
     nda: "",
     adresse: "",
-    code_postal: "",
-    ville: "",
+    code_naf: "",
+    site_web: "",
+    telephone: "",
+    email_contact: "",
   });
 
   const handleLogout = async () => {
@@ -48,7 +51,6 @@ const Profile = () => {
         email: u.email || "",
         profileImage: "",
       });
-
       setProfileForm({
         nom_complet: u.user_metadata?.nom_complet || "",
         telephone: u.user_metadata?.telephone || "",
@@ -56,11 +58,13 @@ const Profile = () => {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("*, organisme_id")
+        .select("organisme_id")
         .eq("id", u.id)
         .single();
 
       if (profile?.organisme_id) {
+        setOrganismeId(profile.organisme_id);
+
         const { data: org } = await supabase
           .from("organismes")
           .select("*")
@@ -68,14 +72,17 @@ const Profile = () => {
           .single();
 
         if (org) {
-          setOrganisme(org as Record<string, string>);
+          const o = org as Record<string, string>;
           setOrgForm({
-            raison_sociale: (org as Record<string, string>).raison_sociale || "",
-            siret: (org as Record<string, string>).siret || "",
-            nda: (org as Record<string, string>).nda || "",
-            adresse: (org as Record<string, string>).adresse || "",
-            code_postal: (org as Record<string, string>).code_postal || "",
-            ville: (org as Record<string, string>).ville || "",
+            raison_sociale: o.raison_sociale || "",
+            siret: o.siret || "",
+            siren: o.siren || "",
+            nda: o.nda || "",
+            adresse: o.adresse || "",
+            code_naf: o.code_naf || "",
+            site_web: o.site_web || "",
+            telephone: o.telephone || "",
+            email_contact: o.email_contact || "",
           });
         }
       }
@@ -95,16 +102,12 @@ const Profile = () => {
 
   const saveProfile = async () => {
     setSaving(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
     const { error } = await supabase.auth.updateUser({
       data: {
         nom_complet: profileForm.nom_complet,
         telephone: profileForm.telephone,
       },
     });
-
     if (error) {
       toast({ title: "Erreur", description: error.message, variant: "destructive" });
     } else {
@@ -115,19 +118,20 @@ const Profile = () => {
   };
 
   const saveOrganisme = async () => {
-    if (!organisme?.id) return;
+    if (!organismeId) return;
     setSaving(true);
-
     const { error } = await supabase
       .from("organismes")
       .update({
         raison_sociale: orgForm.raison_sociale,
         nda: orgForm.nda,
         adresse: orgForm.adresse,
-        code_postal: orgForm.code_postal,
-        ville: orgForm.ville,
+        code_naf: orgForm.code_naf,
+        site_web: orgForm.site_web,
+        telephone: orgForm.telephone,
+        email_contact: orgForm.email_contact,
       })
-      .eq("id", organisme.id);
+      .eq("id", organismeId);
 
     if (error) {
       toast({ title: "Erreur", description: error.message, variant: "destructive" });
@@ -188,7 +192,7 @@ const Profile = () => {
               <div className="space-y-2">
                 <Label>Email</Label>
                 <Input value={user?.email || ""} disabled className="bg-gray-100 text-gray-500" />
-                <p className="text-xs text-gray-400">L'email ne peut pas être modifié ici. Contactez le support.</p>
+                <p className="text-xs text-gray-400">L'email ne peut pas être modifié ici.</p>
               </div>
               <div className="flex justify-end">
                 <Button
@@ -204,7 +208,7 @@ const Profile = () => {
           </Card>
 
           {/* Infos organisme */}
-          {organisme && (
+          {organismeId && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg" style={{ color: "#25245e" }}>
@@ -213,6 +217,7 @@ const Profile = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                   <div className="space-y-2">
                     <Label>Raison sociale</Label>
                     <Input
@@ -222,17 +227,20 @@ const Profile = () => {
                       placeholder="Nom de la structure"
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label>SIRET</Label>
-                    <Input
-                      value={orgForm.siret}
-                      disabled
-                      className="bg-gray-100 text-gray-500"
-                    />
-                    <p className="text-xs text-gray-400">Le SIRET ne peut pas être modifié.</p>
+                    <Input value={orgForm.siret} disabled className="bg-gray-100 text-gray-500" />
+                    <p className="text-xs text-gray-400">Non modifiable.</p>
                   </div>
+
                   <div className="space-y-2">
-                    <Label>NDA (N° de déclaration d'activité)</Label>
+                    <Label>SIREN</Label>
+                    <Input value={orgForm.siren} disabled className="bg-gray-100 text-gray-500" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>NDA (N° déclaration d'activité)</Label>
                     <Input
                       name="nda"
                       value={orgForm.nda}
@@ -240,33 +248,57 @@ const Profile = () => {
                       placeholder="ex: 24370470637"
                     />
                   </div>
-                  <div className="space-y-2">
+
+                  <div className="space-y-2 md:col-span-2">
                     <Label>Adresse</Label>
                     <Input
                       name="adresse"
                       value={orgForm.adresse}
                       onChange={handleOrgChange}
-                      placeholder="80 rue du Nouveau Bois"
+                      placeholder="80 rue du Nouveau Bois, 37550 Saint-Avertin"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label>Code postal</Label>
+                    <Label>Code NAF</Label>
                     <Input
-                      name="code_postal"
-                      value={orgForm.code_postal}
+                      name="code_naf"
+                      value={orgForm.code_naf}
                       onChange={handleOrgChange}
-                      placeholder="37550"
+                      placeholder="ex: 8559A"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label>Ville</Label>
+                    <Label>Site web</Label>
                     <Input
-                      name="ville"
-                      value={orgForm.ville}
+                      name="site_web"
+                      value={orgForm.site_web}
                       onChange={handleOrgChange}
-                      placeholder="Saint-Avertin"
+                      placeholder="https://monsite.fr"
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Téléphone de l'organisme</Label>
+                    <Input
+                      name="telephone"
+                      value={orgForm.telephone}
+                      onChange={handleOrgChange}
+                      placeholder="02 47 00 00 00"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Email de contact</Label>
+                    <Input
+                      name="email_contact"
+                      value={orgForm.email_contact}
+                      onChange={handleOrgChange}
+                      placeholder="contact@monof.fr"
+                    />
+                  </div>
+
                 </div>
                 <div className="flex justify-end">
                   <Button
