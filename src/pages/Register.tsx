@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
+import { validatePassword } from "@/lib/passwordUtils";
 
 const Register = () => {
   const { toast } = useToast();
@@ -98,8 +99,9 @@ const Register = () => {
       toast({ title: "Erreur", description: "Les mots de passe ne correspondent pas", variant: "destructive" });
       return;
     }
-    if (formData.password.length < 8) {
-      toast({ title: "Erreur", description: "Mot de passe : 8 caractères minimum", variant: "destructive" });
+    const pwCheck = validatePassword(formData.password);
+    if (!pwCheck.valid) {
+      toast({ title: "Mot de passe insuffisant", description: pwCheck.message, variant: "destructive" });
       return;
     }
     if (!formData.siret) {
@@ -273,11 +275,25 @@ const Register = () => {
                         </span>
                       </Label>
                       <div className="relative">
-                        <Input id="password" name="password" type={showPassword ? "text" : "password"} placeholder="8 caractères minimum" value={formData.password} onChange={handleChange} required className="pr-10" />
+                        <Input id="password" name="password" type={showPassword ? "text" : "password"} placeholder="Ex: MonMot2Passe!" value={formData.password} onChange={handleChange} required className="pr-10" />
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                           {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
                       </div>
+                      {/* Indicateur de force */}
+                      {formData.password.length > 0 && (() => {
+                        const check = validatePassword(formData.password);
+                        return (
+                          <div className="space-y-1 pt-1">
+                            {check.rules.map((rule) => (
+                              <div key={rule.label} className={`flex items-center gap-1.5 text-xs ${rule.ok ? "text-green-600" : "text-gray-400"}`}>
+                                <span>{rule.ok ? "✓" : "○"}</span>
+                                <span>{rule.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
