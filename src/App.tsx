@@ -10,6 +10,8 @@ import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Formations from "./pages/Formations";
 import FormationCreation from "./pages/FormationCreation";
+import FormationDetail from "./pages/FormationDetail";
+import FormationEdit from "./pages/FormationEdit";
 import Clients from "./pages/Clients";
 import Documents from "./pages/Documents";
 import Profile from "./pages/Profile";
@@ -35,6 +37,8 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/formations" element={<Formations />} />
           <Route path="/formations/creation" element={<FormationCreation />} />
+          <Route path="/formations/:id" element={<FormationDetail />} />
+          <Route path="/formations/:id/edit" element={<FormationEdit />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/profile" element={<Profile />} />
