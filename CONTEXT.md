@@ -93,7 +93,7 @@ Puis préciser la tâche du jour — voir §8 "Roadmap" pour la liste des priori
 | Clients | ✅ CRUD + autocomplétion SIRET — **bouton logout fixé le 30/06** |
 | Documents | ✅ Liste avec statut signatures DocuSign — **bouton logout fixé le 30/06** |
 | FormationCreation | ✅ CRUD branché Supabase — **formulaire mappé sur le schéma réel, insert réel, boutons Brouillon / Publier, onLogout câblé — livré le 30/06** |
-| Module BPF | ❌ Existe en base (table `bpf`) mais pas de page réelle |
+| Module BPF | ✅ Livré le 03/07 — liste, création, édition, validation, répartition thématiques (jsonb). **PDF MAF à faire** |
 | Module pré-audit | ❌ Edge function `lancer-preaudit` déployée mais pas de page réelle |
 
 Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index.tsx`, `Mockup.tsx`, `NotFound.tsx`.
@@ -153,9 +153,23 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 1. ~~Vérifier l'email reset password via Brevo~~ ✅ Fait
 2. **Tester le flux complet** inscription → session → documents → questionnaires (en cours — inscription et login validés, reste session/documents/questionnaires)
 3. Affiner la charte graphique — bouton "Inscription" du header en orange feu (`#f2901e`)
-4. ~~Brancher **FormationCreation.tsx** sur Supabase~~ ✅ Fait (commit `e022df5`, 30/06)
-5. Tester en prod la création d'une formation (brouillon + publication) sur qualioflex.fr
-6. Brancher le **module BPF** et le **pré-audit** en pages réelles (edge function `lancer-preaudit` déjà prête)
+4. ~~Brancher **FormationCreation.tsx** sur Supabase~~ ✅ Fait
+5. ~~Tester en prod la création d'une formation~~ ✅ OK
+6. ~~Module **BPF** — page complète~~ ✅ Livré le 03/07
+
+**Prochaines priorités :**
+
+7. **BPF — export PDF MAF** : générer un PDF du BPF au format compatible avec la déclaration sur MAF (Mon Activité Formation / DREETS), téléchargeable depuis la page BPF. Inclure un guide pas-à-pas de déclaration sur MAF.
+8. **Module notation formateurs** : notes des formateurs par clients ET stagiaires, avec tableau de bord stats consultable (moyenne, évolution, verbatims). Tables à créer en base : `notations_formateurs` (formation_id, session_id, auteur_type: client|stagiaire, note, commentaire, created_at). Interface : formulaire public (lien envoyé par email) + page stats privée dans l'app.
+9. **Pages footer** : CGU, Politique de confidentialité, RGPD, Contact, Centre d'aide, Référentiel Qualiopi
+10. **Pré-audit** — page réelle (edge function `lancer-preaudit` déjà prête en base)
+11. **Stripe** — abonnement récurrent + paiement ponctuel (frais récupération données)
+12. **Factures QalioFlex** — PDF aux couleurs ExSenCo dans espace "Mon compte", déclenchées via webhook Stripe
+13. **Historique mots de passe** — edge function `check-password-history` + table `password_history` (dette technique sécurité)
+
+### SEO Exsenco (hors QalioFlex)
+Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-37984663690180d4996bc68e523316c7
+⚠️ Lien nécessite authentification Notion — à partager en export ou en copiant le contenu si analyse nécessaire.
 6. Réactiver la **confirmation email** avant lancement public (actuellement désactivée volontairement pour les tests)
 7. Rédiger les **CGV/CGU**
 8. Intégrer **Stripe** pour la facturation — deux usages :
