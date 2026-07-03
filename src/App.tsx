@@ -14,6 +14,7 @@ import FormationDetail from "./pages/FormationDetail";
 import FormationEdit from "./pages/FormationEdit";
 import Clients from "./pages/Clients";
 import Documents from "./pages/Documents";
+import BPF from "./pages/BPF";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Features from "./pages/Features";
@@ -41,6 +42,7 @@ const App = () => (
           <Route path="/formations/:id/edit" element={<FormationEdit />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/bpf" element={<BPF />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/features" element={<Features />} />

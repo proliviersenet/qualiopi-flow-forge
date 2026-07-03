@@ -55,6 +55,9 @@ const Header = ({ user, onLogout }: HeaderProps) => {
               <Link to="/documents" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Documents
               </Link>
+              <Link to="/bpf" className="text-gray-700 hover:text-exsenco-blue font-medium">
+                BPF
+              </Link>
             </nav>
           )}
 
@@ -154,6 +157,13 @@ const Header = ({ user, onLogout }: HeaderProps) => {
               onClick={() => setShowMobileMenu(false)}
             >
               Documents
+            </Link>
+            <Link
+              to="/bpf"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              BPF
             </Link>
           </nav>
         )}
