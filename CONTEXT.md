@@ -1,7 +1,7 @@
 # CONTEXT.md — QalioFlex
 
 > Fichier de contexte à coller à la racine du repo, à donner à n'importe quelle session Claude (web, Claude Code, etc.) pour reprendre le projet sans perte d'information.
-> Dernière mise à jour : 30 juin 2026 (session 2 — FormationCreation branchée)
+> Dernière mise à jour : 1 juillet 2026 (session 3 — module Formations complet + pages Profil & Paramètres)
 
 ---
 
@@ -84,7 +84,12 @@ Puis préciser la tâche du jour — voir §8 "Roadmap" pour la liste des priori
 | Login | ✅ Branchée Supabase Auth + toggle voir/masquer mot de passe |
 | ResetPassword | ✅ Fonctionnel — reset par email via Brevo SMTP (voir §7, problème résolu) |
 | Dashboard | ✅ Données réelles (organisme, stats, alertes) — **bouton logout fixé le 30/06** |
-| Formations | ✅ CRUD branché Supabase — **bouton logout fixé le 30/06** |
+| Formations | ✅ CRUD complet — liste, création, détail, modification, toggle brouillon/publié |
+| FormationDetail | ✅ Livré le 01/07 — vue complète, toggle statut, lien vers edit |
+| FormationEdit | ✅ Livré le 01/07 — formulaire pré-rempli, update Supabase, boutons Brouillon/Publier |
+| FormationCreation | ✅ CRUD branché Supabase — formulaire mappé schéma réel, insert réel, boutons Brouillon/Publier |
+| Profile | ✅ Livré le 01/07 — édition nom/téléphone, infos organisme (NDA, adresse, ville), SIRET lecture seule |
+| Settings | ✅ Livré le 01/07 — changement mot de passe, toggles notifications, zone danger |
 | Clients | ✅ CRUD + autocomplétion SIRET — **bouton logout fixé le 30/06** |
 | Documents | ✅ Liste avec statut signatures DocuSign — **bouton logout fixé le 30/06** |
 | FormationCreation | ✅ CRUD branché Supabase — **formulaire mappé sur le schéma réel, insert réel, boutons Brouillon / Publier, onLogout câblé — livré le 30/06** |
