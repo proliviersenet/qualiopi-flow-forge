@@ -51,7 +51,7 @@ const Footer = () => {
               <h2 className="mb-6 text-sm font-semibold text-gray-900 uppercase">Contact</h2>
               <ul className="text-gray-600 space-y-2">
                 <li>
-                  <a href="mailto:contact@formationpro.fr" className="hover:underline">Email</a>
+                  <a href="mailto:olivier.senet@prospactive.com" className="hover:underline">Email</a>
                 </li>
                 <li>
                   <Link to="/contact" className="hover:underline">Formulaire de contact</Link>

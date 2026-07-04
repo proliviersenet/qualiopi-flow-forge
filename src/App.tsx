@@ -17,6 +17,13 @@ import Documents from "./pages/Documents";
 import BPF from "./pages/BPF";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import Confidentialite from "./pages/Confidentialite";
+import Conditions from "./pages/Conditions";
+import RGPD from "./pages/RGPD";
+import Contact from "./pages/Contact";
+import Aide from "./pages/Aide";
+import Documentation from "./pages/Documentation";
+import Qualiopi from "./pages/Qualiopi";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -45,6 +52,13 @@ const App = () => (
           <Route path="/bpf" element={<BPF />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/confidentialite" element={<Confidentialite />} />
+          <Route path="/conditions" element={<Conditions />} />
+          <Route path="/rgpd" element={<RGPD />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/aide" element={<Aide />} />
+          <Route path="/documentation" element={<Documentation />} />
+          <Route path="/qualiopi" element={<Qualiopi />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
           <Route path="/mockup" element={<Mockup />} />
