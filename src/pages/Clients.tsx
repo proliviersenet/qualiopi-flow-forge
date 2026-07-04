@@ -32,7 +32,10 @@ const Clients = () => {
   const [showForm, setShowForm] = useState(false);
   const [siretLoading, setSiretLoading] = useState(false);
   const [formData, setFormData] = useState({ siret: "", raison_sociale: "", adresse: "", contact_nom: "", contact_email: "" });
-  const [organismeId, setOrganismeId] = useState<string | null>(null);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [organismeNom, setOrganismeNom] = useState("");
 
   useEffect(() => {
     const init = async () => {
@@ -44,11 +47,37 @@ const Clients = () => {
         setOrganismeId(profile.organisme_id);
         const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
         setClients(data || []);
+        const { data: org } = await supabase.from("organismes").select("raison_sociale").eq("id", profile.organisme_id).single();
+        if (org) setOrganismeNom((org as Record<string, string>).raison_sociale || "");
       }
       setLoading(false);
     };
     init();
   }, [navigate]);
+
+  const envoyerInvitation = async () => {
+    if (!inviteEmail || !organismeId) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
+      toast({ title: "Email invalide", variant: "destructive" }); return;
+    }
+    setInviting(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("envoyer-invitation", {
+      body: {
+        email: inviteEmail,
+        organisme_id: organismeId,
+        organisme_nom: organismeNom,
+        formateur_nom: session?.user?.user_metadata?.nom_complet || user?.name || "Votre formateur",
+      },
+    });
+    setInviting(false);
+    if (error || data?.error) {
+      toast({ title: "Erreur", description: error?.message || data?.error, variant: "destructive" }); return;
+    }
+    toast({ title: "Invitation envoyée ✅", description: `Un email a été envoyé à ${inviteEmail}` });
+    setInviteEmail("");
+    setShowInviteForm(false);
+  };
 
   const fetchSiret = async () => {
     const siret = formData.siret.replace(/\s/g, "");
@@ -97,10 +126,41 @@ const Clients = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-900">Mes clients</h1>
-            <Button className="btn-cta font-bold" onClick={() => setShowForm(!showForm)}>
-              + Ajouter un client
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => { setShowInviteForm(!showInviteForm); setShowForm(false); }}>
+                ✉️ Inviter un client
+              </Button>
+              <Button className="btn-cta font-bold" onClick={() => { setShowForm(!showForm); setShowInviteForm(false); }}>
+                + Ajouter un client
+              </Button>
+            </div>
           </div>
+
+          {showInviteForm && (
+            <Card className="mb-6 p-5 border-orange-200 bg-orange-50">
+              <h3 className="font-semibold mb-1" style={{ color: "#25245e" }}>✉️ Inviter un client par email</h3>
+              <p className="text-sm text-gray-500 mb-4">Votre client recevra un lien pour créer son espace QalioFlex en autonomie à partir de son SIREN.</p>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="email@client.fr"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={e => e.key === "Enter" && envoyerInvitation()}
+                />
+                <Button
+                  onClick={envoyerInvitation}
+                  disabled={inviting}
+                  style={{ background: "#f2901e", color: "#fff" }}
+                  className="font-bold"
+                >
+                  {inviting ? "Envoi..." : "Envoyer l'invitation"}
+                </Button>
+                <Button variant="outline" onClick={() => setShowInviteForm(false)}>Annuler</Button>
+              </div>
+            </Card>
+          )}
 
           {showForm && (
             <Card className="mb-6 p-5">
