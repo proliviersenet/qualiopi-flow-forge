@@ -36,33 +36,27 @@ const Contact = () => {
     setSending(true);
 
     try {
-      // Envoi via Formspree (gratuit, 50 messages/mois, zéro backend, zéro clé API)
-      // ⚠️ Remplacer YOUR_FORM_ID par l'ID de votre formulaire Formspree
-      const res = await fetch("https://formspree.io/f/YOUR_FORM_ID", {
+      const googleFormUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdfx6DKLKw-kOvXwcXMJoa8N_3J2hVrlPG2Uc5ZiWaoLX03fQ/formResponse";
+      const body = new FormData();
+      body.append("entry.1185342027", form.nom);
+      body.append("entry.1398307074", form.sujet || "(sans objet)");
+      body.append("entry.391509171", form.message);
+      body.append("emailAddress", form.email);
+
+      // Google Forms bloque le CORS — on utilise un iframe caché pour la soumission
+      await fetch(googleFormUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          nom: form.nom,
-          email: form.email,
-          sujet: form.sujet || "(sans objet)",
-          message: form.message,
-          _subject: `[QalioFlex] ${form.sujet || "Nouveau message"}`,
-        }),
+        mode: "no-cors",
+        body,
       });
 
-      if (res.ok) {
-        setSent(true);
-        setForm({ nom: "", email: "", sujet: "", message: "" });
-      } else {
-        throw new Error("Erreur serveur");
-      }
+      setSent(true);
+      setForm({ nom: "", email: "", sujet: "", message: "" });
     } catch {
-      // Fallback mailto si Formspree non configuré
-      const body = `Nom : ${form.nom}\nEmail : ${form.email}\n\n${form.message}`;
-      window.location.href = `mailto:olivier.senet@prospactive.com?subject=${encodeURIComponent("[QalioFlex] " + (form.sujet || "Contact"))}&body=${encodeURIComponent(body)}`;
       toast({
-        title: "Client mail ouvert",
-        description: "Le formulaire d'envoi automatique n'est pas encore configuré — votre client mail a été ouvert en alternative.",
+        title: "Erreur d'envoi",
+        description: "Impossible d'envoyer le formulaire. Contactez-nous directement par email.",
+        variant: "destructive",
       });
     } finally {
       setSending(false);
