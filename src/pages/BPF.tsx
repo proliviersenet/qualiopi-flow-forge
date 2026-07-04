@@ -158,7 +158,18 @@ const BPF = () => {
   };
 
   const handleSave = async () => {
-    if (!organismeId) return;
+    if (!organismeId) {
+      toast({
+        title: "Profil incomplet",
+        description: "Aucun organisme n'est rattaché à votre compte. Complétez votre profil d'abord.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!form.annee) {
+      toast({ title: "Année obligatoire", description: "Veuillez saisir une année.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
 
     const payload = {
@@ -184,11 +195,12 @@ const BPF = () => {
     setSaving(false);
 
     if (error) {
-      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+      const msg = error.code === "23505"
+        ? `Un BPF existe déjà pour ${form.annee}. Modifiez-le depuis la liste.`
+        : error.message;
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
       return;
     }
-
-    toast({ title: editingId ? "BPF mis à jour" : "BPF créé", description: `Bilan ${form.annee} enregistré.` });
     setDialogOpen(false);
     await fetchBPF(organismeId);
   };
