@@ -14,7 +14,7 @@ const Confidentialite = () => (
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>1. Responsable du traitement</h2>
-            <p>QalioFlex est édité par <strong>SASU EXSENCO</strong>, dont le siège social est situé au 80 rue du Nouveau Bois, 37550 Saint-Avertin. SIRET : 892 787 458 000 17. Contact : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
+            <p>QalioFlex est édité par <strong>SARL EXSENCO</strong>, dont le siège social est situé au 80 rue du Nouveau Bois, 37550 Saint-Avertin. SIRET : 892 787 458 000 17. Contact : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
           </section>
 
           <section>

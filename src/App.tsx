@@ -24,6 +24,7 @@ import Contact from "./pages/Contact";
 import Aide from "./pages/Aide";
 import Documentation from "./pages/Documentation";
 import Qualiopi from "./pages/Qualiopi";
+import MentionsLegales from "./pages/MentionsLegales";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -59,6 +60,7 @@ const App = () => (
           <Route path="/aide" element={<Aide />} />
           <Route path="/documentation" element={<Documentation />} />
           <Route path="/qualiopi" element={<Qualiopi />} />
+          <Route path="/mentions-legales" element={<MentionsLegales />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
           <Route path="/mockup" element={<Mockup />} />

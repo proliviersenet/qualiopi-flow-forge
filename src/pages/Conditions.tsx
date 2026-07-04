@@ -14,7 +14,7 @@ const Conditions = () => (
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>1. Éditeur</h2>
-            <p>QalioFlex est édité par <strong>SASU EXSENCO</strong> — 80 rue du Nouveau Bois, 37550 Saint-Avertin — SIRET 892 787 458 000 17. En utilisant QalioFlex, vous acceptez les présentes conditions dans leur intégralité.</p>
+            <p>QalioFlex est édité par <strong>SARL EXSENCO</strong> — 80 rue du Nouveau Bois, 37550 Saint-Avertin — SIRET 892 787 458 000 17. En utilisant QalioFlex, vous acceptez les présentes conditions dans leur intégralité.</p>
           </section>
 
           <section>
@@ -34,7 +34,7 @@ const Conditions = () => (
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>5. Propriété intellectuelle</h2>
-            <p>L'ensemble des éléments de QalioFlex (interface, code, logo, marque) sont la propriété exclusive de SASU EXSENCO. Toute reproduction ou représentation non autorisée est strictement interdite.</p>
+            <p>L'ensemble des éléments de QalioFlex (interface, code, logo, marque) sont la propriété exclusive de SARL EXSENCO. Toute reproduction ou représentation non autorisée est strictement interdite.</p>
           </section>
 
           <section>

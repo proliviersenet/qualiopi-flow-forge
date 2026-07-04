@@ -76,7 +76,7 @@ const Documentation = () => (
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-400 mb-3">Documentation complète en cours de rédaction — mise à jour continue.</p>
           <Link to="/contact">
-            <button style={{ background: "#25245e", color: "#fff" }} className="font-bold px-6 py-2 rounded-lg text-sm">
+            <button style={{ background: "#25245e", color: "#fff" }} className="font-bold px-6 py-2 rounded-lg text-sm hover:opacity-90 transition-opacity">
               Une question ? Contactez-nous
             </button>
           </Link>

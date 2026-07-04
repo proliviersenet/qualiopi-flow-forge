@@ -65,7 +65,7 @@ const RGPD = () => (
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>Exercer vos droits</h2>
             <p>Pour toute demande relative à vos données personnelles, contactez-nous :</p>
             <div className="bg-gray-50 rounded-lg p-4 mt-2 text-sm">
-              <p><strong>SASU EXSENCO</strong> — DPO : Olivier SENET</p>
+              <p><strong>SARL EXSENCO</strong> — DPO : Olivier SENET</p>
               <p>80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
               <p>Email : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
               <p className="mt-2 text-gray-500">Nous répondons à toute demande dans un délai maximum de <strong>30 jours</strong>.</p>

@@ -62,7 +62,12 @@ const Footer = () => {
         </div>
         <hr className="my-6 border-gray-200" />
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <span className="text-sm text-gray-500">© {currentYear} QalioFlex. Tous droits réservés.</span>
+          <span className="text-sm text-gray-500">© {currentYear} QalioFlex by SARL EXSENCO. Tous droits réservés.</span>
+          <div className="flex gap-4 mt-2 md:mt-0">
+            <Link to="/mentions-legales" className="text-xs text-gray-400 hover:underline">Mentions légales</Link>
+            <Link to="/confidentialite" className="text-xs text-gray-400 hover:underline">Confidentialité</Link>
+            <Link to="/rgpd" className="text-xs text-gray-400 hover:underline">RGPD</Link>
+          </div>
           <div className="flex mt-4 space-x-6 md:mt-0">
             <a href="#" className="text-gray-500 hover:text-gray-900">
               <span className="sr-only">Facebook</span>
