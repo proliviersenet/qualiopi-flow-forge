@@ -39,26 +39,40 @@ const Clients = () => {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
-      setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
-      const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
-      if (profile?.organisme_id) {
-        setOrganismeId(profile.organisme_id);
-        const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
-        setClients(data || []);
-        const { data: org } = await supabase.from("organismes").select("raison_sociale").eq("id", profile.organisme_id).single();
-        if (org) setOrganismeNom((org as Record<string, string>).raison_sociale || "");
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { navigate("/login"); return; }
+        setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
+        const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
+        if (profile?.organisme_id) {
+          setOrganismeId(profile.organisme_id);
+          const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
+          setClients(data || []);
+          const { data: org } = await supabase.from("organismes").select("raison_sociale").eq("id", profile.organisme_id).single();
+          if (org) setOrganismeNom((org as Record<string, string>).raison_sociale || "");
+        }
+      } catch (err) {
+        console.error("Erreur init Clients:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
   }, [navigate]);
 
   const envoyerInvitation = async () => {
-    if (!inviteEmail || !organismeId) return;
+    if (!inviteEmail) {
+      toast({ title: "Email requis", variant: "destructive" }); return;
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
       toast({ title: "Email invalide", variant: "destructive" }); return;
+    }
+    if (!organismeId) {
+      toast({
+        title: "Profil incomplet",
+        description: "Votre compte n'est pas encore rattaché à un organisme. Complétez votre profil d'abord.",
+        variant: "destructive",
+      }); return;
     }
     setInviting(true);
     const { data: { session } } = await supabase.auth.getSession();
