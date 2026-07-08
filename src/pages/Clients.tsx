@@ -43,7 +43,12 @@ const Clients = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { navigate("/login"); return; }
         setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
-        const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
+        const { data: profile, error: profileError } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
+        if (profileError) {
+          toast({ title: "Debug profil", description: `Erreur: ${profileError.message} | Code: ${profileError.code}`, variant: "destructive" });
+        } else if (!profile?.organisme_id) {
+          toast({ title: "Debug profil", description: `Profil trouvé mais organisme_id = null. ID user: ${session.user.id.substring(0, 8)}...` });
+        }
         if (profile?.organisme_id) {
           setOrganismeId(profile.organisme_id);
           const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
