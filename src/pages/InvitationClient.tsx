@@ -86,43 +86,22 @@ const InvitationClient = () => {
 
     setSaving(true);
     try {
-      // 1. Créer le compte Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: invitation.email,
-        password,
-        options: { data: { nom_complet: entreprise.nom, role: "client" } },
-      });
-
-      if (authError) {
-        if (authError.message.includes("already registered")) {
-          throw new Error("Un compte existe déjà avec cette adresse email. Connectez-vous directement sur QalioFlex ou contactez votre formateur.");
-        }
-        throw authError;
-      }
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("Erreur création compte");
-
-      // 2. Créer le client dans la table clients
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .insert({
+      const { data, error } = await supabase.functions.invoke("creer-compte-client", {
+        body: {
+          email: invitation.email,
+          password,
+          nom: entreprise.nom,
           organisme_id: invitation.organisme_id,
           siret: entreprise.siret,
           siren: siren.replace(/\s/g, ""),
-          raison_sociale: entreprise.nom,
           adresse: entreprise.adresse,
-          contact_email: invitation.email,
-        })
-        .select()
-        .single();
+          token,
+        },
+      });
 
-      if (clientError) throw clientError;
-
-      // 3. Marquer l'invitation comme utilisée
-      await supabase
-        .from("invitations_clients")
-        .update({ statut: "utilisee" })
-        .eq("token", token);
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Erreur interne");
+      }
 
       setStep("done");
     } catch (err: unknown) {
