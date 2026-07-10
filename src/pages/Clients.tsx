@@ -66,6 +66,7 @@ const Clients = () => {
   }, [navigate]);
 
   const envoyerInvitation = async () => {
+    toast({ title: `Debug clic — email: "${inviteEmail}" | orgId: "${organismeId || "NULL"}"` });
     if (!inviteEmail) {
       toast({ title: "Email requis", variant: "destructive" }); return;
     }
