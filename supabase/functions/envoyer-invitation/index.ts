@@ -108,7 +108,8 @@ serve(async (req) => {
               </tr>
             </table>
             <p style="color:#999;font-size:12px;margin:24px 0 0;">
-              Ce lien est valable 7 jours. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+              Ce lien est valable 7 jours. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.<br>
+              <strong>📬 Si vous ne voyez pas cet email dans votre boîte principale, vérifiez vos spams ou courriers indésirables.</strong>
             </p>
           </td>
         </tr>

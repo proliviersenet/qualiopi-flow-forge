@@ -45,11 +45,7 @@ const Clients = () => {
         if (!session) { navigate("/login"); return; }
         setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
         const { data: profile, error: profileError } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
-        if (profileError) {
-          toast({ title: "Debug profil", description: `Erreur: ${profileError.message} | Code: ${profileError.code}`, variant: "destructive" });
-        } else if (!profile?.organisme_id) {
-          toast({ title: "Debug profil", description: `Profil trouvé mais organisme_id = null. ID user: ${session.user.id.substring(0, 8)}...` });
-        }
+        if (profileError) console.error("Erreur profil:", profileError);
         if (profile?.organisme_id) {
           setOrganismeId(profile.organisme_id);
           const { data } = await supabase.from("clients").select("*").eq("organisme_id", profile.organisme_id).order("raison_sociale");
@@ -67,7 +63,6 @@ const Clients = () => {
   }, [navigate]);
 
   const envoyerInvitation = async () => {
-    toast({ title: `Debug clic — email: "${inviteEmail}" | orgId: "${organismeId || "NULL"}"` });
     if (!inviteEmail) {
       toast({ title: "Email requis", variant: "destructive" }); return;
     }
@@ -180,6 +175,7 @@ const Clients = () => {
                 </Button>
                 <Button variant="outline" onClick={() => setShowInviteForm(false)}>Annuler</Button>
               </div>
+              <p className="text-xs text-gray-400 mt-2">📬 Si votre client ne reçoit pas l'email, demandez-lui de vérifier ses spams ou courriers indésirables.</p>
             </Card>
           )}
 
