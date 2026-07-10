@@ -93,7 +93,12 @@ const InvitationClient = () => {
         options: { data: { nom_complet: entreprise.nom, role: "client" } },
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (authError.message.includes("already registered")) {
+          throw new Error("Un compte existe déjà avec cette adresse email. Connectez-vous directement sur QalioFlex ou contactez votre formateur.");
+        }
+        throw authError;
+      }
       const userId = authData.user?.id;
       if (!userId) throw new Error("Erreur création compte");
 
