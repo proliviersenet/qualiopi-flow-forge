@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { validatePassword } from "@/lib/passwordUtils";
 
 const InvitationClient = () => {
   const { token } = useParams<{ token: string }>();
@@ -19,6 +21,8 @@ const InvitationClient = () => {
   const [sirenLoading, setSirenLoading] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Vérification du token
@@ -71,8 +75,12 @@ const InvitationClient = () => {
     if (!password || password.length < 8) {
       toast({ title: "Mot de passe trop court", description: "8 caractères minimum.", variant: "destructive" }); return;
     }
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.valid) {
+      toast({ title: "Mot de passe insuffisant", description: pwCheck.message, variant: "destructive" }); return;
+    }
     if (password !== confirmPassword) {
-      toast({ title: "Les mots de passe ne correspondent pas", variant: "destructive" }); return;
+      toast({ title: "Les mots de passe ne correspondent pas", description: "Vérifiez que les deux champs sont identiques.", variant: "destructive" }); return;
     }
     if (!invitation || !entreprise) return;
 
@@ -223,21 +231,59 @@ const InvitationClient = () => {
                   </div>
                   <div className="space-y-2">
                     <Label>Mot de passe <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="8 caractères minimum"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="8 car. min, 1 maj, 1 chiffre, 1 spécial"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {password.length > 0 && (() => {
+                      const check = validatePassword(password);
+                      return (
+                        <div className="space-y-1 pt-1">
+                          {check.rules.map((rule) => (
+                            <div key={rule.label} className={`flex items-center gap-1.5 text-xs ${rule.ok ? "text-green-600" : "text-gray-400"}`}>
+                              <span>{rule.ok ? "✓" : "○"}</span>
+                              <span>{rule.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-2">
                     <Label>Confirmer le mot de passe <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      placeholder="Répétez le mot de passe"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="Répétez le mot de passe"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {confirmPassword.length > 0 && (
+                      <p className={`text-xs ${password === confirmPassword ? "text-green-600" : "text-red-400"}`}>
+                        {password === confirmPassword ? "✓ Les mots de passe correspondent" : "○ Les mots de passe ne correspondent pas"}
+                      </p>
+                    )}
                   </div>
                 </div>
 
