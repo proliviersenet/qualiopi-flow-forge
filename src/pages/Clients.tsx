@@ -35,6 +35,7 @@ const Clients = () => {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [organismeNom, setOrganismeNom] = useState("");
 
   useEffect(() => {
