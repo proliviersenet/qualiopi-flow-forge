@@ -21,14 +21,13 @@ serve(async (req) => {
       );
     }
 
-    // Client admin (service role) pour avoir tous les droits
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // 1. Vérifier que le token d'invitation est valide
+    // 1. Vérifier token invitation
     const { data: invitation, error: invitError } = await supabase
       .from("invitations_clients")
       .select("*")
@@ -44,24 +43,42 @@ serve(async (req) => {
       );
     }
 
-    // 2. Vérifier si un compte existe déjà avec cet email
-    const { data: existingUsers } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    const existingUser = existingUsers?.users?.find(u => u.email === email);
+    // 2. Chercher et supprimer tout compte existant avec cet email via SQL direct
+    const { data: existingRows } = await supabase
+      .from("profiles")
+      .select("id")
+      .limit(1000);
 
-    if (existingUser) {
-      // Supprimer l'ancien compte pour libérer l'email
-      const { error: deleteError } = await supabase.auth.admin.deleteUser(existingUser.id);
-      if (deleteError) {
-        console.error("Erreur suppression ancien compte:", deleteError);
-        // On continue quand même
+    // Recherche dans auth.users via requête SQL brute
+    const { data: authUserRows } = await supabase
+      .rpc("find_user_by_email", { p_email: email })
+      .catch(() => ({ data: null }));
+
+    if (authUserRows && authUserRows.length > 0) {
+      for (const row of authUserRows) {
+        console.log(`Suppression compte: ${row.id}`);
+        await supabase.auth.admin.deleteUser(row.id);
+        await new Promise(r => setTimeout(r, 200));
+      }
+    } else {
+      // Fallback : listUsers
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const found = listData?.users?.filter(u => u.email === email) || [];
+      for (const u of found) {
+        console.log(`Suppression via listUsers: ${u.id}`);
+        await supabase.auth.admin.deleteUser(u.id);
+        await new Promise(r => setTimeout(r, 200));
       }
     }
+
+    // Attendre propagation
+    await new Promise(r => setTimeout(r, 800));
 
     // 3. Créer le nouveau compte
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Pas besoin de confirmation email
+      email_confirm: true,
       user_metadata: { nom_complet: nom, role: "client" },
     });
 
@@ -69,9 +86,7 @@ serve(async (req) => {
       throw new Error(authError?.message || "Erreur création compte");
     }
 
-    const userId = authData.user.id;
-
-    // 4. Créer le client dans la table clients
+    // 4. Créer le client en base
     const { error: clientError } = await supabase
       .from("clients")
       .insert({
@@ -85,14 +100,14 @@ serve(async (req) => {
 
     if (clientError) throw new Error(clientError.message);
 
-    // 5. Marquer l'invitation comme utilisée
+    // 5. Marquer invitation utilisée
     await supabase
       .from("invitations_clients")
       .update({ statut: "utilisee" })
       .eq("token", token);
 
     return new Response(
-      JSON.stringify({ success: true, user_id: userId }),
+      JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
