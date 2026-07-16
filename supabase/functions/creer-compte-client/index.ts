@@ -43,36 +43,18 @@ serve(async (req) => {
       );
     }
 
-    // 2. Chercher et supprimer tout compte existant avec cet email via SQL direct
-    const { data: existingRows } = await supabase
-      .from("profiles")
-      .select("id")
-      .limit(1000);
-
-    // Recherche dans auth.users via requête SQL brute
-    const { data: authUserRows } = await supabase
-      .rpc("find_user_by_email", { p_email: email })
-      .catch(() => ({ data: null }));
-
-    if (authUserRows && authUserRows.length > 0) {
-      for (const row of authUserRows) {
-        console.log(`Suppression compte: ${row.id}`);
-        await supabase.auth.admin.deleteUser(row.id);
-        await new Promise(r => setTimeout(r, 200));
-      }
-    } else {
-      // Fallback : listUsers
-      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const found = listData?.users?.filter(u => u.email === email) || [];
-      for (const u of found) {
-        console.log(`Suppression via listUsers: ${u.id}`);
-        await supabase.auth.admin.deleteUser(u.id);
-        await new Promise(r => setTimeout(r, 200));
-      }
+    // 2. Chercher et supprimer tout compte existant avec cet email
+    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const found = listData?.users?.filter(u => u.email === email) || [];
+    for (const u of found) {
+      console.log(`Suppression compte existant: ${u.id}`);
+      await supabase.auth.admin.deleteUser(u.id);
     }
 
-    // Attendre propagation
-    await new Promise(r => setTimeout(r, 800));
+    // Attendre propagation si suppression effectuée
+    if (found.length > 0) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
 
     // 3. Créer le nouveau compte
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
