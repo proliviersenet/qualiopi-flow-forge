@@ -43,50 +43,64 @@ serve(async (req) => {
       );
     }
 
-    // 2. Supprimer tout utilisateur existant avec cet email via SQL direct
-    const { data: existingUser } = await supabase
-      .rpc("get_user_id_by_email", { p_email: email });
+    // 2. Chercher si un compte existe avec cet email
+    const { data: existingId } = await supabase.rpc("get_user_id_by_email", { p_email: email });
+    console.log("Compte existant trouvé:", existingId);
 
-    if (existingUser) {
-      console.log(`Utilisateur trouvé: ${existingUser}, suppression...`);
-      await supabase.auth.admin.deleteUser(existingUser);
-      await new Promise(r => setTimeout(r, 1500));
+    let userId: string;
+
+    if (existingId) {
+      // Mettre à jour le compte existant au lieu de le recréer
+      console.log("Mise à jour du compte existant:", existingId);
+      const { data: updated, error: updateError } = await supabase.auth.admin.updateUserById(
+        existingId,
+        {
+          password,
+          email_confirm: true,
+          user_metadata: { nom_complet: nom, role: "client" },
+          ban_duration: "none", // débloquer si banni
+        }
+      );
+      if (updateError) throw new Error(updateError.message);
+      userId = existingId;
+    } else {
+      // Créer un nouveau compte
+      console.log("Création nouveau compte pour:", email);
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { nom_complet: nom, role: "client" },
+      });
+      if (authError || !authData.user) throw new Error(authError?.message || "Erreur création compte");
+      userId = authData.user.id;
     }
 
-    // 3. Créer le nouveau compte
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { nom_complet: nom, role: "client" },
-    });
-
-    if (authError || !authData.user) {
-      throw new Error(authError?.message || "Erreur création compte");
-    }
-
-    // 4. Créer le client en base
+    // 3. Créer ou mettre à jour le client en base
     const { error: clientError } = await supabase
       .from("clients")
-      .insert({
+      .upsert({
         organisme_id,
         siret,
         siren,
         raison_sociale: nom,
         adresse,
         contact_email: email,
-      });
+      }, { onConflict: "siret" });
 
-    if (clientError) throw new Error(clientError.message);
+    if (clientError) {
+      console.error("Erreur client:", clientError);
+      // Non bloquant si le client existe déjà
+    }
 
-    // 5. Marquer invitation utilisée
+    // 4. Marquer invitation utilisée
     await supabase
       .from("invitations_clients")
       .update({ statut: "utilisee" })
       .eq("token", token);
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, user_id: userId }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
