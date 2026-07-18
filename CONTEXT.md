@@ -190,3 +190,38 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 - Le repo est cloné via HTTPS ; pour pousser du code, un **Personal Access Token GitHub** (scope `repo`) est nécessaire si pas d'auth Git déjà configurée sur la machine. Ne jamais laisser de token en clair dans une conversation au-delà de son usage immédiat — le révoquer juste après usage.
 - Les secrets Supabase (clés API, DocuSign, etc.) ne sont **jamais** à redemander ou ressaisir en conversation — ils sont déjà configurés côté Supabase Edge Functions.
 - Toujours vérifier l'état réel d'une page avant de la considérer "branchée" — plusieurs pages listées comme "✅ branchées" peuvent quand même contenir des bugs ponctuels (cf. §7, bouton logout).
+
+---
+
+## Session 4 — 18 juillet 2026
+
+### ✅ Module invitation client complet
+- Edge Function `envoyer-invitation` : email HTML Resend, token 7 jours, anti-spam
+- Edge Function `creer-compte-client` : updateUserById si compte existant, création sinon
+- Page publique `/invitation/:token` : vérif token → SIREN → compte → 🎉
+- Tables créées : `invitations_clients`, `stagiaires`
+- DNS OVH configuré, domaine Resend vérifié
+
+### 🔜 Prochain chantier : Espace client distinct
+
+**Problème actuel** : le client voit le même dashboard que le formateur.
+
+**Ce qu'il faut construire :**
+
+#### Détection du rôle au login
+- Si `user_metadata.role === "client"` → rediriger vers `/espace-client`
+- Si `role === "formateur"` → dashboard actuel
+
+#### Espace client (`/espace-client`) — pages à créer :
+1. **Mes sessions** : liste des sessions de formation affectées par le formateur (passées + à venir), avec statut, dates, lieu
+2. **Détail session** (`/espace-client/session/:id`) : documents de la formation (convention, programme, devis, livret, questionnaires, émargements, attestation fin de formation) + bouton upload fichier stagiaires
+3. **Upload stagiaires** : fichier Excel/CSV avec colonnes `nom`, `prénom`, `téléphone portable`, `email` → parsing → insert dans table `stagiaires` → déclenchement flow Qualiopi automatisé
+
+#### Flow formateur (à coder) :
+- Dans la page Clients : **glisser-déposer une formation** du catalogue vers un client → crée une session avec `formation_id` + `client_id`
+- Saisir les **dates de formation** (date_debut, date_fin, lieu)
+- Le flow documentaire Qualiopi ne se déclenche qu'après upload du fichier stagiaires par le client
+
+#### Logo cliquable (todo rapide)
+- Logo QalioFlex dans Header → lien vers `/dashboard` si connecté, `/` sinon
+
