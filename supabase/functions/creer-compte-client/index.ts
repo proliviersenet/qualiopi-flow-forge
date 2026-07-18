@@ -43,17 +43,14 @@ serve(async (req) => {
       );
     }
 
-    // 2. Chercher et supprimer tout compte existant avec cet email
-    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    const found = listData?.users?.filter(u => u.email === email) || [];
-    for (const u of found) {
-      console.log(`Suppression compte existant: ${u.id}`);
-      await supabase.auth.admin.deleteUser(u.id);
-    }
+    // 2. Supprimer tout utilisateur existant avec cet email via SQL direct
+    const { data: existingUser } = await supabase
+      .rpc("get_user_id_by_email", { p_email: email });
 
-    // Attendre propagation si suppression effectuée
-    if (found.length > 0) {
-      await new Promise(r => setTimeout(r, 1000));
+    if (existingUser) {
+      console.log(`Utilisateur trouvé: ${existingUser}, suppression...`);
+      await supabase.auth.admin.deleteUser(existingUser);
+      await new Promise(r => setTimeout(r, 1500));
     }
 
     // 3. Créer le nouveau compte
