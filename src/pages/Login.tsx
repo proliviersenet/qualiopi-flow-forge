@@ -29,13 +29,14 @@ const Login = () => {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error, data } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       });
       if (error) throw error;
+      const role = data.user?.user_metadata?.role;
       toast({ title: "Connexion réussie", description: "Bienvenue sur QalioFlex !" });
-      navigate("/dashboard");
+      navigate(role === "client" ? "/espace-client" : "/dashboard");
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Identifiants incorrects";
       toast({ title: "Erreur de connexion", description: msg, variant: "destructive" });
