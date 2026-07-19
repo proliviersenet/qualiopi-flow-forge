@@ -113,46 +113,68 @@ const EspaceClient = () => {
     init();
   }, [navigate]);
 
+  // Téléchargement du template Excel
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["prenom", "nom", "mobile", "mail"],
+      ["Marie", "Dupont", "0612345678", "marie.dupont@entreprise.fr"],
+      ["Jean", "Martin", "0698765432", "jean.martin@entreprise.fr"],
+    ]);
+    ws["!cols"] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Stagiaires");
+    XLSX.writeFile(wb, "template_stagiaires_qualioflex.xlsx");
+  };
+
   const handleFileUpload = async (sessionId: string, file: File) => {
     if (!file) return;
     setUploadingSession(sessionId);
 
     try {
-      // Lire le fichier Excel/CSV
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as Record<string, string>[];
 
       if (rows.length === 0) {
-        toast({ title: "Fichier vide", description: "Aucune ligne trouvée dans le fichier.", variant: "destructive" });
+        toast({ title: "Fichier vide", description: "Aucune ligne trouvée.", variant: "destructive" });
         return;
       }
 
-      // Normaliser les colonnes (insensible à la casse et aux accents)
-      const normalize = (s: string) => s.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9]/g, "");
+      // Vérification stricte du format : prenom, nom, mobile, mail
+      const firstRow = rows[0];
+      const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
+      const required = ["prenom", "nom", "mobile", "mail"];
+      const missing = required.filter(col => !keys.some(k => k === col || k === col.replace("e", "é")));
 
+      if (missing.length > 0) {
+        toast({
+          title: "Format incorrect",
+          description: `Colonnes manquantes : ${missing.join(", ")}. Téléchargez le template QalioFlex pour utiliser le bon format.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Parsing avec colonnes strictes
       const stagiaires: Stagiaire[] = [];
       const errors: string[] = [];
 
       rows.forEach((row, i) => {
-        const keys = Object.keys(row);
-        const get = (variants: string[]) => {
-          const key = keys.find(k => variants.some(v => normalize(k).includes(normalize(v))));
+        const getCol = (name: string) => {
+          const key = Object.keys(row).find(k => k.toLowerCase().trim() === name);
           return key ? String(row[key]).trim() : "";
         };
 
-        const nom = get(["nom"]);
-        const prenom = get(["prenom", "prénom"]);
-        const email = get(["email", "mail", "courriel"]);
-        const telephone = get(["tel", "telephone", "téléphone", "portable", "mobile"]);
+        const prenom = getCol("prenom");
+        const nom = getCol("nom");
+        const telephone = getCol("mobile");
+        const email = getCol("mail");
 
-        if (!nom && !prenom && !email) return; // ligne vide
+        if (!prenom && !nom && !email) return; // ligne vide
 
-        if (!nom || !prenom) {
-          errors.push(`Ligne ${i + 2} : nom ou prénom manquant`);
+        if (!prenom || !nom) {
+          errors.push(`Ligne ${i + 2} : prénom ou nom manquant`);
           return;
         }
 
@@ -160,18 +182,25 @@ const EspaceClient = () => {
       });
 
       if (errors.length > 0) {
-        toast({ title: `${errors.length} ligne(s) ignorée(s)`, description: errors.slice(0, 3).join(" | "), variant: "destructive" });
+        toast({
+          title: `${errors.length} ligne(s) ignorée(s)`,
+          description: errors.slice(0, 3).join(" | "),
+          variant: "destructive",
+        });
       }
 
       if (stagiaires.length === 0) {
-        toast({ title: "Aucun stagiaire valide", description: "Vérifiez les colonnes : nom, prénom, email, téléphone.", variant: "destructive" });
+        toast({
+          title: "Aucun stagiaire valide",
+          description: "Vérifiez que le fichier contient des données et utilise le bon format.",
+          variant: "destructive",
+        });
         return;
       }
 
-      // Supprimer les anciens stagiaires de cette session
+      // Supprimer les anciens stagiaires et insérer les nouveaux
       await supabase.from("stagiaires").delete().eq("session_id", sessionId);
 
-      // Insérer les nouveaux
       const { error: insertError } = await supabase.from("stagiaires").insert(
         stagiaires.map(s => ({
           session_id: sessionId,
@@ -314,7 +343,7 @@ const EspaceClient = () => {
                         <div>
                           <p className="text-sm font-semibold text-gray-700">👥 Stagiaires</p>
                           <p className="text-xs text-gray-400">
-                            Fichier Excel/CSV avec colonnes : nom, prénom, téléphone, email
+                            Format imposé : <strong>prénom / nom / mobile / mail</strong>
                           </p>
                         </div>
                         {hasStag && (
@@ -322,7 +351,16 @@ const EspaceClient = () => {
                         )}
                       </div>
 
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={downloadTemplate}
+                          className="text-xs"
+                        >
+                          📥 Télécharger le template Excel
+                        </Button>
+
                         <input
                           ref={fileInputRef}
                           type="file"
