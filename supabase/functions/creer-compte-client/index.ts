@@ -76,22 +76,24 @@ serve(async (req) => {
       userId = authData.user.id;
     }
 
-    // 3. Créer ou mettre à jour le client en base
+    // 3. Créer le client en base
     const { error: clientError } = await supabase
       .from("clients")
-      .upsert({
+      .insert({
         organisme_id,
-        siret,
-        siren,
+        siret: siret || null,
+        siren: siren || null,
         raison_sociale: nom,
-        adresse,
+        adresse: adresse || null,
         contact_email: email,
-      }, { onConflict: "siret" });
+      });
 
     if (clientError) {
-      console.error("Erreur client:", clientError);
-      // Non bloquant si le client existe déjà
+      console.error("Erreur insert client:", JSON.stringify(clientError));
+      throw new Error(`Erreur création client: ${clientError.message}`);
     }
+
+    console.log("Client créé avec succès pour:", email);
 
     // 4. Marquer invitation utilisée
     await supabase
