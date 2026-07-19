@@ -225,3 +225,36 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 #### Logo cliquable (todo rapide)
 - Logo QalioFlex dans Header → lien vers `/dashboard` si connecté, `/` sinon
 
+
+### ✅ Flow client complet validé le 19/07/2026
+
+**Formateur :**
+- Invite un client par email → Edge Function `envoyer-invitation` (Resend)
+- Voit le client dans sa liste → clique "Voir la fiche"
+- Affecte une formation du catalogue avec dates, lieu, lien visio → crée une session
+
+**Client :**
+- Reçoit l'email → clique le lien → saisit son SIREN → espace créé via `creer-compte-client`
+- Se connecte → redirigé automatiquement vers `/espace-client`
+- Voit ses sessions de formation → importe le fichier stagiaires (Excel/CSV)
+
+**RLS ajoutées :**
+- `clients_read_own_record` : `contact_email = auth.email()`
+- `clients_read_own_sessions` : `client_id in (select id from clients where contact_email = auth.email())`
+
+**Pages créées :**
+- `EspaceClient.tsx` : espace client complet (sessions, documents, upload stagiaires)
+- `ClientDetail.tsx` : fiche client formateur + dialog affectation formation
+- `InvitationClient.tsx` : onboarding client en 3 étapes
+
+**Edge Functions déployées :**
+- `envoyer-invitation` : génération token + email Resend
+- `creer-compte-client` : création/réactivation compte + insert client en base
+
+### 🔜 Prochaines priorités
+
+1. **Onboarding formateur** : wizard post-inscription (compléter organisme → créer formation → inviter client)
+2. **Flow documentaire Qualiopi** : déclenché après upload stagiaires (convention, programme, émargements, attestation)
+3. **Module notation** : notes clients + stagiaires avec stats
+4. **Pages footer** restantes : tous les liens fonctionnent
+5. **Stripe** : abonnement + factures
