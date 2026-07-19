@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -231,7 +231,12 @@ const Clients = () => {
                     </div>
                     {client.adresse && <p className="text-xs text-gray-500 mb-2">📍 {client.adresse}</p>}
                     {client.contact_nom && <p className="text-xs text-gray-500 mb-1">👤 {client.contact_nom}</p>}
-                    {client.contact_email && <p className="text-xs text-gray-500">✉️ {client.contact_email}</p>}
+                    {client.contact_email && <p className="text-xs text-gray-500 mb-3">✉️ {client.contact_email}</p>}
+                    <Link to={`/clients/${client.id}`}>
+                      <Button size="sm" className="w-full font-bold" style={{ background: "#25245e", color: "#fff" }}>
+                        Voir la fiche →
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
               ))}
