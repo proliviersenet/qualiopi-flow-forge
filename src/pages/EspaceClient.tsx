@@ -221,7 +221,9 @@ const EspaceClient = () => {
       });
 
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      const msg = err instanceof Error
+        ? err.message
+        : (err as Record<string, string>)?.message || JSON.stringify(err);
       toast({ title: "Erreur import", description: msg, variant: "destructive" });
     } finally {
       setUploadingSession(null);
