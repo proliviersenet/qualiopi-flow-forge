@@ -54,8 +54,47 @@ serve(async (req) => {
       questionnaire: "le questionnaire de satisfaction",
     };
 
-    const sujet = `[QalioFlex] Relance — ${motifLabel[motif] || motif}`;
-    const corps = `Bonjour ${prenom} ${nom},\n\nNous vous rappelons que ${motifLabel[motif] || motif} concernant la formation "${formationTitre}" est en attente de votre signature ou complétion.\n\nMerci de bien vouloir y répondre dès que possible.\n\nCordialement,\nL'équipe QalioFlex`;
+    const motifAction: Record<string, string> = {
+      convention: "signer votre convention de formation",
+      emargement: "compléter votre feuille d'émargement",
+      attestation: "signer votre attestation de fin de formation",
+      questionnaire: "compléter votre questionnaire de satisfaction",
+    };
+
+    const sujet = `[QalioFlex] Rappel — ${motifLabel[motif] || motif} en attente`;
+    const lienAction = "https://qualioflex.fr/espace-client";
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+  <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
+    <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+    <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
+  </div>
+  <div style="background:#fff;border:1px solid #eee;border-top:none;padding:30px;border-radius:0 0 8px 8px;">
+    <p>Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p>Vous n'avez pas encore répondu à une action en attente concernant votre formation <strong>"${formationTitre}"</strong>.</p>
+    <p>👉 Il vous reste à <strong>${motifAction[motif] || motifLabel[motif]}</strong>.</p>
+    <div style="text-align:center;margin:30px 0;">
+      <a href="${lienAction}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
+        Accéder à mon espace →
+      </a>
+    </div>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:13px;color:#777;">Besoin d'aide ? Contactez-nous directement :</p>
+    <p style="font-size:13px;">
+      <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
+    </p>
+    <p style="font-size:11px;color:#aaa;margin-top:24px;">
+      QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin
+    </p>
+  </div>
+</body>
+</html>`;
+
+    const textContent = `Bonjour ${prenom} ${nom},\n\nVous n'avez pas encore répondu à une action en attente pour votre formation "${formationTitre}".\n\nAction requise : ${motifAction[motif] || motifLabel[motif]}\n\nAccédez à votre espace : ${lienAction}\n\nBesoin d'aide ? Contactez-nous : olivier@exsenco.fr\n\nCordialement,\nL'équipe QalioFlex`;
 
     let emailSent = false;
     let smsSent = false;
@@ -65,16 +104,13 @@ serve(async (req) => {
     if ((canal === "email" || canal === "les_deux") && email) {
       const emailRes = await fetch(`${BREVO_API}/smtp/email`, {
         method: "POST",
-        headers: {
-          "api-key": BREVO_API_KEY,
-          "Content-Type": "application/json",
-        },
+        headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
           sender: { name: "QalioFlex", email: "noreply@qualioflex.fr" },
           to: [{ email, name: `${prenom} ${nom}` }],
           subject: sujet,
-          textContent: corps,
-          htmlContent: `<p>Bonjour <strong>${prenom} ${nom}</strong>,</p><p>Nous vous rappelons que <strong>${motifLabel[motif] || motif}</strong> concernant la formation <strong>"${formationTitre}"</strong> est en attente de votre signature ou complétion.</p><p>Merci de bien vouloir y répondre dès que possible.</p><p>Cordialement,<br>L'équipe QalioFlex</p>`,
+          textContent,
+          htmlContent,
         }),
       });
       if (emailRes.ok) emailSent = true;
@@ -96,7 +132,7 @@ serve(async (req) => {
         body: JSON.stringify({
           sender: "QalioFlex",
           recipient: phoneIntl,
-          content: `QalioFlex : Bonjour ${prenom}, ${motifLabel[motif] || motif} pour "${formationTitre}" est en attente. Merci de le compléter rapidement.`,
+          content: `QalioFlex : Bonjour ${prenom}, vous n'avez pas encore ${motifAction[motif] || motifLabel[motif]} pour "${formationTitre}". Connectez-vous sur qualioflex.fr. Besoin d'aide : olivier@exsenco.fr`,
           type: "transactional",
         }),
       });
@@ -115,7 +151,6 @@ serve(async (req) => {
         JSON.stringify({ error: errors.join(" | ") }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
     }
 
     return new Response(
