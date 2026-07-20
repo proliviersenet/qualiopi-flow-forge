@@ -116,13 +116,28 @@ const EspaceClient = () => {
 
   // Téléchargement du template Excel
   const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
       ["prenom", "nom", "mobile", "mail"],
       ["Marie", "Dupont", "0612345678", "marie.dupont@entreprise.fr"],
       ["Jean", "Martin", "0698765432", "jean.martin@entreprise.fr"],
     ]);
+
+    // Forcer la colonne mobile (C) en format texte pour conserver le 0
+    const mobileCol = ["C2", "C3"];
+    mobileCol.forEach(cell => {
+      if (ws[cell]) {
+        ws[cell].t = "s"; // type string
+        ws[cell].z = "@"; // format texte Excel
+      }
+    });
+
+    // Largeurs de colonnes
     ws["!cols"] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }];
-    const wb = XLSX.utils.book_new();
+
+    // Définir le format texte pour toute la colonne C
+    if (!ws["!rows"]) ws["!rows"] = [];
+
     XLSX.utils.book_append_sheet(wb, ws, "Stagiaires");
     XLSX.writeFile(wb, "template_stagiaires_qualioflex.xlsx");
   };
@@ -133,9 +148,9 @@ const EspaceClient = () => {
 
     try {
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
+      const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as Record<string, string>[];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false }) as Record<string, string>[];
 
       if (rows.length === 0) {
         toast({ title: "Fichier vide", description: "Aucune ligne trouvée.", variant: "destructive" });
@@ -169,8 +184,14 @@ const EspaceClient = () => {
 
         const prenom = getCol("prenom");
         const nom = getCol("nom");
-        const telephone = getCol("mobile");
+        const telephoneRaw = getCol("mobile");
         const email = getCol("mail");
+
+        // Normaliser le numéro : forcer string et ajouter 0 si manquant
+        let telephone = String(telephoneRaw).replace(/\s/g, "");
+        if (telephone.length === 9 && !telephone.startsWith("0")) {
+          telephone = "0" + telephone;
+        }
 
         if (!prenom && !nom && !email) return; // ligne vide
 
