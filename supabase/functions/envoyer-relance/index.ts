@@ -111,15 +111,19 @@ serve(async (req) => {
       }
     }
 
-    // Enregistrer la relance en base
+    // Enregistrer la relance en base avec le vrai schéma
     const statut = (emailSent || smsSent) ? "envoye" : "erreur";
     await supabase.from("relances").insert({
-      stagiaire_id,
-      session_id,
-      type: canal,
-      motif,
+      participation_id: stagiaire_id,
+      canal,
+      type: envoye_par === "auto" ? "automatique" : "manuelle",
+      jalon: motif,
       statut,
-      envoye_par: envoye_par || "formateur",
+      echeance: new Date().toISOString(),
+      nb_relances_envoyees: 1,
+      alerte_formateur_envoyee: envoye_par === "formateur",
+      alerte_client_envoyee: envoye_par === "client",
+      last_error: errors.length > 0 ? errors.join(" | ") : null,
     });
 
     if (statut === "erreur") {
