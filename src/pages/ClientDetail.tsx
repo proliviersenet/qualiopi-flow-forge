@@ -14,6 +14,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import StagiairesList from "@/components/StagiairesList";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Client {
@@ -279,6 +280,9 @@ const ClientDetail = () => {
                           {session.date_fin && <span>📅 Fin : {new Date(session.date_fin).toLocaleDateString("fr-FR")}</span>}
                           {session.lieu && <span>📍 {session.lieu}</span>}
                           {session.lien_visio && <a href={session.lien_visio} target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">🖥 Lien visio</a>}
+                        </div>
+                        <div className="mt-4">
+                          <StagiairesList sessionId={session.id} />
                         </div>
                       </div>
                       <Button

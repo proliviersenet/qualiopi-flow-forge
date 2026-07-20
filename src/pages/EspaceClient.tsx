@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import StagiairesList from "@/components/StagiairesList";
 import * as XLSX from "xlsx";
 
 interface Session {
@@ -243,9 +244,9 @@ const EspaceClient = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header client simplifié */}
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
-        <div>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/espace-client")}>
           <span className="text-xl font-bold" style={{ color: "#25245e" }}>QalioFlex</span>
-          <span className="text-xs text-gray-400 ml-2">Espace client</span>
+          <span className="text-xs text-gray-400">Espace client</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">{user?.email}</span>
@@ -338,6 +339,13 @@ const EspaceClient = () => {
                         <p className="text-xs text-orange-500 mt-2">⚠️ Les documents seront disponibles après l'import des stagiaires.</p>
                       )}
                     </div>
+
+                    {/* Stagiaires importés */}
+                    {hasStag && (
+                      <div className="border-t pt-4 mb-4">
+                        <StagiairesList sessionId={session.id} />
+                      </div>
+                    )}
 
                     {/* Upload stagiaires */}
                     <div className="border-t pt-4">
