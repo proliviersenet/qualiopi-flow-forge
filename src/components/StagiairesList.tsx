@@ -70,7 +70,19 @@ const StagiairesList = ({
         body: { stagiaire_id: stagiaire.id, session_id: sessionId, motif, canal, envoye_par },
       });
 
-      if (error || data?.error) throw new Error(data?.error || error?.message);
+      console.log("Réponse relance:", JSON.stringify(data), JSON.stringify(error));
+
+      if (error) {
+        // Extraire le vrai message depuis la réponse HTTP
+        let errMsg = error.message || "Erreur inconnue";
+        try {
+          const ctx = await (error as Record<string, unknown>)?.context;
+          if (ctx) errMsg = JSON.stringify(ctx);
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      if (data?.error) throw new Error(data.error);
 
       toast({
         title: "✅ Relance envoyée",
