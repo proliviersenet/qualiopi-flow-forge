@@ -282,7 +282,7 @@ const ClientDetail = () => {
                           {session.lien_visio && <a href={session.lien_visio} target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">🖥 Lien visio</a>}
                         </div>
                         <div className="mt-4">
-                          <StagiairesList sessionId={session.id} />
+                          <StagiairesList sessionId={session.id} canRelance={true} envoye_par="formateur" canal="les_deux" />
                         </div>
                       </div>
                       <Button

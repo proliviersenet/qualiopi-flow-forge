@@ -364,7 +364,7 @@ const EspaceClient = () => {
                     {/* Stagiaires importés */}
                     {hasStag && (
                       <div className="border-t pt-4 mb-4">
-                        <StagiairesList sessionId={session.id} />
+                        <StagiairesList sessionId={session.id} canRelance={true} envoye_par="client" canal="les_deux" />
                       </div>
                     )}
 
