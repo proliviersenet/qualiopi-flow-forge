@@ -21,13 +21,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const {
-      stagiaire_id,
-      session_id,
-      motif, // 'convention' | 'emargement' | 'attestation' | 'questionnaire'
-      canal,  // 'email' | 'sms' | 'les_deux'
-      envoye_par, // 'auto' | 'formateur' | 'client'
-    } = await req.json();
+    const body = await req.json();
+    console.log("envoyer-relance appelé:", JSON.stringify(body));
+    const { stagiaire_id, session_id, motif, canal, envoye_par } = body;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -111,26 +107,15 @@ serve(async (req) => {
       }
     }
 
-    // Enregistrer la relance en base avec le vrai schéma
-    const statut = (emailSent || smsSent) ? "envoye" : "erreur";
-    await supabase.from("relances").insert({
-      participation_id: stagiaire_id,
-      canal,
-      type: envoye_par === "auto" ? "automatique" : "manuelle",
-      jalon: motif,
-      statut,
-      echeance: new Date().toISOString(),
-      nb_relances_envoyees: 1,
-      alerte_formateur_envoyee: envoye_par === "formateur",
-      alerte_client_envoyee: envoye_par === "client",
-      last_error: errors.length > 0 ? errors.join(" | ") : null,
-    });
+    // Enregistrement du résultat (sans FK participations pour l'instant)
+    console.log(`Relance résultat — email: ${emailSent}, sms: ${smsSent}, erreurs: ${errors.join(" | ")}`);
 
-    if (statut === "erreur") {
+    if (!emailSent && !smsSent) {
       return new Response(
         JSON.stringify({ error: errors.join(" | ") }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
     }
 
     return new Response(
