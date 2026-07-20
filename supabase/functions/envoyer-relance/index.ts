@@ -87,7 +87,7 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: { name: "QalioFlex", email: "noreply@qualioflex.fr" },
+          sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
           to: [{ email, name: `${prenom} ${nom}` }],
           subject: sujet,
           htmlContent,
