@@ -6,53 +6,64 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY")!;
-const BREVO_API = "https://api.brevo.com/v3";
-
-// Convertit 0612345678 → +33612345678
-const toIntlPhone = (phone: string) => {
-  const cleaned = phone.replace(/\s/g, "");
-  if (cleaned.startsWith("+33")) return cleaned;
-  if (cleaned.startsWith("0")) return "+33" + cleaned.slice(1);
-  return "+33" + cleaned;
-};
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    console.log("=== envoyer-relance START ===");
+
+    // Env vars dans le handler (pas au niveau module)
+    const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    console.log("BREVO_API_KEY présent:", BREVO_API_KEY.length > 0);
+    console.log("SUPABASE_URL présent:", SUPABASE_URL.length > 0);
+
     const body = await req.json();
-    console.log("envoyer-relance appelé:", JSON.stringify(body));
+    console.log("Body reçu:", JSON.stringify(body));
+
     const { stagiaire_id, session_id, motif, canal, envoye_par } = body;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    if (!stagiaire_id) {
+      return new Response(JSON.stringify({ error: "stagiaire_id manquant" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Récupérer les infos du stagiaire + session + formation
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // Récupérer les infos du stagiaire
     const { data: stagiaire, error: stagErr } = await supabase
       .from("stagiaires")
-      .select("*, session:session_id(*, formation:formation_id(titre))")
+      .select("nom, prenom, email_pro, telephone, session_id")
       .eq("id", stagiaire_id)
       .single();
 
-    if (stagErr || !stagiaire) throw new Error("Stagiaire introuvable");
+    console.log("Stagiaire:", JSON.stringify(stagiaire), "Erreur:", stagErr?.message);
 
-    const formation = (stagiaire.session as Record<string, unknown>)?.formation as Record<string, string>;
-    const formationTitre = formation?.titre || "votre formation";
+    if (stagErr || !stagiaire) {
+      return new Response(JSON.stringify({ error: "Stagiaire introuvable: " + stagErr?.message }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Récupérer le titre de la formation via session
+    const { data: sessionData } = await supabase
+      .from("sessions")
+      .select("formation:formation_id(titre)")
+      .eq("id", stagiaire.session_id || session_id)
+      .single();
+
+    const formationTitre = (sessionData?.formation as Record<string, string>)?.titre || "votre formation";
     const prenom = stagiaire.prenom || "";
     const nom = stagiaire.nom || "";
     const email = stagiaire.email_pro || "";
     const phone = stagiaire.telephone || "";
 
-    const motifLabel: Record<string, string> = {
-      convention: "la convention de formation",
-      emargement: "la feuille d'émargement",
-      attestation: "l'attestation de fin de formation",
-      questionnaire: "le questionnaire de satisfaction",
-    };
+    console.log(`Envoi relance à ${prenom} ${nom} — email: ${email}, phone: ${phone}, motif: ${motif}, canal: ${canal}`);
 
     const motifAction: Record<string, string> = {
       convention: "signer votre convention de formation",
@@ -61,13 +72,17 @@ serve(async (req) => {
       questionnaire: "compléter votre questionnaire de satisfaction",
     };
 
-    const sujet = `[QalioFlex] Rappel — ${motifLabel[motif] || motif} en attente`;
-    const lienAction = "https://qualioflex.fr/espace-client";
+    const motifLabel: Record<string, string> = {
+      convention: "la convention de formation",
+      emargement: "la feuille d'émargement",
+      attestation: "l'attestation de fin de formation",
+      questionnaire: "le questionnaire de satisfaction",
+    };
 
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="UTF-8"></head>
+    const lienAction = "https://qualioflex.fr/espace-client";
+    const sujet = `[QalioFlex] Rappel — ${motifLabel[motif] || motif} en attente`;
+
+    const htmlContent = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
     <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
@@ -78,31 +93,26 @@ serve(async (req) => {
     <p>Vous n'avez pas encore répondu à une action en attente concernant votre formation <strong>"${formationTitre}"</strong>.</p>
     <p>👉 Il vous reste à <strong>${motifAction[motif] || motifLabel[motif]}</strong>.</p>
     <div style="text-align:center;margin:30px 0;">
-      <a href="${lienAction}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
-        Accéder à mon espace →
-      </a>
+      <a href="${lienAction}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">Accéder à mon espace →</a>
     </div>
     <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
-    <p style="font-size:13px;color:#777;">Besoin d'aide ? Contactez-nous directement :</p>
-    <p style="font-size:13px;">
-      <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
-    </p>
-    <p style="font-size:11px;color:#aaa;margin-top:24px;">
-      QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin
-    </p>
+    <p style="font-size:13px;color:#777;">Besoin d'aide ?</p>
+    <p style="font-size:13px;"><a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a></p>
+    <p style="font-size:11px;color:#aaa;margin-top:24px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
-</body>
-</html>`;
+</body></html>`;
 
-    const textContent = `Bonjour ${prenom} ${nom},\n\nVous n'avez pas encore répondu à une action en attente pour votre formation "${formationTitre}".\n\nAction requise : ${motifAction[motif] || motifLabel[motif]}\n\nAccédez à votre espace : ${lienAction}\n\nBesoin d'aide ? Contactez-nous : olivier@exsenco.fr\n\nCordialement,\nL'équipe QalioFlex`;
+    const textContent = `Bonjour ${prenom} ${nom},\n\nVous n'avez pas encore répondu à une action en attente pour "${formationTitre}".\nAction : ${motifAction[motif] || motif}\nLien : ${lienAction}\nBesoin d'aide : olivier@exsenco.fr`;
+
+    const smsContent = `QalioFlex : Bonjour ${prenom}, vous n'avez pas encore ${motifAction[motif] || motif} pour "${formationTitre}". Connectez-vous sur qualioflex.fr. Aide : olivier@exsenco.fr`;
 
     let emailSent = false;
     let smsSent = false;
     const errors: string[] = [];
 
-    // Envoi email
+    // Email via Brevo
     if ((canal === "email" || canal === "les_deux") && email) {
-      const emailRes = await fetch(`${BREVO_API}/smtp/email`, {
+      const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,56 +123,43 @@ serve(async (req) => {
           htmlContent,
         }),
       });
+      const emailBody = await emailRes.text();
+      console.log("Email Brevo status:", emailRes.status, emailBody);
       if (emailRes.ok) emailSent = true;
-      else {
-        const err = await emailRes.text();
-        errors.push(`Email: ${err}`);
-      }
+      else errors.push(`Email: ${emailBody}`);
     }
 
-    // Envoi SMS
+    // SMS via Brevo
     if ((canal === "sms" || canal === "les_deux") && phone) {
-      const phoneIntl = toIntlPhone(phone);
-      const smsRes = await fetch(`${BREVO_API}/transactionalSMS/sms`, {
+      const cleaned = phone.replace(/\s/g, "");
+      const phoneIntl = cleaned.startsWith("+33") ? cleaned : "+33" + (cleaned.startsWith("0") ? cleaned.slice(1) : cleaned);
+      const smsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
         method: "POST",
-        headers: {
-          "api-key": BREVO_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sender: "QalioFlex",
-          recipient: phoneIntl,
-          content: `QalioFlex : Bonjour ${prenom}, vous n'avez pas encore ${motifAction[motif] || motifLabel[motif]} pour "${formationTitre}". Connectez-vous sur qualioflex.fr. Besoin d'aide : olivier@exsenco.fr`,
-          type: "transactional",
-        }),
+        headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: "QalioFlex", recipient: phoneIntl, content: smsContent, type: "transactional" }),
       });
+      const smsBody = await smsRes.text();
+      console.log("SMS Brevo status:", smsRes.status, smsBody);
       if (smsRes.ok) smsSent = true;
-      else {
-        const err = await smsRes.text();
-        errors.push(`SMS: ${err}`);
-      }
+      else errors.push(`SMS: ${smsBody}`);
     }
 
-    // Enregistrement du résultat (sans FK participations pour l'instant)
-    console.log(`Relance résultat — email: ${emailSent}, sms: ${smsSent}, erreurs: ${errors.join(" | ")}`);
+    console.log(`=== RÉSULTAT: email=${emailSent}, sms=${smsSent}, errors=${errors.join("|")} ===`);
 
     if (!emailSent && !smsSent) {
-      return new Response(
-        JSON.stringify({ error: errors.join(" | ") }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: errors.join(" | ") }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, email: emailSent, sms: smsSent }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true, email: emailSent, sms: smsSent }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
 
   } catch (err) {
-    console.error("Erreur envoyer-relance:", err);
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("=== ERREUR CRITIQUE ===", err?.message || String(err));
+    return new Response(JSON.stringify({ error: err?.message || String(err) }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
