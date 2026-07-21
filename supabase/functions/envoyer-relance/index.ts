@@ -13,6 +13,9 @@ serve(async (req) => {
     if (!BREVO_API_KEY) throw new Error("BREVO_API_KEY manquant");
 
     const { prenom, nom, email, telephone, formation_titre, motif, canal } = await req.json();
+    
+    // Debug
+    console.log(`DEBUG: prenom=${prenom}, email=${email}, telephone="${telephone}", canal=${canal}`);
 
     const motifAction: Record<string, string> = {
       convention: "signer votre convention de formation",
