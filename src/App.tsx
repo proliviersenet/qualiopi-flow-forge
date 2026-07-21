@@ -28,6 +28,7 @@ import MentionsLegales from "./pages/MentionsLegales";
 import InvitationClient from "./pages/InvitationClient";
 import EspaceClient from "./pages/EspaceClient";
 import ClientDetail from "./pages/ClientDetail";
+import Positionnement from "./pages/Positionnement";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -66,6 +67,7 @@ const App = () => (
           <Route path="/mentions-legales" element={<MentionsLegales />} />
           <Route path="/invitation/:token" element={<InvitationClient />} />
           <Route path="/espace-client" element={<EspaceClient />} />
+          <Route path="/positionnement/:token" element={<Positionnement />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
