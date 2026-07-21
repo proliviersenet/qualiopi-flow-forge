@@ -369,14 +369,18 @@ const EspaceClient = () => {
                       <p className="text-sm font-semibold text-gray-700 mb-3">📄 Documents Qualiopi</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {[
-                          { key: "support", label: "Support pédagogique" },
+                          // Le support reste verrouillé côté client tant que les évaluations à chaud
+                          // ne sont pas toutes complétées et les attestations pas toutes générées
+                          // (fonctionnalités à venir) — locked: true empêche tout lien cliquable ici,
+                          // même si le fichier existe déjà côté stockage.
+                          { key: "support", label: "Support pédagogique", locked: true },
                           { key: "programme", label: "Programme" },
                           { key: "devis", label: "Devis" },
                           { key: "livret", label: "Livret d'accueil" },
                           { key: "emargements", label: "Émargements" },
                           { key: "attestation", label: "Attestation de fin" },
-                        ].map(({ key, label }) => {
-                          const url = documentsByFormation[session.formation_id]?.[key];
+                        ].map(({ key, label, locked }) => {
+                          const url = locked ? undefined : documentsByFormation[session.formation_id]?.[key];
                           return url ? (
                             <a
                               key={key}
@@ -390,10 +394,14 @@ const EspaceClient = () => {
                               <span className="ml-auto">↗</span>
                             </a>
                           ) : (
-                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2">
+                            <div
+                              key={key}
+                              className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2"
+                              title={locked ? "Disponible une fois vos évaluations à chaud complétées et votre attestation générée" : undefined}
+                            >
                               <span>📎</span>
                               <span>{label}</span>
-                              <span className="ml-auto text-gray-300">—</span>
+                              <span className="ml-auto text-gray-300">{locked ? "🔒" : "—"}</span>
                             </div>
                           );
                         })}
