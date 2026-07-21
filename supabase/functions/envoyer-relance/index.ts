@@ -87,9 +87,11 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
+          sender: "QalioFlex",
           recipient: phoneIntl,
-          content: sms,
+          content: `QalioFlex : Bonjour ${prenom}, une action est en attente pour votre formation. Connectez-vous sur qualioflex.fr`,
           type: "transactional",
+          unicodeEnabled: false,
         }),
       });
       const rb = await r.text();
