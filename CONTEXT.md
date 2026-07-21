@@ -258,3 +258,68 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 3. **Module notation** : notes clients + stagiaires avec stats
 4. **Pages footer** restantes : tous les liens fonctionnent
 5. **Stripe** : abonnement + factures
+
+---
+
+## Flow documentaire Qualiopi complet — défini le 21/07/2026
+
+### Principes
+- Pas de convention pour les stagiaires (supprimé du flow)
+- Tous les formulaires sont intégrés dans QalioFlex (pas de lien externe)
+- Toutes les réponses sont stockées et génèrent une synthèse groupe
+- Tous les documents restent accessibles dans la session (formateur + client)
+- Gestion manuelle des stagiaires : ajout / modification / suppression possible
+
+### Flow stagiaires (dans l'ordre chronologique)
+
+| # | Étape | Type | Déclencheur | Bloquant | Alerte |
+|---|---|---|---|---|---|
+| 1 | Livret d'accueil + règlement intérieur | Envoi PDF | Dès création session | Non | — |
+| 2 | Questionnaire positionnement AVANT | Form QalioFlex | Dès création session | **OUI** | Formateur + client si manque 2j avant début |
+| 3 | Feuilles de présence | Signature Docusign | Pendant la formation | Non | — |
+| 4 | Questionnaire positionnement APRÈS | Form QalioFlex | Fin de formation | Non | — |
+| 5 | Évaluation à chaud | Form QalioFlex | Fin de formation | Non | — |
+| 6 | Évaluation du formateur | Form QalioFlex | Fin de formation | Non | — |
+| 7 | Attestation de fin de formation | Envoi PDF | Fin de formation | Non | — |
+| 8 | Évaluation à froid | Form QalioFlex | J+90 (3 mois) | Non | Formateur + client si manque 1 semaine après envoi |
+
+### Flow client
+
+| # | Étape | Type | Déclencheur |
+|---|---|---|---|
+| 1 | Moyens techniques pour la formation | Document formateur | Avant formation |
+| 2 | Attestations de fin de formation | PDF | Fin de formation |
+
+### Actions formateur
+
+- Saisie de l'évaluation de la formation par le formateur (dans la session, après formation)
+
+### Architecture technique à construire
+
+**Tables à créer :**
+- `questionnaires_templates` : templates par type (positionnement_avant, positionnement_apres, evaluation_chaud, evaluation_formateur, evaluation_froid)
+- `reponses_questionnaires` : réponses par stagiaire par session (session_id, stagiaire_id, type, reponses jsonb, completed_at)
+- `documents_session` : documents liés à une session (convention, livret, attestation, moyens_techniques, url_storage, type)
+
+**Edge Functions à créer :**
+- `declencher-flow-session` : lancée après import stagiaires → envoie livret + questionnaire positionnement avant
+- `alerte-avant-formation` : cron quotidien → vérifie sessions commençant dans 2j avec questionnaires manquants
+- `alerte-evaluation-froid` : cron → vérifie J+90 avec évaluations froides manquantes
+
+**Intégrations :**
+- Docusign : feuilles de présence
+- Storage Supabase : stockage des PDFs générés
+- Synthèse groupe : agrégation des réponses après 100% de complétion (ou à la demande)
+
+### Priorité de développement
+
+1. Gestion manuelle stagiaires (ajout/modif/suppression) ← **en cours**
+2. Fix SMS (format numéro mobile)
+3. Livret d'accueil : upload formateur + transmission stagiaires
+4. Questionnaire positionnement avant (form intégré + alerte bloquante)
+5. Évaluations à chaud, formateur, après
+6. Attestation de fin de formation
+7. Docusign (feuilles de présence)
+8. Évaluation à froid (J+90 + cron alerte)
+9. Synthèses groupe
+10. Évaluation formateur de sa propre formation
