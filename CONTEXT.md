@@ -323,3 +323,60 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 8. Évaluation à froid (J+90 + cron alerte)
 9. Synthèses groupe
 10. Évaluation formateur de sa propre formation
+
+---
+
+## Session 5 — 21 juillet 2026
+
+### ✅ Livré cette session
+
+**Module relances email + SMS (Brevo) :**
+- Edge Function `envoyer-relance` : email Brevo (olivier@exsenco.fr) + SMS (numéro court Brevo)
+- Motifs complets : livret, questionnaire avant/après, émargement, évaluation chaud/formateur/froid, attestation
+- Bouton relance dropdown dans StagiairesList (formateur + client)
+- Toast affiche les vrais canaux envoyés (email/SMS) depuis results API
+- Fix SMS : URL `/transactionalSMS/send`, format numéro `33XXXXXXXXX`
+- Sender ID "QalioFlex" demandé auprès du support Brevo (en attente activation)
+- Convention supprimée du flow stagiaires
+- Gestion manuelle stagiaires : ajout/modification/suppression inline dans StagiairesList
+- Logo QalioFlex cliquable dans tous les emails (lien vers qualioflex.fr)
+
+**Module documents formation (en cours de test) :**
+- Profile.tsx : upload logo organisme (PNG/JPG/WebP/SVG) → Storage `documents-qualiopi/logos/{organisme_id}/`
+- FormationDetail.tsx : section Documents avec upload support + programme
+- Déclenchement auto génération trame quand support ET programme uploadés
+- Edge Function `generer-trame` : Claude API génère trame pédagogique complète avec logo + infos légales organisme
+- Trame confidentielle (formateur uniquement), visualisable + imprimable PDF
+- Table `documents_formation` créée en base
+- Storage policies créées
+
+### 🔑 Clés et secrets actifs
+- Brevo API : `BREVO_API_KEY` dans Supabase Secrets ✅
+- Anthropic API : `ANTHROPIC_API_KEY` dans Supabase Secrets ✅
+- GitHub token : à regénérer au début de chaque session (token usage unique)
+
+### 🔜 À tester au démarrage session 6
+1. Upload support + programme dans une formation → vérifier génération trame auto
+2. Vérifier logo upload dans Profile
+3. Vérifier que la trame s'ouvre et s'imprime en PDF avec logo + infos légales
+
+### 🔜 Prochaines priorités (dans l'ordre)
+1. **Documents générés** : Convention, Livret d'accueil, Feuille de présence, Attestation de réalisation (HTML→PDF, logo + infos légales auto)
+2. **Questionnaires intégrés** : Positionnement avant/après, Évaluation à chaud, Évaluation formateur par stagiaire, Évaluation formation par formateur (forms HTML QalioFlex, stockés en base, synthèse groupe)
+3. **Flow auto post-import stagiaires** : envoi livret + questionnaire positionnement avant, alerte bloquante 2j avant formation
+4. **Évaluation à froid** J+90 (cron Supabase)
+5. **DocuSign** : feuilles de présence
+6. **Onboarding formateur** : wizard post-inscription
+7. **Stripe** : abonnement + factures
+8. **Pages footer** restantes
+
+### 📁 Exemples de documents fournis (dans /mnt/user-data/uploads/)
+- Attestation_de_réalisation_de_formation_20210510.docx
+- Evaluation_à_chaud_20210316.docx
+- Evaluation_de_la_formation_par_le_formateur_20210316.docx
+- Evaluation_du_formateur_par_le_stagiaire_20210414.doc
+- Feuille_de_présence_.doc
+- Questionnaire_de_positionnement_avant_formation.xlsx
+- Questionnaire_de_positionnement_après_formation_-_prospection_commerciale.xlsx
+- Trame_pédagogique_-_Construire_son_PAC-_20210615.docx
+- grille_de_qualification_-_besoin_en_formation_202105.xlsx
