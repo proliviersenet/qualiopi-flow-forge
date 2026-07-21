@@ -78,9 +78,12 @@ serve(async (req) => {
 
     if ((canal === "sms" || canal === "les_deux") && telephone) {
       const cleaned = telephone.replace(/\s/g, "");
-      const phoneIntl = cleaned.startsWith("+33") ? cleaned
-        : "+33" + (cleaned.startsWith("0") ? cleaned.slice(1) : cleaned);
-      const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      // Format Brevo : 33607467409 (sans +, sans 0 initial)
+      const phoneIntl = cleaned.startsWith("+33") ? cleaned.slice(1)
+        : cleaned.startsWith("33") ? cleaned
+        : cleaned.startsWith("0") ? "33" + cleaned.slice(1)
+        : "33" + cleaned;
+      const r = await fetch("https://api.brevo.com/v3/transactionalSMS/send", {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
