@@ -372,3 +372,82 @@ const ClientDetail = () => {
                         size="sm"
                         variant="outline"
                         className="border-red-200 text-red-500 hover:bg-red-50 ml-4"
+                        onClick={() => supprimerSession(session.id)}
+                      >
+                        Supprimer
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+
+      {/* Dialog affecter formation */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle style={{ color: "#25245e" }}>Affecter une formation à {client.raison_sociale}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Formation <span className="text-red-500">*</span></Label>
+              <Select value={selectedFormation} onValueChange={setSelectedFormation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir une formation..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {formations.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.titre}{f.duree ? ` — ${f.duree}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date de début <span className="text-red-500">*</span></Label>
+                <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Date de fin</Label>
+                <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Lieu</Label>
+              <Input value={lieu} onChange={e => setLieu(e.target.value)} placeholder="ex: Tours, distanciel..." />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Lien visio (optionnel)</Label>
+              <Input value={lienVisio} onChange={e => setLienVisio(e.target.value)} placeholder="https://meet.google.com/..." />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+            <Button
+              onClick={handleAffecterFormation}
+              disabled={saving}
+              style={{ background: "#f2901e", color: "#fff" }}
+              className="font-bold"
+            >
+              {saving ? "Création..." : "Affecter la formation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ClientDetail;
