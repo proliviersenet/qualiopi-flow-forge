@@ -152,21 +152,20 @@ const StagiairesList = ({
 
       console.log("Réponse relance:", JSON.stringify(data), JSON.stringify(error));
 
-      if (error) {
-        // Extraire le vrai message depuis la réponse HTTP
-        let errMsg = error.message || "Erreur inconnue";
-        try {
-          const ctx = await (error as Record<string, unknown>)?.context;
-          if (ctx) errMsg = JSON.stringify(ctx);
-        } catch {}
+      if (error || data?.error) {
+        let errMsg = error?.message || data?.error || "Erreur inconnue";
         throw new Error(errMsg);
       }
 
-      if (data?.error) throw new Error(data.error);
+      const results = data?.results || {};
+      const sentChannels = [];
+      if (results.email) sentChannels.push("email");
+      if (results.sms) sentChannels.push("SMS");
+      const channelLabel = sentChannels.length > 0 ? sentChannels.join(" et ") : "aucun canal";
 
       toast({
         title: "✅ Relance envoyée",
-        description: `${stagiaire.prenom} ${stagiaire.nom} relancé${canal === "les_deux" ? " par email et SMS" : ` par ${canal}`}.`,
+        description: `${stagiaire.prenom} ${stagiaire.nom} relancé par ${channelLabel}.`,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erreur inconnue";
