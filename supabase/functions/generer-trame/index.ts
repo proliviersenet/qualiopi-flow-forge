@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
@@ -37,27 +38,53 @@ serve(async (req) => {
     const duree = (formation as Record<string, string>).duree || "";
     const modalites = (formation as Record<string, string>).modalites || "";
 
-    // Appel Claude API pour générer la trame
+    // Télécharger le support et le programme (PDF) uploadés pour cette formation,
+    // pour que Claude analyse leur contenu réel plutôt que les seuls champs texte.
+    const telechargerPdf = async (type: "support" | "programme") => {
+      const path = `formations/${formation_id}/${type}/${type}.pdf`;
+      const { data, error } = await supabase.storage.from("documents-qualiopi").download(path);
+      if (error || !data) {
+        throw new Error(
+          `${type === "support" ? "Le support pédagogique" : "Le programme détaillé"} (PDF) est introuvable. ` +
+          `Uploadez-le au format PDF depuis la fiche formation avant de générer la trame.`
+        );
+      }
+      const buffer = await data.arrayBuffer();
+      return base64Encode(buffer);
+    };
+
+    const [supportBase64, programmeBase64] = await Promise.all([
+      telechargerPdf("support"),
+      telechargerPdf("programme"),
+    ]);
+
+    // Appel Claude API pour générer la trame, à partir de l'analyse réelle des 2 PDF
     const prompt = `Tu es expert en ingénierie pédagogique et en formations professionnelles Qualiopi.
 
-Génère une TRAME PÉDAGOGIQUE COMPLÈTE pour la formation suivante :
+Voici deux documents PDF :
+1. Le SUPPORT PÉDAGOGIQUE (diaporama/support de cours converti en PDF) utilisé par le formateur
+2. Le PROGRAMME DÉTAILLÉ de la formation
 
+Analyse en profondeur leur contenu (sections, notions abordées, exercices, ordre de progression, durée implicite de chaque partie si mentionnée) pour générer une TRAME PÉDAGOGIQUE COMPLÈTE et fidèle au contenu réel de ces documents — pas une trame générique.
+
+Métadonnées de la formation (à utiliser pour le cadrage, la cohérence des horaires et en complément si les PDF sont peu détaillés sur un point) :
 **Titre** : ${titre}
 **Durée** : ${duree}
 **Objectifs** : ${objectifs}
-**Programme** : ${programme}
+**Programme (texte saisi par le formateur)** : ${programme}
 **Modalités** : ${modalites}
 
 La trame doit être structurée en tableau HTML avec les colonnes :
-- Thème (regroupement thématique)
+- Thème (regroupement thématique, basé sur les sections réelles du support/programme)
 - Phase (intitulé de la séquence)
 - Objectif spécifique / Message à transmettre
-- Outils / Approche pédagogique
+- Outils / Approche pédagogique (identifie dans le support si un exercice, cas pratique, quiz, etc. est prévu)
 - Horaire (ex: Jour 1 - 9h00)
 - Durée (ex: 30')
 - Observations / Notes formateur
 
 Règles :
+- Base la trame sur le contenu réel et l'ordre des documents fournis, ne l'invente pas
 - Couvre l'intégralité de la durée annoncée avec des horaires réalistes (pauses café 15min, déjeuner 90min)
 - Alterne les modalités pédagogiques (magistral, participatif, ateliers, mises en situation, exercices)
 - Commence par un accueil/introduction et termine par une synthèse/clôture
@@ -75,8 +102,23 @@ Retourne UNIQUEMENT le HTML du tableau (pas de markdown, pas de balises html/bod
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: prompt }],
+        max_tokens: 8000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: supportBase64 },
+              title: "Support pédagogique",
+            },
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: programmeBase64 },
+              title: "Programme détaillé",
+            },
+            { type: "text", text: prompt },
+          ],
+        }],
       }),
     });
 
