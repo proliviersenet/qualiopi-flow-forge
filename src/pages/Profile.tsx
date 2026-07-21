@@ -33,7 +33,11 @@ const Profile = () => {
     site_web: "",
     telephone: "",
     email_contact: "",
+    logo_url: "",
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -83,7 +87,9 @@ const Profile = () => {
             site_web: o.site_web || "",
             telephone: o.telephone || "",
             email_contact: o.email_contact || "",
+            logo_url: o.logo_url || "",
           });
+          if (o.logo_url) setLogoPreview(o.logo_url);
         }
       }
 
@@ -115,6 +121,47 @@ const Profile = () => {
       toast({ title: "Profil mis à jour", description: "Vos informations personnelles ont été enregistrées." });
     }
     setSaving(false);
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/svg+xml"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Format non supporté", description: "PNG, JPG, WebP ou SVG uniquement.", variant: "destructive" }); return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const uploadLogo = async () => {
+    if (!logoFile || !organismeId) return;
+    setUploadingLogo(true);
+    const ext = logoFile.name.split(".").pop();
+    const path = `logos/${organismeId}/logo.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("documents-qualiopi")
+      .upload(path, logoFile, { upsert: true, contentType: logoFile.type });
+
+    if (upErr) {
+      toast({ title: "Erreur upload logo", description: upErr.message, variant: "destructive" });
+      setUploadingLogo(false); return;
+    }
+
+    const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
+    const logoUrl = urlData?.publicUrl || "";
+
+    const { error: updateErr } = await supabase
+      .from("organismes")
+      .update({ logo_url: logoUrl })
+      .eq("id", organismeId);
+
+    setUploadingLogo(false);
+    if (updateErr) {
+      toast({ title: "Erreur mise à jour logo", description: updateErr.message, variant: "destructive" }); return;
+    }
+    setOrgForm(prev => ({ ...prev, logo_url: logoUrl }));
+    toast({ title: "✅ Logo uploadé", description: "Votre logo sera intégré dans les documents générés." });
   };
 
   const saveOrganisme = async () => {
@@ -289,7 +336,32 @@ const Profile = () => {
                     />
                   </div>
 
-                  <div className="space-y-2">
+                  {/* Logo */}
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Logo de l'organisme</Label>
+                    <p className="text-xs text-gray-400">Sera intégré automatiquement dans tous les documents générés (PNG, JPG, WebP, SVG)</p>
+                    <div className="flex items-center gap-4">
+                      {logoPreview ? (
+                        <img src={logoPreview} alt="Logo" className="h-16 w-auto object-contain border rounded-lg p-2 bg-gray-50" />
+                      ) : (
+                        <div className="h-16 w-24 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-gray-300 text-xs">Logo</div>
+                      )}
+                      <div className="flex gap-2">
+                        <label htmlFor="logo-upload" className="cursor-pointer">
+                          <div className="border border-gray-200 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            {logoPreview ? "Changer" : "Choisir un logo"}
+                          </div>
+                          <input id="logo-upload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                        </label>
+                        {logoFile && (
+                          <Button size="sm" onClick={uploadLogo} disabled={uploadingLogo} style={{ background: "#f2901e", color: "#fff" }} className="font-bold">
+                            {uploadingLogo ? "Upload..." : "Enregistrer le logo"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
                     <Label>Email de contact</Label>
                     <Input
                       name="email_contact"
