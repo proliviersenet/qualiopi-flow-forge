@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -67,6 +68,8 @@ const ClientDetail = () => {
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [livrets, setLivrets] = useState<Record<string, string>>({});
+  const [generatingLivret, setGeneratingLivret] = useState<string | null>(null);
 
   // Dialog affecter formation
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,7 +90,57 @@ const ClientDetail = () => {
       .select("*, formation:formation_id(titre, duree)")
       .eq("client_id", clientId)
       .order("date_debut", { ascending: false });
-    setSessions((data as Session[]) || []);
+    const sessionsData = (data as Session[]) || [];
+    setSessions(sessionsData);
+
+    // Charger les livrets d'accueil déjà générés pour ces sessions
+    if (sessionsData.length > 0) {
+      const { data: livretsData } = await supabase
+        .from("documents_formation")
+        .select("session_id, contenu_html")
+        .in("session_id", sessionsData.map(s => s.id))
+        .eq("type", "livret");
+      if (livretsData) {
+        const map: Record<string, string> = {};
+        (livretsData as { session_id: string; contenu_html: string | null }[]).forEach(d => {
+          if (d.contenu_html) map[d.session_id] = d.contenu_html;
+        });
+        setLivrets(map);
+      }
+    }
+  };
+
+  const genererLivret = async (sessionId: string) => {
+    setGeneratingLivret(sessionId);
+    const { data, error } = await supabase.functions.invoke("generer-livret", {
+      body: { session_id: sessionId },
+    });
+    setGeneratingLivret(null);
+
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur génération livret", description: message, variant: "destructive" });
+      return;
+    }
+
+    setLivrets(prev => ({ ...prev, [sessionId]: data.contenu_html }));
+    toast({ title: "✅ Livret d'accueil généré" });
+  };
+
+  const voirLivret = (sessionId: string) => {
+    const html = livrets[sessionId];
+    if (!html) return;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
   };
 
   useEffect(() => {
@@ -281,6 +334,30 @@ const ClientDetail = () => {
                           {session.lieu && <span>📍 {session.lieu}</span>}
                           {session.lien_visio && <a href={session.lien_visio} target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">🖥 Lien visio</a>}
                         </div>
+                        <div className="mt-4 mb-3 flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">📘 Livret d'accueil</p>
+                            <p className="text-xs text-gray-400">
+                              {generatingLivret === session.id
+                                ? "Génération en cours..."
+                                : livrets[session.id]
+                                ? "Généré par QalioFlex — visible par le client"
+                                : "À générer avant le début de la session"}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            {generatingLivret === session.id && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                            <Button size="sm" variant="outline" disabled={generatingLivret === session.id}
+                              onClick={() => genererLivret(session.id)}>
+                              {generatingLivret === session.id ? "Génération..." : livrets[session.id] ? "Regénérer" : "Générer"}
+                            </Button>
+                            {livrets[session.id] && (
+                              <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirLivret(session.id)}>
+                                Voir
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                         <div className="mt-4">
                           <StagiairesList
                             sessionId={session.id}
@@ -295,82 +372,3 @@ const ClientDetail = () => {
                         size="sm"
                         variant="outline"
                         className="border-red-200 text-red-500 hover:bg-red-50 ml-4"
-                        onClick={() => supprimerSession(session.id)}
-                      >
-                        Supprimer
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-
-      <Footer />
-
-      {/* Dialog affecter formation */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle style={{ color: "#25245e" }}>Affecter une formation à {client.raison_sociale}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Formation <span className="text-red-500">*</span></Label>
-              <Select value={selectedFormation} onValueChange={setSelectedFormation}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir une formation..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {formations.map(f => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.titre}{f.duree ? ` — ${f.duree}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Date de début <span className="text-red-500">*</span></Label>
-                <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Date de fin</Label>
-                <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Lieu</Label>
-              <Input value={lieu} onChange={e => setLieu(e.target.value)} placeholder="ex: Tours, distanciel..." />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Lien visio (optionnel)</Label>
-              <Input value={lienVisio} onChange={e => setLienVisio(e.target.value)} placeholder="https://meet.google.com/..." />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button
-              onClick={handleAffecterFormation}
-              disabled={saving}
-              style={{ background: "#f2901e", color: "#fff" }}
-              className="font-bold"
-            >
-              {saving ? "Création..." : "Affecter la formation"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
-
-export default ClientDetail;
