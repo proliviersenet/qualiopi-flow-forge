@@ -33,8 +33,10 @@ serve(async (req) => {
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
-    <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
-    <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
+    <a href="https://qualioflex.fr" style="text-decoration:none;">
+      <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+      <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
+    </a>
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
     <p>Bonjour <strong>${prenom} ${nom}</strong>,</p>

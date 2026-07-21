@@ -83,8 +83,10 @@ serve(async (req) => {
         <!-- Header -->
         <tr>
           <td style="background:#25245e;padding:32px 40px;">
-            <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
-            <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
+            <a href="https://qualioflex.fr" style="text-decoration:none;">
+              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+              <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
+            </a>
           </td>
         </tr>
         <!-- Body -->
