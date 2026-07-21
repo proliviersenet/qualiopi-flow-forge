@@ -17,6 +17,7 @@ interface Stagiaire {
   doc_programme?: string | null;
   doc_emargement?: string | null;
   doc_attestation?: string | null;
+  formation_titre?: string;
 }
 
 const docStatus = (val: string | null | undefined) => {
@@ -39,11 +40,13 @@ const StagiairesList = ({
   canRelance = false,
   envoye_par = "formateur",
   canal = "les_deux",
+  formationTitre = "",
 }: {
   sessionId: string;
   canRelance?: boolean;
   envoye_par?: "auto" | "formateur" | "client";
   canal?: "email" | "sms" | "les_deux";
+  formationTitre?: string;
 }) => {
   const { toast } = useToast();
   const [stagiaires, setStagiaires] = useState<Stagiaire[]>([]);
@@ -67,7 +70,16 @@ const StagiairesList = ({
     setRelancing(stagiaire.id + motif);
     try {
       const { data, error } = await supabase.functions.invoke("envoyer-relance", {
-        body: { stagiaire_id: stagiaire.id, session_id: sessionId, motif, canal, envoye_par },
+        body: {
+          prenom: stagiaire.prenom,
+          nom: stagiaire.nom,
+          email: stagiaire.email_pro,
+          telephone: stagiaire.telephone,
+          formation_titre: formationTitre,
+          motif,
+          canal,
+          envoye_par,
+        },
       });
 
       console.log("Réponse relance:", JSON.stringify(data), JSON.stringify(error));
