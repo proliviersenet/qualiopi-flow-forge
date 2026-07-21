@@ -30,10 +30,14 @@ const docStatus = (val: string | null | undefined) => {
 };
 
 const motifs = [
-  { value: "convention", label: "Convention de formation" },
+  { value: "livret", label: "Livret d'accueil" },
+  { value: "questionnaire_avant", label: "Questionnaire positionnement avant" },
   { value: "emargement", label: "Feuille d'émargement" },
-  { value: "attestation", label: "Attestation de fin" },
-  { value: "questionnaire", label: "Questionnaire de satisfaction" },
+  { value: "questionnaire_apres", label: "Questionnaire positionnement après" },
+  { value: "evaluation_chaud", label: "Évaluation à chaud" },
+  { value: "evaluation_formateur", label: "Évaluation du formateur" },
+  { value: "attestation", label: "Attestation de fin de formation" },
+  { value: "evaluation_froid", label: "Évaluation à froid (J+90)" },
 ];
 
 const StagiairesList = ({
@@ -212,7 +216,7 @@ const StagiairesList = ({
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Prénom</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Email</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Mobile</th>
-              <th className="text-left py-2 pr-2 text-gray-500 font-medium">Convention</th>
+              <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Avant</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Émargement</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Attestation</th>
               {canRelance && <th className="text-left py-2 pr-2 text-gray-500 font-medium">Relance</th>}
@@ -221,10 +225,10 @@ const StagiairesList = ({
           </thead>
           <tbody>
             {stagiaires.map((s) => {
-              const convention = docStatus(s.doc_convention);
+              const questAvant = docStatus(s.doc_programme);
               const emargement = docStatus(s.doc_emargement);
               const attestation = docStatus(s.doc_attestation);
-              const allSigned = s.doc_convention === "signe" && s.doc_emargement === "signe" && s.doc_attestation === "signe";
+              const allSigned = s.doc_programme === "signe" && s.doc_emargement === "signe" && s.doc_attestation === "signe";
               const needsRelance = !allSigned;
 
               return (
@@ -235,7 +239,7 @@ const StagiairesList = ({
                   <td className="py-2 pr-3 text-gray-500">{s.email_pro || "—"}</td>
                   <td className="py-2 pr-3 text-gray-500">{s.telephone || "—"}</td>
                   <td className="py-2 pr-2">
-                    <Badge className={`text-xs px-1.5 py-0.5 ${convention.color}`}>{convention.label}</Badge>
+                    <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color}`}>{questAvant.label}</Badge>
                   </td>
                   <td className="py-2 pr-2">
                     <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
@@ -301,12 +305,12 @@ const StagiairesList = ({
 
       {/* Résumé avancement */}
       <div className="mt-3 flex gap-4 text-xs text-gray-500">
-        <span>⏳ En attente : {stagiaires.filter(s => !s.doc_convention).length}</span>
-        <span>📤 Envoyés : {stagiaires.filter(s => s.doc_convention === "envoye").length}</span>
-        <span>✅ Complets : {stagiaires.filter(s => s.doc_convention === "signe" && s.doc_emargement === "signe" && s.doc_attestation === "signe").length}</span>
-        {canRelance && stagiaires.filter(s => s.doc_convention !== "signe").length > 0 && (
+        <span>⏳ En attente : {stagiaires.filter(s => !s.doc_programme).length}</span>
+        <span>📤 Envoyés : {stagiaires.filter(s => s.doc_programme === "envoye").length}</span>
+        <span>✅ Complets : {stagiaires.filter(s => s.doc_programme === "signe" && s.doc_emargement === "signe" && s.doc_attestation === "signe").length}</span>
+        {canRelance && stagiaires.filter(s => s.doc_programme !== "signe").length > 0 && (
           <span className="text-orange-500 font-medium">
-            ⚠️ {stagiaires.filter(s => s.doc_convention !== "signe").length} en attente de signature
+            ⚠️ {stagiaires.filter(s => s.doc_programme !== "signe").length} en attente de signature
           </span>
         )}
       </div>
