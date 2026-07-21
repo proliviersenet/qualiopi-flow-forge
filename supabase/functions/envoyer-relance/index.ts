@@ -13,9 +13,6 @@ serve(async (req) => {
     if (!BREVO_API_KEY) throw new Error("BREVO_API_KEY manquant");
 
     const { prenom, nom, email, telephone, formation_titre, motif, canal } = await req.json();
-    
-    // Debug
-    console.log(`DEBUG: prenom=${prenom}, email=${email}, telephone="${telephone}", canal=${canal}`);
 
     const motifAction: Record<string, string> = {
       convention: "signer votre convention de formation",
@@ -98,7 +95,6 @@ serve(async (req) => {
         }),
       });
       const rb = await r.text();
-      console.log(`SMS Brevo response: status=${r.status}, ok=${r.ok}, body=${rb}`);
       results.sms = r.ok;
       if (!r.ok) errors.push(`SMS(${r.status}): ${rb}`);
     }
