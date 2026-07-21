@@ -18,6 +18,10 @@ interface Stagiaire {
   doc_programme?: string | null;
   doc_emargement?: string | null;
   doc_attestation?: string | null;
+  doc_questionnaire_avant?: string | null;
+  doc_questionnaire_apres?: string | null;
+  reponses_questionnaire_avant?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
+  reponses_questionnaire_apres?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   formation_titre?: string;
 }
 
@@ -105,6 +109,27 @@ const StagiairesList = ({
     toast({ title: "Stagiaire supprimé" });
   };
 
+  const voirReponses = (s: Stagiaire, type: "avant" | "apres") => {
+    const reponses = type === "avant" ? s.reponses_questionnaire_avant : s.reponses_questionnaire_apres;
+    if (!reponses) return;
+    const ligne = (libelle: string, note: number | undefined) =>
+      `<tr><td style="padding:6px 10px;border:1px solid #eee;">${libelle}</td><td style="padding:6px 10px;border:1px solid #eee;text-align:center;font-weight:bold;">${note ?? "—"} / 4</td></tr>`;
+    const competencesRows = Object.entries(reponses.competences || {}).map(([k, v]) => ligne(k, v)).join("");
+    const objectifsRows = Object.entries(reponses.objectifs || {}).map(([k, v]) => ligne(k, v)).join("");
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Réponses — ${s.prenom} ${s.nom}</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a2e;} h1{color:#25245e;font-size:16pt;} h2{color:#25245e;font-size:12pt;margin-top:20px;} table{border-collapse:collapse;width:100%;max-width:600px;font-size:10pt;}</style>
+      </head><body>
+      <h1>Questionnaire de positionnement ${type === "avant" ? "avant" : "après"} formation</h1>
+      <p>${s.prenom} ${s.nom}</p>
+      <h2>Compétences</h2>
+      <table>${competencesRows || "<tr><td style='padding:6px;'>Aucune réponse</td></tr>"}</table>
+      <h2>Objectifs</h2>
+      <table>${objectifsRows || "<tr><td style='padding:6px;'>Aucune réponse</td></tr>"}</table>
+      </body></html>`;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   const normalizePhone = (phone: string) => {
     const cleaned = phone.replace(/\s/g, "");
     if (cleaned.length === 9 && !cleaned.startsWith("0")) return "0" + cleaned;
@@ -147,6 +172,7 @@ const StagiairesList = ({
           motif,
           canal,
           envoye_par,
+          stagiaire_id: stagiaire.id,
         },
       });
 
@@ -217,6 +243,7 @@ const StagiairesList = ({
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Mobile</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Avant</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Émargement</th>
+              <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Après</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Attestation</th>
               {canRelance && <th className="text-left py-2 pr-2 text-gray-500 font-medium">Relance</th>}
               {canRelance && <th className="text-left py-2 text-gray-500 font-medium">Actions</th>}
@@ -224,10 +251,11 @@ const StagiairesList = ({
           </thead>
           <tbody>
             {stagiaires.map((s) => {
-              const questAvant = docStatus(s.doc_programme);
+              const questAvant = docStatus(s.doc_questionnaire_avant);
               const emargement = docStatus(s.doc_emargement);
+              const questApres = docStatus(s.doc_questionnaire_apres);
               const attestation = docStatus(s.doc_attestation);
-              const allSigned = s.doc_programme === "signe" && s.doc_emargement === "signe" && s.doc_attestation === "signe";
+              const allSigned = s.doc_questionnaire_avant === "signe" && s.doc_emargement === "signe" && s.doc_questionnaire_apres === "signe" && s.doc_attestation === "signe";
               const needsRelance = !allSigned;
 
               return (
@@ -238,10 +266,27 @@ const StagiairesList = ({
                   <td className="py-2 pr-3 text-gray-500">{s.email_pro || "—"}</td>
                   <td className="py-2 pr-3 text-gray-500">{s.telephone || "—"}</td>
                   <td className="py-2 pr-2">
-                    <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color}`}>{questAvant.label}</Badge>
+                    <button
+                      className="disabled:cursor-default"
+                      disabled={s.doc_questionnaire_avant !== "signe"}
+                      onClick={() => voirReponses(s, "avant")}
+                      title={s.doc_questionnaire_avant === "signe" ? "Voir les réponses" : undefined}
+                    >
+                      <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color} ${s.doc_questionnaire_avant === "signe" ? "cursor-pointer hover:opacity-75" : ""}`}>{questAvant.label}</Badge>
+                    </button>
                   </td>
                   <td className="py-2 pr-2">
                     <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
+                  </td>
+                  <td className="py-2 pr-2">
+                    <button
+                      className="disabled:cursor-default"
+                      disabled={s.doc_questionnaire_apres !== "signe"}
+                      onClick={() => voirReponses(s, "apres")}
+                      title={s.doc_questionnaire_apres === "signe" ? "Voir les réponses" : undefined}
+                    >
+                      <Badge className={`text-xs px-1.5 py-0.5 ${questApres.color} ${s.doc_questionnaire_apres === "signe" ? "cursor-pointer hover:opacity-75" : ""}`}>{questApres.label}</Badge>
+                    </button>
                   </td>
                   <td className="py-2 pr-2">
                     <Badge className={`text-xs px-1.5 py-0.5 ${attestation.color}`}>{attestation.label}</Badge>
