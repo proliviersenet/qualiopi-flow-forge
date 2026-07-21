@@ -101,6 +101,12 @@ const StagiairesList = ({
     toast({ title: "Stagiaire supprimé" });
   };
 
+  const normalizePhone = (phone: string) => {
+    const cleaned = phone.replace(/\s/g, "");
+    if (cleaned.length === 9 && !cleaned.startsWith("0")) return "0" + cleaned;
+    return cleaned;
+  };
+
   const addStagiaire = async () => {
     if (!editForm.nom || !editForm.prenom) {
       toast({ title: "Nom et prénom obligatoires", variant: "destructive" }); return;
@@ -113,7 +119,7 @@ const StagiairesList = ({
       nom: editForm.nom,
       prenom: editForm.prenom,
       email_pro: editForm.email_pro,
-      telephone: editForm.telephone,
+      telephone: normalizePhone(editForm.telephone),
     });
     setSaving(false);
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
