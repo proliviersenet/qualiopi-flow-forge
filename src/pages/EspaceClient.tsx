@@ -66,12 +66,10 @@ const EspaceClient = () => {
         const u = session.user;
         const role = u.user_metadata?.role;
 
-        // Sécurité : si ce n'est pas un client, rediriger
         if (role && role !== "client") { navigate("/dashboard"); return; }
 
         setUser({ name: u.user_metadata?.nom_complet || u.email || "", email: u.email || "" });
 
-        // Trouver le client lié à cet email
         const { data: clientData } = await supabase
           .from("clients")
           .select("id")
@@ -85,7 +83,6 @@ const EspaceClient = () => {
 
         setClientId(clientData.id);
 
-        // Récupérer les sessions de ce client avec les infos de formation
         const { data: sessionsData } = await supabase
           .from("sessions")
           .select("*, formation:formation_id(titre, objectifs, programme, duree)")
@@ -94,7 +91,6 @@ const EspaceClient = () => {
 
         setSessions((sessionsData as Session[]) || []);
 
-        // Vérifier quelles sessions ont déjà des stagiaires
         if (sessionsData && sessionsData.length > 0) {
           const sessionIds = sessionsData.map((s: Session) => s.id);
           const { data: stagData } = await supabase
@@ -107,12 +103,6 @@ const EspaceClient = () => {
             setUploadedSessions(ids);
           }
 
-          // Récupérer les documents disponibles pour les formations de ces sessions
-          // (support, programme... la trame pédagogique reste exclue, confidentielle formateur).
-          // Les documents de FORMATION (support, programme, devis...) sont regroupés par
-          // formation_id ; les documents de SESSION (livret d'accueil — propre aux dates/lieu
-          // d'une session précise) sont regroupés par session_id, pour ne jamais mélanger le
-          // livret d'une session avec celui d'une autre session de la même formation.
           const formationIds = [...new Set(sessionsData.map((s: Session) => s.formation_id))];
           const { data: docsData } = await supabase
             .from("documents_formation")
@@ -147,7 +137,6 @@ const EspaceClient = () => {
     init();
   }, [navigate]);
 
-  // Téléchargement du template Excel
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
@@ -156,19 +145,16 @@ const EspaceClient = () => {
       ["Jean", "Martin", "0698765432", "jean.martin@entreprise.fr"],
     ]);
 
-    // Forcer la colonne mobile (C) en format texte pour conserver le 0
     const mobileCol = ["C2", "C3"];
     mobileCol.forEach(cell => {
       if (ws[cell]) {
-        ws[cell].t = "s"; // type string
-        ws[cell].z = "@"; // format texte Excel
+        ws[cell].t = "s";
+        ws[cell].z = "@";
       }
     });
 
-    // Largeurs de colonnes
     ws["!cols"] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }];
 
-    // Définir le format texte pour toute la colonne C
     if (!ws["!rows"]) ws["!rows"] = [];
 
     XLSX.utils.book_append_sheet(wb, ws, "Stagiaires");
@@ -190,7 +176,6 @@ const EspaceClient = () => {
         return;
       }
 
-      // Vérification stricte du format : prenom, nom, mobile, mail
       const firstRow = rows[0];
       const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
       const required = ["prenom", "nom", "mobile", "mail"];
@@ -205,7 +190,6 @@ const EspaceClient = () => {
         return;
       }
 
-      // Parsing avec colonnes strictes
       const stagiaires: Stagiaire[] = [];
       const errors: string[] = [];
 
@@ -220,13 +204,12 @@ const EspaceClient = () => {
         const telephoneRaw = getCol("mobile");
         const email = getCol("mail");
 
-        // Normaliser le numéro : forcer string et ajouter 0 si manquant
         let telephone = String(telephoneRaw).replace(/\s/g, "");
         if (telephone.length === 9 && !telephone.startsWith("0")) {
           telephone = "0" + telephone;
         }
 
-        if (!prenom && !nom && !email) return; // ligne vide
+        if (!prenom && !nom && !email) return;
 
         if (!prenom || !nom) {
           errors.push(`Ligne ${i + 2} : prénom ou nom manquant`);
@@ -253,7 +236,6 @@ const EspaceClient = () => {
         return;
       }
 
-      // Supprimer les anciens stagiaires et insérer les nouveaux
       await supabase.from("stagiaires").delete().eq("session_id", sessionId);
 
       const { error: insertError } = await supabase.from("stagiaires").insert(
@@ -296,7 +278,6 @@ const EspaceClient = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header client simplifié */}
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/espace-client")}>
           <span className="text-xl font-bold" style={{ color: "#25245e" }}>QalioFlex</span>
@@ -347,7 +328,6 @@ const EspaceClient = () => {
                       <Badge className={statut.color}>{statut.label}</Badge>
                     </div>
 
-                    {/* Infos session */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4 text-sm">
                       {session.date_debut && (
                         <div className="bg-gray-50 rounded-lg p-3">
@@ -377,42 +357,30 @@ const EspaceClient = () => {
                       )}
                     </div>
 
-                    {/* Documents Qualiopi */}
                     <div className="border-t pt-4 mb-4">
                       <p className="text-sm font-semibold text-gray-700 mb-3">📄 Documents Qualiopi</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {[
-                          // Le support reste verrouillé côté client tant que les évaluations à chaud
-                          // ne sont pas toutes complétées et les attestations pas toutes générées
-                          // (fonctionnalités à venir) — locked: true empêche tout lien cliquable ici,
-                          // même si le fichier existe déjà côté stockage.
                           { key: "support", label: "Support pédagogique", locked: true, scope: "formation" as const },
                           { key: "programme", label: "Programme", scope: "formation" as const },
                           { key: "devis", label: "Devis", scope: "formation" as const },
-                          // Le livret d'accueil est propre à CETTE session (dates/lieu précis),
-                          // donc rattaché à session_id et non formation_id — voir documentsBySession.
                           { key: "livret", label: "Livret d'accueil", scope: "session" as const },
                           { key: "emargements", label: "Émargements", scope: "formation" as const },
                           { key: "attestation", label: "Attestation de fin", scope: "formation" as const },
-                        ].map(({ key, label, locked, scope }) => {
+                        ].map((docConfig) => {
+                          const key = docConfig.key;
+                          const label = docConfig.label;
+                          const locked = docConfig.locked;
+                          const scope = docConfig.scope;
                           const value = locked
                             ? undefined
                             : scope === "session"
                             ? documentsBySession[session.id]?.[key]
                             : documentsByFormation[session.formation_id]?.[key];
-                          // Le livret est stocké en HTML brut (contenu_html), pas en URL de
-                          // stockage — on l'ouvre dans un nouvel onglet plutôt qu'un lien direct.
                           const isInlineHtml = key === "livret";
                           if (value && isInlineHtml) {
                             return (
-                              <button
-                                key={key}
-                                onClick={() => {
-                                  const win = window.open("", "_blank");
-                                  if (win) { win.document.write(value); win.document.close(); }
-                                }}
-                                className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left"
-                              >
+                              <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left">
                                 <span>📎</span>
                                 <span>{label}</span>
                                 <span className="ml-auto">↗</span>
@@ -420,24 +388,17 @@ const EspaceClient = () => {
                             );
                           }
                           const url = value;
-                          return url ? (
-                            
-                              <akey={key}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline"
-                            >
-                              <span>📎</span>
-                              <span>{label}</span>
-                              <span className="ml-auto">↗</span>
-                            </a>
-                          ) : (
-                            <div
-                              key={key}
-                              className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2"
-                              title={locked ? "Disponible une fois vos évaluations à chaud complétées et votre attestation générée" : undefined}
-                            >
+                          if (url) {
+                            return (
+                              <a key={key} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline">
+                                <span>📎</span>
+                                <span>{label}</span>
+                                <span className="ml-auto">↗</span>
+                              </a>
+                            );
+                          }
+                          return (
+                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2" title={locked ? "Disponible une fois vos évaluations à chaud complétées et votre attestation générée" : undefined}>
                               <span>📎</span>
                               <span>{label}</span>
                               <span className="ml-auto text-gray-300">{locked ? "🔒" : "—"}</span>
@@ -450,7 +411,6 @@ const EspaceClient = () => {
                       )}
                     </div>
 
-                    {/* Stagiaires importés */}
                     {hasStag && (
                       <div className="border-t pt-4 mb-4">
                         <StagiairesList
@@ -463,7 +423,6 @@ const EspaceClient = () => {
                       </div>
                     )}
 
-                    {/* Upload stagiaires */}
                     <div className="border-t pt-4">
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -530,4 +489,3 @@ const EspaceClient = () => {
 };
 
 export default EspaceClient;
-
