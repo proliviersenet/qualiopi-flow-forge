@@ -272,3 +272,243 @@ const FormationDetail = () => {
       toast({ title: "Erreur", description: error.message, variant: "destructive" });
       return;
     }
+    setFormation((prev) => prev ? { ...prev, statut: newStatut } : prev);
+    toast({ title: newStatut === "publie" ? "Formation publiée" : "Formation mise en brouillon" });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+        <main className="flex-grow flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Chargement...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!formation) return null;
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+
+      <main className="flex-grow bg-gray-50 py-8">
+        <div className="container mx-auto px-4 max-w-3xl">
+
+          <div className="flex items-center mb-6">
+            <Link to="/formations" className="text-exsenco-blue hover:text-blue-800 mr-2">
+              &larr; Retour aux formations
+            </Link>
+          </div>
+
+          <div className="flex items-start justify-between mb-6 gap-4">
+            <h1 className="text-3xl font-bold text-gray-900 flex-1">{formation.titre}</h1>
+            <Badge className={badgeColor(formation.statut)}>{badgeLabel(formation.statut)}</Badge>
+          </div>
+
+          <div className="flex gap-3 mb-8">
+            <Link to={`/formations/${formation.id}/edit`}>
+              <Button style={{ background: "#25245e", color: "#fff" }} className="font-bold">
+                Modifier
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={toggleStatut}>
+              {formation.statut === "publie" ? "Passer en brouillon" : "Publier"}
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="pt-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  {formation.duree && (
+                    <div>
+                      <p className="text-gray-400 text-xs mb-1">⏱ Durée</p>
+                      <p className="font-medium">{formation.duree}</p>
+                    </div>
+                  )}
+                  {formation.tarif && (
+                    <div>
+                      <p className="text-gray-400 text-xs mb-1">💶 Tarif</p>
+                      <p className="font-medium">{formation.tarif}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-gray-400 text-xs mb-1">📄 Documents</p>
+                    <p className="font-medium">{formation.document_mode === "auto" ? "Automatique" : "Import manuel"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs mb-1">📅 Créée le</p>
+                    <p className="font-medium">{new Date(formation.created_at).toLocaleDateString("fr-FR")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {formation.objectifs && (
+              <Card>
+                <CardContent className="pt-5">
+                  <h3 className="font-semibold text-gray-700 mb-2">🎯 Objectifs pédagogiques</h3>
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.objectifs}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {formation.programme && (
+              <Card>
+                <CardContent className="pt-5">
+                  <h3 className="font-semibold text-gray-700 mb-2">📋 Programme</h3>
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.programme}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {formation.modalites && (
+              <Card>
+                <CardContent className="pt-5">
+                  <h3 className="font-semibold text-gray-700 mb-2">📍 Modalités</h3>
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.modalites}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {formation.prerequis && (
+              <Card>
+                <CardContent className="pt-5">
+                  <h3 className="font-semibold text-gray-700 mb-2">✅ Prérequis</h3>
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.prerequis}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="pt-5">
+                <h3 className="font-semibold text-gray-700 mb-4">📁 Documents de la formation</h3>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">📚 Support pédagogique</p>
+                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre support avant l'upload. Obligatoire</p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      {documents.support && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
+                      <input ref={supportRef} type="file" accept=".pdf" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "support"); }} />
+                      <Button size="sm" variant="outline" disabled={uploading === "support"}
+                        onClick={() => supportRef.current?.click()}>
+                        {uploading === "support" ? "Upload..." : documents.support ? "Remplacer" : "Uploader"}
+                      </Button>
+                      {documents.support && <a href={documents.support} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline">Voir</Button></a>}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">📋 Programme détaillé</p>
+                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre programme avant l'upload. Obligatoire</p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      {documents.programme && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
+                      <input ref={programmeRef} type="file" accept=".pdf" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "programme"); }} />
+                      <Button size="sm" variant="outline" disabled={uploading === "programme"}
+                        onClick={() => programmeRef.current?.click()}>
+                        {uploading === "programme" ? "Upload..." : documents.programme ? "Remplacer" : "Uploader"}
+                      </Button>
+                      {documents.programme && <a href={documents.programme} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline">Voir</Button></a>}
+                    </div>
+                  </div>
+
+                  <div className={`flex items-center justify-between p-3 rounded-lg ${documents.trame_pedagogique ? "bg-blue-50 border border-blue-200" : "bg-gray-50"}`}>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">🤖 Trame pédagogique</p>
+                      <p className="text-xs text-gray-400">
+                        {generatingTrame
+                          ? "Claude analyse vos documents et rédige la trame — ça peut prendre 1 à 3 minutes, ne quittez pas la page."
+                          : documents.trame_pedagogique
+                          ? "Générée par QalioFlex — confidentielle, usage formateur uniquement"
+                          : "Générée automatiquement quand support + programme sont uploadés"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      {generatingTrame && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                      {!generatingTrame && documents.trame_pedagogique && <Badge className="bg-blue-100 text-blue-700">✓ Générée</Badge>}
+                      {documents.support && documents.programme && (
+                        <Button size="sm" variant="outline" disabled={generatingTrame}
+                          onClick={lancerGenerationTrame}>
+                          {generatingTrame ? "Génération en cours..." : documents.trame_pedagogique ? "Regénérer" : "Générer"}
+                        </Button>
+                      )}
+                      {documents.trame_pedagogique && (
+                        <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirTrame} disabled={generatingTrame}>
+                          Voir la trame
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-700">🎯 Compétences à évaluer</h3>
+                    <p className="text-xs text-gray-400">Utilisées dans le questionnaire de positionnement envoyé aux stagiaires (avant et après la formation).</p>
+                  </div>
+                  <Button size="sm" variant="outline" disabled={generatingCompetences} onClick={genererCompetences}>
+                    {generatingCompetences ? "Génération..." : competences.length > 0 ? "Regénérer par Claude" : "Générer par Claude"}
+                  </Button>
+                </div>
+
+                {competences.length === 0 && objectifsEval.length === 0 ? (
+                  <p className="text-sm text-gray-400">Aucune liste générée pour le moment.</p>
+                ) : (
+                  <div className="space-y-5">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Compétences</p>
+                      <div className="space-y-2">
+                        {competences.map((c, i) => (
+                          <div key={i} className="flex gap-2 items-center">
+                            <Input value={c} onChange={e => modifierItem("competences", i, e.target.value)} className="text-sm h-8" />
+                            <Button size="sm" variant="outline" className="h-8 px-2 text-red-500 border-red-200 hover:bg-red-50" onClick={() => supprimerItem("competences", i)}>✕</Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button size="sm" variant="outline" className="mt-2 text-xs h-7" onClick={() => ajouterItem("competences")}>+ Ajouter une compétence</Button>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Objectifs de la formation</p>
+                      <div className="space-y-2">
+                        {objectifsEval.map((o, i) => (
+                          <div key={i} className="flex gap-2 items-center">
+                            <Input value={o} onChange={e => modifierItem("objectifs", i, e.target.value)} className="text-sm h-8" />
+                            <Button size="sm" variant="outline" className="h-8 px-2 text-red-500 border-red-200 hover:bg-red-50" onClick={() => supprimerItem("objectifs", i)}>✕</Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button size="sm" variant="outline" className="mt-2 text-xs h-7" onClick={() => ajouterItem("objectifs")}>+ Ajouter un objectif</Button>
+                    </div>
+
+                    <Button size="sm" disabled={savingCompetences} style={{ background: "#f2901e", color: "#fff" }} className="font-bold" onClick={sauverCompetences}>
+                      {savingCompetences ? "Enregistrement..." : "Enregistrer"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+};
+
+export default FormationDetail;
