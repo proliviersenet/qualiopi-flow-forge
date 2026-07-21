@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
@@ -50,12 +51,14 @@ const FormationDetail = () => {
   const [documents, setDocuments] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [generatingTrame, setGeneratingTrame] = useState(false);
+  const [competences, setCompetences] = useState<string[]>([]);
+  const [objectifsEval, setObjectifsEval] = useState<string[]>([]);
+  const [generatingCompetences, setGeneratingCompetences] = useState(false);
+  const [savingCompetences, setSavingCompetences] = useState(false);
 
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
 
-    // PDF uniquement : format lu nativement par Claude (analyse du contenu pour la trame),
-    // et ça évite les soucis de compatibilité Word/PPT.
     const extLower = file.name.split(".").pop()?.toLowerCase() || "";
     if (extLower !== "pdf") {
       toast({
@@ -67,14 +70,6 @@ const FormationDetail = () => {
     }
 
     setUploading(type);
-    // Nom de fichier assaini : Supabase Storage rejette les clés avec espaces/accents ("Invalid key").
-    // Chemin VERSIONNÉ (timestamp inclus) plutôt que déterministe : avec un chemin fixe
-    // (formations/{id}/{type}/{type}.pdf), le CDN de stockage peut continuer à servir
-    // l'ancien fichier en cache après un remplacement (upsert) — ce qui donnait l'impression
-    // que support et programme étaient "inversés" après un nouvel upload, alors qu'il
-    // s'agissait en fait d'un ancien fichier resservi depuis le cache sous la même URL.
-    // En rendant le chemin unique à chaque upload, chaque fichier a sa propre URL et il
-    // n'y a plus aucune ambiguïté possible.
     const path = `formations/${id}/${type}/${type}-${Date.now()}.pdf`;
     const { error: upErr } = await supabase.storage
       .from("documents-qualiopi")
@@ -100,11 +95,6 @@ const FormationDetail = () => {
     setDocuments(prev => ({ ...prev, [type]: url }));
     setUploading(null);
     toast({ title: `✅ ${type === "support" ? "Support" : "Programme"} uploadé` });
-    // Le déclenchement de la génération de trame (dès que support ET programme sont
-    // présents) est géré par un useEffect qui observe l'état `documents` — voir plus bas.
-    // (Le faire ici posait un bug : `documents` dans cette fonction est une valeur figée
-    // au moment du rendu précédent, donc un upload rapide support+programme pouvait
-    // rater le déclenchement automatique.)
   };
 
   const lancerGenerationTrame = async () => {
@@ -116,9 +106,6 @@ const FormationDetail = () => {
     setGeneratingTrame(false);
 
     if (error || data?.error) {
-      // supabase-js masque le corps de la réponse derrière un message générique
-      // ("Edge Function returned a non-2xx status code") quand le statut n'est pas 2xx.
-      // Le vrai message renvoyé par la fonction est dans error.context (la Response brute).
       let message = data?.error || error?.message;
       const ctx = (error as { context?: Response })?.context;
       if (ctx && typeof ctx.json === "function") {
@@ -137,10 +124,6 @@ const FormationDetail = () => {
     toast({ title: "✅ Trame pédagogique générée", description: "Cliquez sur 'Voir la trame' pour la consulter et l'imprimer." });
   };
 
-  // Déclenche automatiquement la génération de trame dès que support ET programme
-  // sont tous les deux présents (upload manuel ou rechargement depuis la base) et
-  // qu'aucune trame n'existe encore. Basé sur l'état réel `documents`, pas sur une
-  // valeur figée dans une closure — fiable même si les 2 uploads se suivent de près.
   useEffect(() => {
     if (
       documents.support &&
@@ -154,6 +137,67 @@ const FormationDetail = () => {
       lancerGenerationTrame();
     }
   }, [documents.support, documents.programme, documents.trame_pedagogique, generatingTrame]);
+
+  const genererCompetences = async () => {
+    if (!id) return;
+    setGeneratingCompetences(true);
+    const { data, error } = await supabase.functions.invoke("generer-competences", {
+      body: { formation_id: id },
+    });
+    setGeneratingCompetences(false);
+
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON
+        }
+      }
+      toast({ title: "Erreur génération compétences", description: message, variant: "destructive" });
+      return;
+    }
+
+    setCompetences(data.competences || []);
+    setObjectifsEval(data.objectifs || []);
+    toast({ title: "✅ Liste générée", description: "Relisez et ajustez si besoin, puis enregistrez." });
+  };
+
+  const sauverCompetences = async () => {
+    if (!id) return;
+    setSavingCompetences(true);
+    const { error } = await supabase.from("formation_competences").upsert({
+      formation_id: id,
+      competences,
+      objectifs: objectifsEval,
+      genere_par: "manuel",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "formation_id" });
+    setSavingCompetences(false);
+    if (error) {
+      toast({ title: "Erreur enregistrement", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "✅ Liste enregistrée" });
+  };
+
+  const modifierItem = (liste: "competences" | "objectifs", index: number, valeur: string) => {
+    if (liste === "competences") setCompetences(prev => prev.map((c, i) => i === index ? valeur : c));
+    else setObjectifsEval(prev => prev.map((o, i) => i === index ? valeur : o));
+  };
+
+  const supprimerItem = (liste: "competences" | "objectifs", index: number) => {
+    if (liste === "competences") setCompetences(prev => prev.filter((_, i) => i !== index));
+    else setObjectifsEval(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const ajouterItem = (liste: "competences" | "objectifs") => {
+    if (liste === "competences") setCompetences(prev => [...prev, ""]);
+    else setObjectifsEval(prev => [...prev, ""]);
+  };
 
   const voirTrame = () => {
     if (!documents.trame_pedagogique) return;
@@ -191,7 +235,6 @@ const FormationDetail = () => {
 
       setFormation(data as Formation);
 
-      // Charger les documents existants
       const { data: docs } = await supabase
         .from("documents_formation")
         .select("type, url, contenu_html, nom_fichier")
@@ -200,6 +243,16 @@ const FormationDetail = () => {
         const docsMap: Record<string, string> = {};
         docs.forEach((d: Record<string, string>) => { docsMap[d.type] = d.url || d.contenu_html || ""; });
         setDocuments(docsMap);
+      }
+
+      const { data: comp } = await supabase
+        .from("formation_competences")
+        .select("competences, objectifs")
+        .eq("formation_id", id)
+        .maybeSingle();
+      if (comp) {
+        setCompetences((comp.competences as string[]) || []);
+        setObjectifsEval((comp.objectifs as string[]) || []);
       }
 
       setLoading(false);
@@ -219,198 +272,3 @@ const FormationDetail = () => {
       toast({ title: "Erreur", description: error.message, variant: "destructive" });
       return;
     }
-    setFormation((prev) => prev ? { ...prev, statut: newStatut } : prev);
-    toast({ title: newStatut === "publie" ? "Formation publiée" : "Formation mise en brouillon" });
-  };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
-        <main className="flex-grow flex items-center justify-center bg-gray-50">
-          <p className="text-gray-400">Chargement...</p>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!formation) return null;
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
-
-      <main className="flex-grow bg-gray-50 py-8">
-        <div className="container mx-auto px-4 max-w-3xl">
-
-          <div className="flex items-center mb-6">
-            <Link to="/formations" className="text-exsenco-blue hover:text-blue-800 mr-2">
-              &larr; Retour aux formations
-            </Link>
-          </div>
-
-          <div className="flex items-start justify-between mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-gray-900 flex-1">{formation.titre}</h1>
-            <Badge className={badgeColor(formation.statut)}>{badgeLabel(formation.statut)}</Badge>
-          </div>
-
-          <div className="flex gap-3 mb-8">
-            <Link to={`/formations/${formation.id}/edit`}>
-              <Button style={{ background: "#25245e", color: "#fff" }} className="font-bold">
-                Modifier
-              </Button>
-            </Link>
-            <Button variant="outline" onClick={toggleStatut}>
-              {formation.statut === "publie" ? "Passer en brouillon" : "Publier"}
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Infos clés */}
-            <Card>
-              <CardContent className="pt-5">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  {formation.duree && (
-                    <div>
-                      <p className="text-gray-400 text-xs mb-1">⏱ Durée</p>
-                      <p className="font-medium">{formation.duree}</p>
-                    </div>
-                  )}
-                  {formation.tarif && (
-                    <div>
-                      <p className="text-gray-400 text-xs mb-1">💶 Tarif</p>
-                      <p className="font-medium">{formation.tarif}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-gray-400 text-xs mb-1">📄 Documents</p>
-                    <p className="font-medium">{formation.document_mode === "auto" ? "Automatique" : "Import manuel"}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-xs mb-1">📅 Créée le</p>
-                    <p className="font-medium">{new Date(formation.created_at).toLocaleDateString("fr-FR")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {formation.objectifs && (
-              <Card>
-                <CardContent className="pt-5">
-                  <h3 className="font-semibold text-gray-700 mb-2">🎯 Objectifs pédagogiques</h3>
-                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.objectifs}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {formation.programme && (
-              <Card>
-                <CardContent className="pt-5">
-                  <h3 className="font-semibold text-gray-700 mb-2">📋 Programme</h3>
-                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.programme}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {formation.modalites && (
-              <Card>
-                <CardContent className="pt-5">
-                  <h3 className="font-semibold text-gray-700 mb-2">📍 Modalités</h3>
-                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.modalites}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {formation.prerequis && (
-              <Card>
-                <CardContent className="pt-5">
-                  <h3 className="font-semibold text-gray-700 mb-2">✅ Prérequis</h3>
-                  <p className="text-sm text-gray-600 whitespace-pre-line">{formation.prerequis}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Section Documents */}
-            <Card>
-              <CardContent className="pt-5">
-                <h3 className="font-semibold text-gray-700 mb-4">📁 Documents de la formation</h3>
-
-                <div className="space-y-4">
-                  {/* Support pédagogique */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">📚 Support pédagogique</p>
-                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre support avant l'upload. Obligatoire</p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      {documents.support && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
-                      <input ref={supportRef} type="file" accept=".pdf" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "support"); }} />
-                      <Button size="sm" variant="outline" disabled={uploading === "support"}
-                        onClick={() => supportRef.current?.click()}>
-                        {uploading === "support" ? "Upload..." : documents.support ? "Remplacer" : "Uploader"}
-                      </Button>
-                      {documents.support && <a href={documents.support} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline">Voir</Button></a>}
-                    </div>
-                  </div>
-
-                  {/* Programme détaillé */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">📋 Programme détaillé</p>
-                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre programme avant l'upload. Obligatoire</p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      {documents.programme && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
-                      <input ref={programmeRef} type="file" accept=".pdf" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "programme"); }} />
-                      <Button size="sm" variant="outline" disabled={uploading === "programme"}
-                        onClick={() => programmeRef.current?.click()}>
-                        {uploading === "programme" ? "Upload..." : documents.programme ? "Remplacer" : "Uploader"}
-                      </Button>
-                      {documents.programme && <a href={documents.programme} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline">Voir</Button></a>}
-                    </div>
-                  </div>
-
-                  {/* Trame pédagogique générée */}
-                  <div className={`flex items-center justify-between p-3 rounded-lg ${documents.trame_pedagogique ? "bg-blue-50 border border-blue-200" : "bg-gray-50"}`}>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">🤖 Trame pédagogique</p>
-                      <p className="text-xs text-gray-400">
-                        {generatingTrame
-                          ? "Claude analyse vos documents et rédige la trame — ça peut prendre 1 à 3 minutes, ne quittez pas la page."
-                          : documents.trame_pedagogique
-                          ? "Générée par QalioFlex — confidentielle, usage formateur uniquement"
-                          : "Générée automatiquement quand support + programme sont uploadés"}
-                      </p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      {generatingTrame && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-                      {!generatingTrame && documents.trame_pedagogique && <Badge className="bg-blue-100 text-blue-700">✓ Générée</Badge>}
-                      {documents.support && documents.programme && (
-                        <Button size="sm" variant="outline" disabled={generatingTrame}
-                          onClick={lancerGenerationTrame}>
-                          {generatingTrame ? "Génération en cours..." : documents.trame_pedagogique ? "Regénérer" : "Générer"}
-                        </Button>
-                      )}
-                      {documents.trame_pedagogique && (
-                        <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirTrame} disabled={generatingTrame}>
-                          Voir la trame
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
-
-      <Footer />
-    </div>
-  );
-};
-
-export default FormationDetail;
