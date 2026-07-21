@@ -87,7 +87,7 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: "QalioFlex",
+          sender: "33607467409",
           recipient: phoneIntl,
           content: sms,
           type: "transactional",
