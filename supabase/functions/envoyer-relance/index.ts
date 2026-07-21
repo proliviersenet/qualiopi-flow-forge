@@ -98,6 +98,7 @@ serve(async (req) => {
         }),
       });
       const rb = await r.text();
+      console.log(`SMS Brevo response: status=${r.status}, ok=${r.ok}, body=${rb}`);
       results.sms = r.ok;
       if (!r.ok) errors.push(`SMS(${r.status}): ${rb}`);
     }
