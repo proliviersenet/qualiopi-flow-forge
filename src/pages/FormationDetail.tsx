@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -41,6 +42,7 @@ const FormationDetail = () => {
   const navigate = useNavigate();
   const supportRef = useRef<HTMLInputElement>(null);
   const programmeRef = useRef<HTMLInputElement>(null);
+  const trameAutoTriggeredRef = useRef(false);
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [formation, setFormation] = useState<Formation | null>(null);
@@ -70,15 +72,20 @@ const FormationDetail = () => {
     const path = `formations/${id}/${type}/${type}.pdf`;
     const { error: upErr } = await supabase.storage
       .from("documents-qualiopi")
-      .upload(path, file, { upsert: true, contentType: "application/pdf" });
+      .upload(path, file, { upsert: true, contentType: "application/pdf", cacheControl: "60" });
 
     if (upErr) {
       toast({ title: "Erreur upload", description: upErr.message, variant: "destructive" });
       setUploading(null); return;
     }
 
+    // Le chemin est déterministe (formations/{id}/{type}/{type}.pdf) : à chaque
+    // remplacement (upsert) l'URL publique reste identique. Sans indicateur de version,
+    // le navigateur/CDN peut alors continuer à servir l'ancien fichier en cache — ce qui
+    // donnait l'impression que support et programme étaient "inversés" après un nouvel
+    // upload. On ajoute un paramètre ?v=timestamp pour forcer la récupération du bon fichier.
     const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
-    const url = urlData?.publicUrl || "";
+    const url = urlData?.publicUrl ? `${urlData.publicUrl}?v=${Date.now()}` : "";
 
     await supabase.from("documents_formation").upsert({
       formation_id: id,
@@ -92,13 +99,11 @@ const FormationDetail = () => {
     setDocuments(prev => ({ ...prev, [type]: url }));
     setUploading(null);
     toast({ title: `✅ ${type === "support" ? "Support" : "Programme"} uploadé` });
-
-    // Déclencher génération trame si support ET programme sont présents
-    const newDocs = { ...documents, [type]: url };
-    if (newDocs.support && newDocs.programme) {
-      toast({ title: "🤖 Génération de la trame pédagogique en cours...", description: "Claude analyse votre formation et génère la trame. Cela prend 10-30 secondes." });
-      lancerGenerationTrame();
-    }
+    // Le déclenchement de la génération de trame (dès que support ET programme sont
+    // présents) est géré par un useEffect qui observe l'état `documents` — voir plus bas.
+    // (Le faire ici posait un bug : `documents` dans cette fonction est une valeur figée
+    // au moment du rendu précédent, donc un upload rapide support+programme pouvait
+    // rater le déclenchement automatique.)
   };
 
   const lancerGenerationTrame = async () => {
@@ -110,13 +115,44 @@ const FormationDetail = () => {
     setGeneratingTrame(false);
 
     if (error || data?.error) {
-      toast({ title: "Erreur génération trame", description: data?.error || error?.message, variant: "destructive" });
+      // supabase-js masque le corps de la réponse derrière un message générique
+      // ("Edge Function returned a non-2xx status code") quand le statut n'est pas 2xx.
+      // Le vrai message renvoyé par la fonction est dans error.context (la Response brute).
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur génération trame", description: message, variant: "destructive" });
       return;
     }
 
     setDocuments(prev => ({ ...prev, trame_pedagogique: data.contenu_html }));
     toast({ title: "✅ Trame pédagogique générée", description: "Cliquez sur 'Voir la trame' pour la consulter et l'imprimer." });
   };
+
+  // Déclenche automatiquement la génération de trame dès que support ET programme
+  // sont tous les deux présents (upload manuel ou rechargement depuis la base) et
+  // qu'aucune trame n'existe encore. Basé sur l'état réel `documents`, pas sur une
+  // valeur figée dans une closure — fiable même si les 2 uploads se suivent de près.
+  useEffect(() => {
+    if (
+      documents.support &&
+      documents.programme &&
+      !documents.trame_pedagogique &&
+      !generatingTrame &&
+      !trameAutoTriggeredRef.current
+    ) {
+      trameAutoTriggeredRef.current = true;
+      toast({ title: "🤖 Génération de la trame pédagogique en cours...", description: "Claude analyse vos documents et rédige la trame. Cela peut prendre 1 à 3 minutes." });
+      lancerGenerationTrame();
+    }
+  }, [documents.support, documents.programme, documents.trame_pedagogique, generatingTrame]);
 
   const voirTrame = () => {
     if (!documents.trame_pedagogique) return;
@@ -341,21 +377,24 @@ const FormationDetail = () => {
                     <div>
                       <p className="text-sm font-medium text-gray-700">🤖 Trame pédagogique</p>
                       <p className="text-xs text-gray-400">
-                        {documents.trame_pedagogique
+                        {generatingTrame
+                          ? "Claude analyse vos documents et rédige la trame — ça peut prendre 1 à 3 minutes, ne quittez pas la page."
+                          : documents.trame_pedagogique
                           ? "Générée par QalioFlex — confidentielle, usage formateur uniquement"
                           : "Générée automatiquement quand support + programme sont uploadés"}
                       </p>
                     </div>
                     <div className="flex gap-2 items-center">
-                      {documents.trame_pedagogique && <Badge className="bg-blue-100 text-blue-700">✓ Générée</Badge>}
+                      {generatingTrame && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                      {!generatingTrame && documents.trame_pedagogique && <Badge className="bg-blue-100 text-blue-700">✓ Générée</Badge>}
                       {documents.support && documents.programme && (
                         <Button size="sm" variant="outline" disabled={generatingTrame}
                           onClick={lancerGenerationTrame}>
-                          {generatingTrame ? "Génération..." : documents.trame_pedagogique ? "Regénérer" : "Générer"}
+                          {generatingTrame ? "Génération en cours..." : documents.trame_pedagogique ? "Regénérer" : "Générer"}
                         </Button>
                       )}
                       {documents.trame_pedagogique && (
-                        <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirTrame}>
+                        <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirTrame} disabled={generatingTrame}>
                           Voir la trame
                         </Button>
                       )}
