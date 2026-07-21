@@ -51,12 +51,26 @@ const FormationDetail = () => {
 
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
+
+    // PDF uniquement : format lu nativement par Claude (analyse du contenu pour la trame),
+    // et ça évite les soucis de compatibilité Word/PPT.
+    const extLower = file.name.split(".").pop()?.toLowerCase() || "";
+    if (extLower !== "pdf") {
+      toast({
+        title: "Format non accepté",
+        description: `${type === "support" ? "Le support" : "Le programme"} doit être au format PDF. Convertissez votre document avant de l'uploader.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(type);
-    const ext = file.name.split(".").pop();
-    const path = `formations/${id}/${type}/${file.name}`;
+    // Nom de fichier assaini : Supabase Storage rejette les clés avec espaces/accents ("Invalid key").
+    // Chemin déterministe en .pdf ; le nom d'origine reste affiché via nom_fichier en base.
+    const path = `formations/${id}/${type}/${type}.pdf`;
     const { error: upErr } = await supabase.storage
       .from("documents-qualiopi")
-      .upload(path, file, { upsert: true });
+      .upload(path, file, { upsert: true, contentType: "application/pdf" });
 
     if (upErr) {
       toast({ title: "Erreur upload", description: upErr.message, variant: "destructive" });
@@ -290,11 +304,11 @@ const FormationDetail = () => {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-700">📚 Support pédagogique</p>
-                      <p className="text-xs text-gray-400">Word, PPT ou PDF — obligatoire pour générer la trame</p>
+                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre support avant l'upload. Obligatoire</p>
                     </div>
                     <div className="flex gap-2 items-center">
                       {documents.support && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
-                      <input ref={supportRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="hidden"
+                      <input ref={supportRef} type="file" accept=".pdf" className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "support"); }} />
                       <Button size="sm" variant="outline" disabled={uploading === "support"}
                         onClick={() => supportRef.current?.click()}>
@@ -308,11 +322,11 @@ const FormationDetail = () => {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-700">📋 Programme détaillé</p>
-                      <p className="text-xs text-gray-400">Word, PPT ou PDF — obligatoire pour générer la trame</p>
+                      <p className="text-xs text-gray-400">PDF uniquement — analysé par Claude pour générer la trame. Convertissez votre programme avant l'upload. Obligatoire</p>
                     </div>
                     <div className="flex gap-2 items-center">
                       {documents.programme && <Badge className="bg-green-100 text-green-700">✓ Uploadé</Badge>}
-                      <input ref={programmeRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="hidden"
+                      <input ref={programmeRef} type="file" accept=".pdf" className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocument(f, "programme"); }} />
                       <Button size="sm" variant="outline" disabled={uploading === "programme"}
                         onClick={() => programmeRef.current?.click()}>
