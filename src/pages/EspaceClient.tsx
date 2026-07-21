@@ -47,6 +47,7 @@ const EspaceClient = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [documentsByFormation, setDocumentsByFormation] = useState<Record<string, Record<string, string>>>({});
+  const [documentsBySession, setDocumentsBySession] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [uploadingSession, setUploadingSession] = useState<string | null>(null);
   const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
@@ -107,22 +108,34 @@ const EspaceClient = () => {
           }
 
           // Récupérer les documents disponibles pour les formations de ces sessions
-          // (support, programme... la trame pédagogique reste exclue, confidentielle formateur)
+          // (support, programme... la trame pédagogique reste exclue, confidentielle formateur).
+          // Les documents de FORMATION (support, programme, devis...) sont regroupés par
+          // formation_id ; les documents de SESSION (livret d'accueil — propre aux dates/lieu
+          // d'une session précise) sont regroupés par session_id, pour ne jamais mélanger le
+          // livret d'une session avec celui d'une autre session de la même formation.
           const formationIds = [...new Set(sessionsData.map((s: Session) => s.formation_id))];
           const { data: docsData } = await supabase
             .from("documents_formation")
-            .select("formation_id, type, url")
-            .in("formation_id", formationIds)
+            .select("formation_id, session_id, type, url, contenu_html")
+            .or(`formation_id.in.(${formationIds.join(",")}),session_id.in.(${sessionIds.join(",")})`)
             .neq("type", "trame_pedagogique");
 
           if (docsData) {
-            const map: Record<string, Record<string, string>> = {};
-            (docsData as { formation_id: string; type: string; url: string | null }[]).forEach((d) => {
-              if (!d.url) return;
-              if (!map[d.formation_id]) map[d.formation_id] = {};
-              map[d.formation_id][d.type] = d.url;
+            const byFormation: Record<string, Record<string, string>> = {};
+            const bySession: Record<string, Record<string, string>> = {};
+            (docsData as { formation_id: string; session_id: string | null; type: string; url: string | null; contenu_html: string | null }[]).forEach((d) => {
+              const value = d.url || d.contenu_html;
+              if (!value) return;
+              if (d.session_id) {
+                if (!bySession[d.session_id]) bySession[d.session_id] = {};
+                bySession[d.session_id][d.type] = value;
+              } else {
+                if (!byFormation[d.formation_id]) byFormation[d.formation_id] = {};
+                byFormation[d.formation_id][d.type] = value;
+              }
             });
-            setDocumentsByFormation(map);
+            setDocumentsByFormation(byFormation);
+            setDocumentsBySession(bySession);
           }
         }
       } catch (err) {
@@ -373,16 +386,42 @@ const EspaceClient = () => {
                           // ne sont pas toutes complétées et les attestations pas toutes générées
                           // (fonctionnalités à venir) — locked: true empêche tout lien cliquable ici,
                           // même si le fichier existe déjà côté stockage.
-                          { key: "support", label: "Support pédagogique", locked: true },
-                          { key: "programme", label: "Programme" },
-                          { key: "devis", label: "Devis" },
-                          { key: "livret", label: "Livret d'accueil" },
-                          { key: "emargements", label: "Émargements" },
-                          { key: "attestation", label: "Attestation de fin" },
-                        ].map(({ key, label, locked }) => {
-                          const url = locked ? undefined : documentsByFormation[session.formation_id]?.[key];
+                          { key: "support", label: "Support pédagogique", locked: true, scope: "formation" as const },
+                          { key: "programme", label: "Programme", scope: "formation" as const },
+                          { key: "devis", label: "Devis", scope: "formation" as const },
+                          // Le livret d'accueil est propre à CETTE session (dates/lieu précis),
+                          // donc rattaché à session_id et non formation_id — voir documentsBySession.
+                          { key: "livret", label: "Livret d'accueil", scope: "session" as const },
+                          { key: "emargements", label: "Émargements", scope: "formation" as const },
+                          { key: "attestation", label: "Attestation de fin", scope: "formation" as const },
+                        ].map(({ key, label, locked, scope }) => {
+                          const value = locked
+                            ? undefined
+                            : scope === "session"
+                            ? documentsBySession[session.id]?.[key]
+                            : documentsByFormation[session.formation_id]?.[key];
+                          // Le livret est stocké en HTML brut (contenu_html), pas en URL de
+                          // stockage — on l'ouvre dans un nouvel onglet plutôt qu'un lien direct.
+                          const isInlineHtml = key === "livret";
+                          if (value && isInlineHtml) {
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => {
+                                  const win = window.open("", "_blank");
+                                  if (win) { win.document.write(value); win.document.close(); }
+                                }}
+                                className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left"
+                              >
+                                <span>📎</span>
+                                <span>{label}</span>
+                                <span className="ml-auto">↗</span>
+                              </button>
+                            );
+                          }
+                          const url = value;
                           return url ? (
-                            <a
+                            
                               key={key}
                               href={url}
                               target="_blank"
