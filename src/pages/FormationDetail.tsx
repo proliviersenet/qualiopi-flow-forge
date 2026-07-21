@@ -68,24 +68,25 @@ const FormationDetail = () => {
 
     setUploading(type);
     // Nom de fichier assaini : Supabase Storage rejette les clés avec espaces/accents ("Invalid key").
-    // Chemin déterministe en .pdf ; le nom d'origine reste affiché via nom_fichier en base.
-    const path = `formations/${id}/${type}/${type}.pdf`;
+    // Chemin VERSIONNÉ (timestamp inclus) plutôt que déterministe : avec un chemin fixe
+    // (formations/{id}/{type}/{type}.pdf), le CDN de stockage peut continuer à servir
+    // l'ancien fichier en cache après un remplacement (upsert) — ce qui donnait l'impression
+    // que support et programme étaient "inversés" après un nouvel upload, alors qu'il
+    // s'agissait en fait d'un ancien fichier resservi depuis le cache sous la même URL.
+    // En rendant le chemin unique à chaque upload, chaque fichier a sa propre URL et il
+    // n'y a plus aucune ambiguïté possible.
+    const path = `formations/${id}/${type}/${type}-${Date.now()}.pdf`;
     const { error: upErr } = await supabase.storage
       .from("documents-qualiopi")
-      .upload(path, file, { upsert: true, contentType: "application/pdf", cacheControl: "60" });
+      .upload(path, file, { contentType: "application/pdf", cacheControl: "3600" });
 
     if (upErr) {
       toast({ title: "Erreur upload", description: upErr.message, variant: "destructive" });
       setUploading(null); return;
     }
 
-    // Le chemin est déterministe (formations/{id}/{type}/{type}.pdf) : à chaque
-    // remplacement (upsert) l'URL publique reste identique. Sans indicateur de version,
-    // le navigateur/CDN peut alors continuer à servir l'ancien fichier en cache — ce qui
-    // donnait l'impression que support et programme étaient "inversés" après un nouvel
-    // upload. On ajoute un paramètre ?v=timestamp pour forcer la récupération du bon fichier.
     const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
-    const url = urlData?.publicUrl ? `${urlData.publicUrl}?v=${Date.now()}` : "";
+    const url = urlData?.publicUrl || "";
 
     await supabase.from("documents_formation").upsert({
       formation_id: id,
