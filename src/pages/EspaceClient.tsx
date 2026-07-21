@@ -46,6 +46,7 @@ const EspaceClient = () => {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [documentsByFormation, setDocumentsByFormation] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [uploadingSession, setUploadingSession] = useState<string | null>(null);
   const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
@@ -103,6 +104,25 @@ const EspaceClient = () => {
           if (stagData) {
             const ids = new Set(stagData.map((s: { session_id: string }) => s.session_id));
             setUploadedSessions(ids);
+          }
+
+          // Récupérer les documents disponibles pour les formations de ces sessions
+          // (support, programme... la trame pédagogique reste exclue, confidentielle formateur)
+          const formationIds = [...new Set(sessionsData.map((s: Session) => s.formation_id))];
+          const { data: docsData } = await supabase
+            .from("documents_formation")
+            .select("formation_id, type, url")
+            .in("formation_id", formationIds)
+            .neq("type", "trame_pedagogique");
+
+          if (docsData) {
+            const map: Record<string, Record<string, string>> = {};
+            (docsData as { formation_id: string; type: string; url: string | null }[]).forEach((d) => {
+              if (!d.url) return;
+              if (!map[d.formation_id]) map[d.formation_id] = {};
+              map[d.formation_id][d.type] = d.url;
+            });
+            setDocumentsByFormation(map);
           }
         }
       } catch (err) {
@@ -348,16 +368,38 @@ const EspaceClient = () => {
                     <div className="border-t pt-4 mb-4">
                       <p className="text-sm font-semibold text-gray-700 mb-3">📄 Documents Qualiopi</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {["Convention", "Programme", "Devis", "Livret d'accueil", "Émargements", "Attestation de fin"].map((doc) => (
-                          <div key={doc} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2">
-                            <span>📎</span>
-                            <span>{doc}</span>
-                            <span className="ml-auto text-gray-300">—</span>
-                          </div>
-                        ))}
+                        {[
+                          { key: "support", label: "Support pédagogique" },
+                          { key: "programme", label: "Programme" },
+                          { key: "devis", label: "Devis" },
+                          { key: "livret", label: "Livret d'accueil" },
+                          { key: "emargements", label: "Émargements" },
+                          { key: "attestation", label: "Attestation de fin" },
+                        ].map(({ key, label }) => {
+                          const url = documentsByFormation[session.formation_id]?.[key];
+                          return url ? (
+                            <a
+                              key={key}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline"
+                            >
+                              <span>📎</span>
+                              <span>{label}</span>
+                              <span className="ml-auto">↗</span>
+                            </a>
+                          ) : (
+                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2">
+                              <span>📎</span>
+                              <span>{label}</span>
+                              <span className="ml-auto text-gray-300">—</span>
+                            </div>
+                          );
+                        })}
                       </div>
                       {!hasStag && (
-                        <p className="text-xs text-orange-500 mt-2">⚠️ Les documents seront disponibles après l'import des stagiaires.</p>
+                        <p className="text-xs text-orange-500 mt-2">⚠️ Certains documents seront disponibles après l'import des stagiaires.</p>
                       )}
                     </div>
 
