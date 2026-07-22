@@ -50,12 +50,14 @@ const StagiairesList = ({
   envoye_par = "formateur",
   canal = "les_deux",
   formationTitre = "",
+  showSynthese = false,
 }: {
   sessionId: string;
   canRelance?: boolean;
   envoye_par?: "auto" | "formateur" | "client";
   canal?: "email" | "sms" | "les_deux";
   formationTitre?: string;
+  showSynthese?: boolean;
 }) => {
   const { toast } = useToast();
   const [stagiaires, setStagiaires] = useState<Stagiaire[]>([]);
@@ -129,6 +131,52 @@ const StagiairesList = ({
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
   };
+
+  // Agrège les réponses de TOUS les stagiaires de la session (avant, puis après) pour
+  // produire une moyenne par compétence/objectif — évite au formateur de devoir ouvrir
+  // les réponses stagiaire par stagiaire pour se faire une idée du niveau du groupe.
+  const calculerSynthese = (type: "avant" | "apres") => {
+    const champ = type === "avant" ? "reponses_questionnaire_avant" : "reponses_questionnaire_apres";
+    const repondants = stagiaires.filter(s => s[champ]);
+    if (repondants.length === 0) return null;
+
+    const agreger = (cle: "competences" | "objectifs") => {
+      const totaux: Record<string, { somme: number; count: number }> = {};
+      repondants.forEach(s => {
+        const notes = s[champ]?.[cle] || {};
+        Object.entries(notes).forEach(([libelle, note]) => {
+          if (!totaux[libelle]) totaux[libelle] = { somme: 0, count: 0 };
+          totaux[libelle].somme += Number(note);
+          totaux[libelle].count += 1;
+        });
+      });
+      return Object.entries(totaux).map(([libelle, { somme, count }]) => ({
+        libelle, moyenne: somme / count, count,
+      }));
+    };
+
+    return {
+      nbRepondants: repondants.length,
+      competences: agreger("competences"),
+      objectifs: agreger("objectifs"),
+    };
+  };
+
+  const barreNote = (item: { libelle: string; moyenne: number }) => (
+    <div key={item.libelle} className="flex items-center gap-2">
+      <span className="text-xs text-gray-600 flex-1" title={item.libelle}>{item.libelle}</span>
+      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden flex-shrink-0">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${Math.min(100, (item.moyenne / 4) * 100)}%`,
+            background: item.moyenne < 2 ? "#dc3545" : item.moyenne < 3 ? "#f2901e" : "#22c55e",
+          }}
+        />
+      </div>
+      <span className="text-xs font-semibold text-gray-700 w-9 text-right flex-shrink-0">{item.moyenne.toFixed(1)}/4</span>
+    </div>
+  );
 
   const normalizePhone = (phone: string) => {
     const cleaned = phone.replace(/\s/g, "");
@@ -216,6 +264,56 @@ const StagiairesList = ({
           </Button>
         )}
       </div>
+
+      {/* Synthèse questionnaire de positionnement (formateur uniquement) */}
+      {showSynthese && (() => {
+        const syntheseAvant = calculerSynthese("avant");
+        const syntheseApres = calculerSynthese("apres");
+        if (!syntheseAvant && !syntheseApres) return null;
+        return (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 space-y-4">
+            <p className="text-xs font-semibold text-gray-700">📊 Synthèse questionnaire de positionnement</p>
+            {syntheseAvant && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500">
+                  Avant formation — {syntheseAvant.nbRepondants} réponse{syntheseAvant.nbRepondants > 1 ? "s" : ""}
+                </p>
+                {syntheseAvant.competences.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Compétences</p>
+                    {syntheseAvant.competences.map(barreNote)}
+                  </div>
+                )}
+                {syntheseAvant.objectifs.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Objectifs</p>
+                    {syntheseAvant.objectifs.map(barreNote)}
+                  </div>
+                )}
+              </div>
+            )}
+            {syntheseApres && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500">
+                  Après formation — {syntheseApres.nbRepondants} réponse{syntheseApres.nbRepondants > 1 ? "s" : ""}
+                </p>
+                {syntheseApres.competences.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Compétences</p>
+                    {syntheseApres.competences.map(barreNote)}
+                  </div>
+                )}
+                {syntheseApres.objectifs.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Objectifs</p>
+                    {syntheseApres.objectifs.map(barreNote)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Formulaire ajout */}
       {showAddForm && (
