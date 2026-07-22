@@ -365,6 +365,7 @@ const ClientDetail = () => {
                             envoye_par="formateur"
                             canal="les_deux"
                             formationTitre={(session.formation as Record<string, string>)?.titre || ""}
+                            showSynthese={true}
                           />
                         </div>
                       </div>
