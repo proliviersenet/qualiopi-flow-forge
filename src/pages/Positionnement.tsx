@@ -14,6 +14,8 @@ interface QuestionnaireData {
   organisme_logo_url: string;
   competences: string[];
   objectifs: string[];
+  consentement_email: boolean | null;
+  consentement_sms: boolean | null;
 }
 
 // Page PUBLIQUE — accessible sans compte via un lien à token unique envoyé par
@@ -28,6 +30,10 @@ const Positionnement = () => {
   const [submitted, setSubmitted] = useState(false);
   const [competencesNotes, setCompetencesNotes] = useState<Record<string, number>>({});
   const [objectifsNotes, setObjectifsNotes] = useState<Record<string, number>>({});
+  // Consentement RGPD opt-in email/SMS : null tant que le stagiaire n'a pas fait
+  // de choix explicite (ni "j'accepte", ni "je refuse") — on ne présume jamais.
+  const [consentEmail, setConsentEmail] = useState<boolean | null>(null);
+  const [consentSms, setConsentSms] = useState<boolean | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -39,7 +45,12 @@ const Positionnement = () => {
         setLoading(false);
         return;
       }
-      setData(res as QuestionnaireData);
+      const resData = res as QuestionnaireData;
+      setData(resData);
+      // Pré-remplit avec un choix déjà exprimé précédemment (le stagiaire reste
+      // libre de le modifier avant d'envoyer à nouveau).
+      if (resData.consentement_email !== null) setConsentEmail(resData.consentement_email);
+      if (resData.consentement_sms !== null) setConsentSms(resData.consentement_sms);
       setLoading(false);
     };
     if (token) load();
@@ -56,6 +67,10 @@ const Positionnement = () => {
 
   const handleSubmit = async () => {
     if (!data) return;
+    if (consentEmail === null || consentSms === null) {
+      setError("Merci d'indiquer vos préférences de contact (email et SMS) avant d'envoyer.");
+      return;
+    }
     const totalItems = data.competences.length + data.objectifs.length;
     const totalReponses = Object.keys(competencesNotes).length + Object.keys(objectifsNotes).length;
     if (totalReponses < totalItems) {
@@ -65,7 +80,11 @@ const Positionnement = () => {
     setError(null);
     setSubmitting(true);
     const { data: res, error: err } = await supabase.functions.invoke("positionnement-public", {
-      body: { token, action: "submit", competences_notes: competencesNotes, objectifs_notes: objectifsNotes },
+      body: {
+        token, action: "submit",
+        competences_notes: competencesNotes, objectifs_notes: objectifsNotes,
+        consentement_email: consentEmail, consentement_sms: consentSms,
+      },
     });
     setSubmitting(false);
     if (err || res?.error) {
@@ -125,6 +144,59 @@ const Positionnement = () => {
             <p className="mt-2">
               Merci d'attribuer une note sur chacun des critères ci-dessous, 0 correspondant à une non maîtrise, 4 à une totale maîtrise.
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Consentement RGPD opt-in email/SMS — choix explicite requis (accepter OU
+            refuser), jamais présélectionné, avant tout envoi ultérieur au stagiaire. */}
+        <Card className="mb-4">
+          <CardContent className="pt-5">
+            <h2 className="font-semibold mb-1" style={{ color: "#25245e" }}>Vos préférences de contact</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Conformément au RGPD, nous avons besoin de votre accord pour vous contacter par email et/ou SMS
+              dans le cadre de cette formation (rappels, questionnaires, attestation...). Vous pouvez modifier
+              ce choix à tout moment auprès de votre formateur.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-700 mb-2">✉️ Emails de {data.organisme_raison_sociale || "l'organisme de formation"}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConsentEmail(true)}
+                    className={`px-4 py-2 rounded text-sm font-semibold border ${consentEmail === true ? "text-white" : "text-gray-500 border-gray-200"}`}
+                    style={consentEmail === true ? { background: "#22c55e", borderColor: "#22c55e" } : {}}
+                  >
+                    ✅ J'accepte
+                  </button>
+                  <button
+                    onClick={() => setConsentEmail(false)}
+                    className={`px-4 py-2 rounded text-sm font-semibold border ${consentEmail === false ? "text-white" : "text-gray-500 border-gray-200"}`}
+                    style={consentEmail === false ? { background: "#dc3545", borderColor: "#dc3545" } : {}}
+                  >
+                    ❌ Je refuse
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-gray-700 mb-2">📱 SMS de {data.organisme_raison_sociale || "l'organisme de formation"}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConsentSms(true)}
+                    className={`px-4 py-2 rounded text-sm font-semibold border ${consentSms === true ? "text-white" : "text-gray-500 border-gray-200"}`}
+                    style={consentSms === true ? { background: "#22c55e", borderColor: "#22c55e" } : {}}
+                  >
+                    ✅ J'accepte
+                  </button>
+                  <button
+                    onClick={() => setConsentSms(false)}
+                    className={`px-4 py-2 rounded text-sm font-semibold border ${consentSms === false ? "text-white" : "text-gray-500 border-gray-200"}`}
+                    style={consentSms === false ? { background: "#dc3545", borderColor: "#dc3545" } : {}}
+                  >
+                    ❌ Je refuse
+                  </button>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
