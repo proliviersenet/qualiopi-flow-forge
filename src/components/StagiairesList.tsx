@@ -7,6 +7,37 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  ResponsiveContainer, Legend, Tooltip,
+} from "recharts";
+
+// Tick personnalisé pour l'axe des angles du radar : découpe les libellés longs
+// (compétences/objectifs rédigés en phrases) sur plusieurs lignes plutôt que de
+// les laisser déborder ou d'être tronqués illisibles.
+const RadarTick = (props: { x?: number; y?: number; payload?: { value: string }; textAnchor?: string }) => {
+  const { x = 0, y = 0, payload, textAnchor = "middle" } = props;
+  const words = String(payload?.value || "").split(" ");
+  const lines: string[] = [];
+  let current = "";
+  words.forEach((w) => {
+    if ((current + " " + w).trim().length > 16) {
+      if (current) lines.push(current.trim());
+      current = w;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  });
+  if (current) lines.push(current);
+  const shown = lines.slice(0, 3);
+  return (
+    <text x={x} y={y} textAnchor={textAnchor} fontSize={9} fill="#4b5563">
+      {shown.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : 11}>{line}</tspan>
+      ))}
+    </text>
+  );
+};
 
 interface Stagiaire {
   id: string;
@@ -23,6 +54,10 @@ interface Stagiaire {
   reponses_questionnaire_avant?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   reponses_questionnaire_apres?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   formation_titre?: string;
+  consentement_email?: boolean | null;
+  consentement_email_date?: string | null;
+  consentement_sms?: boolean | null;
+  consentement_sms_date?: string | null;
 }
 
 const docStatus = (val: string | null | undefined) => {
@@ -31,6 +66,15 @@ const docStatus = (val: string | null | undefined) => {
   if (val === "signe") return { label: "Signé ✓", color: "bg-green-100 text-green-700" };
   if (val === "erreur") return { label: "Erreur ⚠️", color: "bg-red-100 text-red-600" };
   return { label: val, color: "bg-gray-100 text-gray-500" };
+};
+
+// Consentement RGPD opt-in (email/SMS) : reflète le choix explicite du stagiaire
+// sur le formulaire public de positionnement (accepté / refusé / pas encore répondu).
+const consentInfo = (val: boolean | null | undefined, date: string | null | undefined) => {
+  const dateStr = date ? new Date(date).toLocaleDateString("fr-FR") : "";
+  if (val === true) return { symbol: "✓", color: "text-green-600", title: `Consentement accepté${dateStr ? " le " + dateStr : ""}` };
+  if (val === false) return { symbol: "✗", color: "text-red-500", title: `Consentement refusé${dateStr ? " le " + dateStr : ""}` };
+  return { symbol: "–", color: "text-gray-300", title: "Consentement non renseigné (le stagiaire n'a pas encore répondu au questionnaire)" };
 };
 
 const motifs = [
@@ -162,21 +206,24 @@ const StagiairesList = ({
     };
   };
 
-  const barreNote = (item: { libelle: string; moyenne: number }) => (
-    <div key={item.libelle} className="flex items-center gap-2">
-      <span className="text-xs text-gray-600 flex-1" title={item.libelle}>{item.libelle}</span>
-      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden flex-shrink-0">
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.min(100, (item.moyenne / 4) * 100)}%`,
-            background: item.moyenne < 2 ? "#dc3545" : item.moyenne < 3 ? "#f2901e" : "#22c55e",
-          }}
-        />
-      </div>
-      <span className="text-xs font-semibold text-gray-700 w-9 text-right flex-shrink-0">{item.moyenne.toFixed(1)}/4</span>
-    </div>
-  );
+  // Construit les données du radar pour une clé donnée (compétences ou objectifs) en
+  // fusionnant avant/après sur les mêmes axes, pour visualiser la progression en un coup d'œil.
+  const construireRadarData = (
+    syntheseAvant: ReturnType<typeof calculerSynthese>,
+    syntheseApres: ReturnType<typeof calculerSynthese>,
+    cle: "competences" | "objectifs"
+  ) => {
+    const avantMap = new Map((syntheseAvant?.[cle] || []).map(i => [i.libelle, i.moyenne]));
+    const apresMap = new Map((syntheseApres?.[cle] || []).map(i => [i.libelle, i.moyenne]));
+    const libelles = Array.from(new Set([...avantMap.keys(), ...apresMap.keys()]));
+    if (libelles.length === 0) return null;
+    return libelles.map(libelle => {
+      const point: Record<string, string | number> = { subject: libelle };
+      if (syntheseAvant) point.Avant = avantMap.get(libelle) ?? 0;
+      if (syntheseApres) point.Après = apresMap.get(libelle) ?? 0;
+      return point;
+    });
+  };
 
   const normalizePhone = (phone: string) => {
     const cleaned = phone.replace(/\s/g, "");
@@ -208,6 +255,23 @@ const StagiairesList = ({
   };
 
   const handleRelance = async (stagiaire: Stagiaire, motif: string) => {
+    // Garde-fou RGPD : on ne sollicite jamais un stagiaire sur un canal qu'il a
+    // explicitement refusé (opt-out) — condition posée par Brevo pour l'envoi.
+    const emailRefuse = stagiaire.consentement_email === false;
+    const smsRefuse = stagiaire.consentement_sms === false;
+    const canalBloque =
+      (canal === "email" && emailRefuse) ||
+      (canal === "sms" && smsRefuse) ||
+      (canal === "les_deux" && emailRefuse && smsRefuse);
+    if (canalBloque) {
+      toast({
+        title: "Envoi bloqué",
+        description: `${stagiaire.prenom} ${stagiaire.nom} a refusé d'être contacté(e) sur ce canal (consentement RGPD).`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setRelancing(stagiaire.id + motif);
     try {
       const { data, error } = await supabase.functions.invoke("envoyer-relance", {
@@ -265,52 +329,51 @@ const StagiairesList = ({
         )}
       </div>
 
-      {/* Synthèse questionnaire de positionnement (formateur uniquement) */}
+      {/* Synthèse questionnaire de positionnement (formateur uniquement) — format radar,
+          avant/après superposés sur les mêmes axes pour visualiser la progression du groupe. */}
       {showSynthese && (() => {
         const syntheseAvant = calculerSynthese("avant");
         const syntheseApres = calculerSynthese("apres");
         if (!syntheseAvant && !syntheseApres) return null;
+        const radarCompetences = construireRadarData(syntheseAvant, syntheseApres, "competences");
+        const radarObjectifs = construireRadarData(syntheseAvant, syntheseApres, "objectifs");
+        if (!radarCompetences && !radarObjectifs) return null;
+
+        const radar = (titre: string, data: Record<string, string | number>[]) => (
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide text-center mb-1">{titre}</p>
+            <ResponsiveContainer width="100%" height={340}>
+              <RadarChart data={data} outerRadius="70%">
+                <PolarGrid stroke="#e5e7eb" />
+                <PolarAngleAxis dataKey="subject" tick={<RadarTick />} />
+                <PolarRadiusAxis domain={[0, 4]} tickCount={5} tick={{ fontSize: 9, fill: "#9ca3af" }} />
+                {syntheseAvant && (
+                  <Radar name="Avant" dataKey="Avant" stroke="#25245e" fill="#25245e" fillOpacity={0.25} />
+                )}
+                {syntheseApres && (
+                  <Radar name="Après" dataKey="Après" stroke="#f2901e" fill="#f2901e" fillOpacity={0.3} />
+                )}
+                <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
+                {syntheseAvant && syntheseApres && <Legend wrapperStyle={{ fontSize: 11 }} />}
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+
         return (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 space-y-4">
-            <p className="text-xs font-semibold text-gray-700">📊 Synthèse questionnaire de positionnement</p>
-            {syntheseAvant && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-500">
-                  Avant formation — {syntheseAvant.nbRepondants} réponse{syntheseAvant.nbRepondants > 1 ? "s" : ""}
-                </p>
-                {syntheseAvant.competences.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Compétences</p>
-                    {syntheseAvant.competences.map(barreNote)}
-                  </div>
-                )}
-                {syntheseAvant.objectifs.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Objectifs</p>
-                    {syntheseAvant.objectifs.map(barreNote)}
-                  </div>
-                )}
-              </div>
-            )}
-            {syntheseApres && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-500">
-                  Après formation — {syntheseApres.nbRepondants} réponse{syntheseApres.nbRepondants > 1 ? "s" : ""}
-                </p>
-                {syntheseApres.competences.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Compétences</p>
-                    {syntheseApres.competences.map(barreNote)}
-                  </div>
-                )}
-                {syntheseApres.objectifs.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-gray-400 uppercase tracking-wide">Objectifs</p>
-                    {syntheseApres.objectifs.map(barreNote)}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-semibold text-gray-700">📊 Synthèse questionnaire de positionnement</p>
+              <p className="text-[11px] text-gray-400">
+                {syntheseAvant ? `Avant : ${syntheseAvant.nbRepondants} réponse${syntheseAvant.nbRepondants > 1 ? "s" : ""}` : ""}
+                {syntheseAvant && syntheseApres ? " · " : ""}
+                {syntheseApres ? `Après : ${syntheseApres.nbRepondants} réponse${syntheseApres.nbRepondants > 1 ? "s" : ""}` : ""}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {radarCompetences && radar("Compétences", radarCompetences)}
+              {radarObjectifs && radar("Objectifs", radarObjectifs)}
+            </div>
           </div>
         );
       })()}
@@ -339,6 +402,7 @@ const StagiairesList = ({
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Prénom</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Email</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Mobile</th>
+              <th className="text-left py-2 pr-3 text-gray-500 font-medium" title="Consentement RGPD opt-in email et SMS donné par le stagiaire">Opt-in ✉️/📱</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Avant</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Émargement</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Après</th>
@@ -363,6 +427,22 @@ const StagiairesList = ({
                   <td className="py-2 pr-3 text-gray-700">{s.prenom}</td>
                   <td className="py-2 pr-3 text-gray-500">{s.email_pro || "—"}</td>
                   <td className="py-2 pr-3 text-gray-500">{s.telephone || "—"}</td>
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-bold ${consentInfo(s.consentement_email, s.consentement_email_date).color}`}
+                        title={`Email — ${consentInfo(s.consentement_email, s.consentement_email_date).title}`}
+                      >
+                        ✉️{consentInfo(s.consentement_email, s.consentement_email_date).symbol}
+                      </span>
+                      <span
+                        className={`text-xs font-bold ${consentInfo(s.consentement_sms, s.consentement_sms_date).color}`}
+                        title={`SMS — ${consentInfo(s.consentement_sms, s.consentement_sms_date).title}`}
+                      >
+                        📱{consentInfo(s.consentement_sms, s.consentement_sms_date).symbol}
+                      </span>
+                    </div>
+                  </td>
                   <td className="py-2 pr-2">
                     <button
                       className="disabled:cursor-default"
@@ -421,7 +501,7 @@ const StagiairesList = ({
                 {/* Formulaire édition inline */}
                 {editingId === s.id && (
                   <tr>
-                    <td colSpan={8} className="py-2 px-0">
+                    <td colSpan={9} className="py-2 px-0">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-yellow-700">Modifier le stagiaire</p>
                         <div className="grid grid-cols-2 gap-2">
@@ -456,6 +536,9 @@ const StagiairesList = ({
           </span>
         )}
       </div>
+      <p className="mt-1 text-[10px] text-gray-400">
+        Opt-in ✉️/📱 : ✓ accepté · ✗ refusé · – pas encore répondu (consentement RGPD recueilli sur le questionnaire de positionnement)
+      </p>
     </div>
   );
 };
