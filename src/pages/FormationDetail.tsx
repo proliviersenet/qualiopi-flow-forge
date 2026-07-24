@@ -56,6 +56,7 @@ const FormationDetail = () => {
   const [generatingCompetences, setGeneratingCompetences] = useState(false);
   const [savingCompetences, setSavingCompetences] = useState(false);
   const [generatingDevisGenerique, setGeneratingDevisGenerique] = useState(false);
+  const [competencesSaved, setCompetencesSaved] = useState(false);
 
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
@@ -188,6 +189,7 @@ const FormationDetail = () => {
 
     setCompetences(data.competences || []);
     setObjectifsEval(data.objectifs || []);
+    setCompetencesSaved(false);
     toast({ title: "✅ Liste générée", description: "Relisez et ajustez si besoin, puis enregistrez." });
   };
 
@@ -206,22 +208,26 @@ const FormationDetail = () => {
       toast({ title: "Erreur enregistrement", description: error.message, variant: "destructive" });
       return;
     }
+    setCompetencesSaved(true);
     toast({ title: "✅ Liste enregistrée" });
   };
 
   const modifierItem = (liste: "competences" | "objectifs", index: number, valeur: string) => {
     if (liste === "competences") setCompetences(prev => prev.map((c, i) => i === index ? valeur : c));
     else setObjectifsEval(prev => prev.map((o, i) => i === index ? valeur : o));
+    setCompetencesSaved(false);
   };
 
   const supprimerItem = (liste: "competences" | "objectifs", index: number) => {
     if (liste === "competences") setCompetences(prev => prev.filter((_, i) => i !== index));
     else setObjectifsEval(prev => prev.filter((_, i) => i !== index));
+    setCompetencesSaved(false);
   };
 
   const ajouterItem = (liste: "competences" | "objectifs") => {
     if (liste === "competences") setCompetences(prev => [...prev, ""]);
     else setObjectifsEval(prev => [...prev, ""]);
+    setCompetencesSaved(false);
   };
 
   const voirTrame = () => {
@@ -311,6 +317,7 @@ const FormationDetail = () => {
       if (comp) {
         setCompetences((comp.competences as string[]) || []);
         setObjectifsEval((comp.objectifs as string[]) || []);
+        setCompetencesSaved(true);
       }
 
       setLoading(false);
@@ -544,9 +551,12 @@ const FormationDetail = () => {
                     <h3 className="font-semibold text-gray-700">🎯 Compétences à évaluer</h3>
                     <p className="text-xs text-gray-400">Utilisées dans le questionnaire de positionnement envoyé aux stagiaires (avant et après la formation).</p>
                   </div>
-                  <Button size="sm" variant="outline" disabled={generatingCompetences} onClick={genererCompetences}>
-                    {generatingCompetences ? "Génération..." : competences.length > 0 ? "Regénérer par Claude" : "Générer par Claude"}
-                  </Button>
+                  <div className="flex gap-2 items-center">
+                    {competencesSaved && competences.length > 0 && <Badge className="bg-green-100 text-green-700">✓ Enregistré</Badge>}
+                    <Button size="sm" variant="outline" disabled={generatingCompetences} onClick={genererCompetences}>
+                      {generatingCompetences ? "Génération..." : competences.length > 0 ? "Regénérer par Claude" : "Générer par Claude"}
+                    </Button>
+                  </div>
                 </div>
 
                 {competences.length === 0 && objectifsEval.length === 0 ? (
@@ -579,8 +589,8 @@ const FormationDetail = () => {
                       <Button size="sm" variant="outline" className="mt-2 text-xs h-7" onClick={() => ajouterItem("objectifs")}>+ Ajouter un objectif</Button>
                     </div>
 
-                    <Button size="sm" disabled={savingCompetences} style={{ background: "#f2901e", color: "#fff" }} className="font-bold" onClick={sauverCompetences}>
-                      {savingCompetences ? "Enregistrement..." : "Enregistrer"}
+                    <Button size="sm" disabled={savingCompetences || competencesSaved} style={{ background: competencesSaved ? "#9ca3af" : "#f2901e", color: "#fff" }} className="font-bold" onClick={sauverCompetences}>
+                      {savingCompetences ? "Enregistrement..." : competencesSaved ? "✓ Déjà enregistré" : "Enregistrer"}
                     </Button>
                   </div>
                 )}
