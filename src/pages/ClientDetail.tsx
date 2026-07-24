@@ -318,9 +318,9 @@ const ClientDetail = () => {
               {sessions.map(session => (
                 <Card key={session.id}>
                   <CardContent className="pt-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 w-full">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <h3 className="font-semibold text-gray-900">
                             {(session.formation as Record<string, string>)?.titre || "Formation"}
                           </h3>
@@ -372,7 +372,7 @@ const ClientDetail = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-red-200 text-red-500 hover:bg-red-50 ml-4"
+                        className="border-red-200 text-red-500 hover:bg-red-50 sm:ml-4 flex-shrink-0"
                         onClick={() => supprimerSession(session.id)}
                       >
                         Supprimer
