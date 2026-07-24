@@ -108,7 +108,12 @@ const EspaceClient = () => {
             .from("documents_formation")
             .select("formation_id, session_id, type, url, contenu_html")
             .or(`formation_id.in.(${formationIds.join(",")}),session_id.in.(${sessionIds.join(",")})`)
-            .neq("type", "trame_pedagogique");
+            .neq("type", "trame_pedagogique")
+            // Les attestations sont propres à un STAGIAIRE (stagiaire_id renseigné) —
+            // on les exclut ici pour ne pas les faire remonter par erreur comme un
+            // document partagé au niveau session/formation ; elles sont affichées
+            // individuellement dans le tableau des stagiaires.
+            .is("stagiaire_id", null);
 
           if (docsData) {
             const byFormation: Record<string, Record<string, string>> = {};
@@ -363,10 +368,9 @@ const EspaceClient = () => {
                         {[
                           { key: "support", label: "Support pédagogique", locked: true, scope: "formation" as const },
                           { key: "programme", label: "Programme", scope: "formation" as const },
-                          { key: "devis", label: "Devis", scope: "formation" as const },
                           { key: "livret", label: "Livret d'accueil", scope: "session" as const },
-                          { key: "emargements", label: "Émargements", scope: "formation" as const },
-                          { key: "attestation", label: "Attestation de fin", scope: "formation" as const },
+                          { key: "emargement", label: "Feuille d'émargement", scope: "session" as const },
+                          { key: "devis", label: "Devis", scope: "session" as const },
                         ].map((docConfig) => {
                           const key = docConfig.key;
                           const label = docConfig.label;
@@ -377,7 +381,11 @@ const EspaceClient = () => {
                             : scope === "session"
                             ? documentsBySession[session.id]?.[key]
                             : documentsByFormation[session.formation_id]?.[key];
-                          const isInlineHtml = key === "livret";
+                          // Livret, émargement et devis sont tous générés en HTML autonome
+                          // (contenu_html), affichable directement dans un nouvel onglet —
+                          // contrairement à support/programme qui sont des fichiers uploadés
+                          // (url) ouverts tels quels.
+                          const isInlineHtml = key === "livret" || key === "emargement" || key === "devis";
                           if (value && isInlineHtml) {
                             return (
                               <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left">
@@ -398,10 +406,10 @@ const EspaceClient = () => {
                             );
                           }
                           return (
-                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2" title={locked ? "Disponible une fois vos évaluations à chaud complétées et votre attestation générée" : undefined}>
+                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2" title={locked ? "Document réservé à l'organisme de formation, non communiqué aux stagiaires/clients" : "Pas encore généré par votre formateur"}>
                               <span>📎</span>
                               <span>{label}</span>
-                              <span className="ml-auto text-gray-300">{locked ? "🔒" : "—"}</span>
+                              <span className="ml-auto text-gray-300">{locked ? "🔒" : "🕓 Bientôt"}</span>
                             </div>
                           );
                         })}
@@ -419,6 +427,7 @@ const EspaceClient = () => {
                             envoye_par="client"
                             canal="les_deux"
                             formationTitre={(session.formation as Record<string, string>)?.titre || ""}
+                            showSynthese={true}
                           />
                       </div>
                     )}
