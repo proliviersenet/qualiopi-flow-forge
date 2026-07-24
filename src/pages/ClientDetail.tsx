@@ -68,8 +68,17 @@ const ClientDetail = () => {
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [livrets, setLivrets] = useState<Record<string, string>>({});
-  const [generatingLivret, setGeneratingLivret] = useState<string | null>(null);
+  // Documents "session" générés automatiquement (livret, émargement, devis) — tous
+  // sur le même modèle : HTML stocké dans documents_formation, consultable/imprimable
+  // en un clic. docsSession[sessionId][type] = contenu_html.
+  const [docsSession, setDocsSession] = useState<Record<string, Record<string, string>>>({});
+  const [generatingDoc, setGeneratingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
+
+  const DOCS_SESSION_CONFIG = [
+    { type: "livret", label: "📘 Livret d'accueil", fn: "generer-livret" },
+    { type: "emargement", label: "✍️ Feuille d'émargement", fn: "generer-emargement" },
+    { type: "devis", label: "🧾 Devis", fn: "generer-devis" },
+  ] as const;
 
   // Dialog affecter formation
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -93,29 +102,32 @@ const ClientDetail = () => {
     const sessionsData = (data as Session[]) || [];
     setSessions(sessionsData);
 
-    // Charger les livrets d'accueil déjà générés pour ces sessions
+    // Charger les documents "session" déjà générés (livret, émargement, devis)
     if (sessionsData.length > 0) {
-      const { data: livretsData } = await supabase
+      const { data: docsData } = await supabase
         .from("documents_formation")
-        .select("session_id, contenu_html")
+        .select("session_id, type, contenu_html")
         .in("session_id", sessionsData.map(s => s.id))
-        .eq("type", "livret");
-      if (livretsData) {
-        const map: Record<string, string> = {};
-        (livretsData as { session_id: string; contenu_html: string | null }[]).forEach(d => {
-          if (d.contenu_html) map[d.session_id] = d.contenu_html;
+        .in("type", DOCS_SESSION_CONFIG.map(c => c.type));
+      if (docsData) {
+        const map: Record<string, Record<string, string>> = {};
+        (docsData as { session_id: string; type: string; contenu_html: string | null }[]).forEach(d => {
+          if (!d.contenu_html) return;
+          if (!map[d.session_id]) map[d.session_id] = {};
+          map[d.session_id][d.type] = d.contenu_html;
         });
-        setLivrets(map);
+        setDocsSession(map);
       }
     }
   };
 
-  const genererLivret = async (sessionId: string) => {
-    setGeneratingLivret(sessionId);
-    const { data, error } = await supabase.functions.invoke("generer-livret", {
+  const genererDocumentSession = async (sessionId: string, type: string, fn: string) => {
+    const cle = `${sessionId}:${type}`;
+    setGeneratingDoc(cle);
+    const { data, error } = await supabase.functions.invoke(fn, {
       body: { session_id: sessionId },
     });
-    setGeneratingLivret(null);
+    setGeneratingDoc(null);
 
     if (error || data?.error) {
       let message = data?.error || error?.message;
@@ -128,16 +140,16 @@ const ClientDetail = () => {
           // corps non-JSON, on garde le message par défaut
         }
       }
-      toast({ title: "Erreur génération livret", description: message, variant: "destructive" });
+      toast({ title: "Erreur génération", description: message, variant: "destructive" });
       return;
     }
 
-    setLivrets(prev => ({ ...prev, [sessionId]: data.contenu_html }));
-    toast({ title: "✅ Livret d'accueil généré" });
+    setDocsSession(prev => ({ ...prev, [sessionId]: { ...(prev[sessionId] || {}), [type]: data.contenu_html } }));
+    toast({ title: "✅ Document généré" });
   };
 
-  const voirLivret = (sessionId: string) => {
-    const html = livrets[sessionId];
+  const voirDocumentSession = (sessionId: string, type: string) => {
+    const html = docsSession[sessionId]?.[type];
     if (!html) return;
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
@@ -334,29 +346,38 @@ const ClientDetail = () => {
                           {session.lieu && <span>📍 {session.lieu}</span>}
                           {session.lien_visio && <a href={session.lien_visio} target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">🖥 Lien visio</a>}
                         </div>
-                        <div className="mt-4 mb-3 flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">📘 Livret d'accueil</p>
-                            <p className="text-xs text-gray-400">
-                              {generatingLivret === session.id
-                                ? "Génération en cours..."
-                                : livrets[session.id]
-                                ? "Généré par QalioFlex — visible par le client"
-                                : "À générer avant le début de la session"}
-                            </p>
-                          </div>
-                          <div className="flex gap-2 items-center">
-                            {generatingLivret === session.id && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-                            <Button size="sm" variant="outline" disabled={generatingLivret === session.id}
-                              onClick={() => genererLivret(session.id)}>
-                              {generatingLivret === session.id ? "Génération..." : livrets[session.id] ? "Regénérer" : "Générer"}
-                            </Button>
-                            {livrets[session.id] && (
-                              <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirLivret(session.id)}>
-                                Voir
-                              </Button>
-                            )}
-                          </div>
+                        <div className="mt-4 mb-3 space-y-2">
+                          {DOCS_SESSION_CONFIG.map(({ type, label, fn }) => {
+                            const cle = `${session.id}:${type}`;
+                            const enCours = generatingDoc === cle;
+                            const html = docsSession[session.id]?.[type];
+                            return (
+                              <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-700">{label}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {enCours
+                                      ? "Génération en cours..."
+                                      : html
+                                      ? "Généré par QalioFlex — visible par le client"
+                                      : "À générer avant le début de la session"}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                  {enCours && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                                  <Button size="sm" variant="outline" disabled={enCours}
+                                    onClick={() => genererDocumentSession(session.id, type, fn)}>
+                                    {enCours ? "Génération..." : html ? "Regénérer" : "Générer"}
+                                  </Button>
+                                  {html && (
+                                    <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirDocumentSession(session.id, type)}>
+                                      Voir
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="mt-4">
                           <StagiairesList
