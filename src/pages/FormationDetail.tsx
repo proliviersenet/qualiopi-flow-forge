@@ -37,6 +37,15 @@ const badgeLabel = (statut: string) => {
   return "Archivé";
 };
 
+// Les 3 questionnaires d'évaluation stagiaire (chantier 2) — même principe que
+// "Compétences à évaluer" (génération Claude + édition + sauvegarde), mais
+// factorisé sur 3 types plutôt que dupliqué 3 fois.
+const EVAL_TYPES: { key: "chaud" | "formateur" | "froid"; label: string; icon: string; desc: string }[] = [
+  { key: "chaud", label: "Évaluation à chaud", icon: "🔥", desc: "Envoyée au stagiaire juste après la fin de la formation." },
+  { key: "formateur", label: "Évaluation du formateur", icon: "🧑‍🏫", desc: "Porte spécifiquement sur l'animateur de la formation." },
+  { key: "froid", label: "Évaluation à froid (J+90)", icon: "📈", desc: "Envoyée environ 90 jours après la formation, mesure l'impact sur le poste." },
+];
+
 const FormationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -57,6 +66,10 @@ const FormationDetail = () => {
   const [savingCompetences, setSavingCompetences] = useState(false);
   const [generatingDevisGenerique, setGeneratingDevisGenerique] = useState(false);
   const [competencesSaved, setCompetencesSaved] = useState(false);
+  const [evalQuestions, setEvalQuestions] = useState<Record<string, string[]>>({ chaud: [], formateur: [], froid: [] });
+  const [evalGenerating, setEvalGenerating] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
+  const [evalSaving, setEvalSaving] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
+  const [evalSaved, setEvalSaved] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
 
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
@@ -269,6 +282,68 @@ const FormationDetail = () => {
     if (win) { win.document.write(documents.devis_generique); win.document.close(); }
   };
 
+  const genererEvaluation = async (type: string) => {
+    if (!id) return;
+    setEvalGenerating(prev => ({ ...prev, [type]: true }));
+    const { data, error } = await supabase.functions.invoke("generer-questions-evaluation", {
+      body: { formation_id: id, type },
+    });
+    setEvalGenerating(prev => ({ ...prev, [type]: false }));
+
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON
+        }
+      }
+      toast({ title: "Erreur génération questions", description: message, variant: "destructive" });
+      return;
+    }
+
+    setEvalQuestions(prev => ({ ...prev, [type]: data.questions || [] }));
+    setEvalSaved(prev => ({ ...prev, [type]: false }));
+    toast({ title: "✅ Questions générées", description: "Relisez et ajustez si besoin, puis enregistrez." });
+  };
+
+  const sauverEvaluation = async (type: string) => {
+    if (!id) return;
+    setEvalSaving(prev => ({ ...prev, [type]: true }));
+    const { error } = await supabase.from("evaluation_questions").upsert({
+      formation_id: id,
+      type,
+      questions: evalQuestions[type] || [],
+      genere_par: "manuel",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "formation_id,type" });
+    setEvalSaving(prev => ({ ...prev, [type]: false }));
+    if (error) {
+      toast({ title: "Erreur enregistrement", description: error.message, variant: "destructive" });
+      return;
+    }
+    setEvalSaved(prev => ({ ...prev, [type]: true }));
+    toast({ title: "✅ Questions enregistrées" });
+  };
+
+  const modifierEvalItem = (type: string, index: number, valeur: string) => {
+    setEvalQuestions(prev => ({ ...prev, [type]: (prev[type] || []).map((q, i) => i === index ? valeur : q) }));
+    setEvalSaved(prev => ({ ...prev, [type]: false }));
+  };
+
+  const supprimerEvalItem = (type: string, index: number) => {
+    setEvalQuestions(prev => ({ ...prev, [type]: (prev[type] || []).filter((_, i) => i !== index) }));
+    setEvalSaved(prev => ({ ...prev, [type]: false }));
+  };
+
+  const ajouterEvalItem = (type: string) => {
+    setEvalQuestions(prev => ({ ...prev, [type]: [...(prev[type] || []), ""] }));
+    setEvalSaved(prev => ({ ...prev, [type]: false }));
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
@@ -318,6 +393,21 @@ const FormationDetail = () => {
         setCompetences((comp.competences as string[]) || []);
         setObjectifsEval((comp.objectifs as string[]) || []);
         setCompetencesSaved(true);
+      }
+
+      const { data: evalRows } = await supabase
+        .from("evaluation_questions")
+        .select("type, questions")
+        .eq("formation_id", id);
+      if (evalRows && evalRows.length > 0) {
+        const qMap: Record<string, string[]> = {};
+        const savedMap: Record<string, boolean> = {};
+        (evalRows as { type: string; questions: string[] }[]).forEach((r) => {
+          qMap[r.type] = r.questions || [];
+          savedMap[r.type] = true;
+        });
+        setEvalQuestions(prev => ({ ...prev, ...qMap }));
+        setEvalSaved(prev => ({ ...prev, ...savedMap }));
       }
 
       setLoading(false);
@@ -594,6 +684,52 @@ const FormationDetail = () => {
                     </Button>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-5">
+                <h3 className="font-semibold text-gray-700 mb-1">📊 Évaluations</h3>
+                <p className="text-xs text-gray-400 mb-4">Questionnaires envoyés aux stagiaires : à chaud (fin de formation), du formateur, et à froid (J+90).</p>
+                <div className="space-y-6">
+                  {EVAL_TYPES.map((et, idx) => (
+                    <div key={et.key} className={idx > 0 ? "border-t border-gray-100 pt-5" : ""}>
+                      <div className="flex items-center justify-between mb-3 gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700">{et.icon} {et.label}</p>
+                          <p className="text-xs text-gray-400">{et.desc}</p>
+                        </div>
+                        <div className="flex gap-2 items-center shrink-0">
+                          {evalSaved[et.key] && (evalQuestions[et.key]?.length || 0) > 0 && <Badge className="bg-green-100 text-green-700">✓ Enregistré</Badge>}
+                          <Button size="sm" variant="outline" disabled={evalGenerating[et.key]} onClick={() => genererEvaluation(et.key)}>
+                            {evalGenerating[et.key] ? "Génération..." : (evalQuestions[et.key]?.length || 0) > 0 ? "Regénérer par Claude" : "Générer par Claude"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {(evalQuestions[et.key]?.length || 0) === 0 ? (
+                        <p className="text-sm text-gray-400">Aucune question générée pour le moment.</p>
+                      ) : (
+                        <div>
+                          <div className="space-y-2">
+                            {evalQuestions[et.key].map((q, i) => (
+                              <div key={i} className="flex gap-2 items-center">
+                                <Input value={q} onChange={e => modifierEvalItem(et.key, i, e.target.value)} className="text-sm h-8" />
+                                <Button size="sm" variant="outline" className="h-8 px-2 text-red-500 border-red-200 hover:bg-red-50" onClick={() => supprimerEvalItem(et.key, i)}>✕</Button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 items-center mt-2">
+                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => ajouterEvalItem(et.key)}>+ Ajouter une question</Button>
+                            <Button size="sm" disabled={evalSaving[et.key] || evalSaved[et.key]} style={{ background: evalSaved[et.key] ? "#9ca3af" : "#f2901e", color: "#fff" }} className="font-bold h-7 text-xs" onClick={() => sauverEvaluation(et.key)}>
+                              {evalSaving[et.key] ? "Enregistrement..." : evalSaved[et.key] ? "✓ Déjà enregistré" : "Enregistrer"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
