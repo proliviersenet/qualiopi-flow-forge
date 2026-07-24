@@ -83,14 +83,38 @@ const FormationDetail = () => {
     const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
     const url = urlData?.publicUrl || "";
 
-    await supabase.from("documents_formation").upsert({
+    // IMPORTANT : pas de .upsert(onConflict:"formation_id,type") — depuis l'ajout de
+    // session_id à documents_formation, l'index unique sur (formation_id, type) est
+    // PARTIEL (WHERE session_id IS NULL) et PostgREST ne sait pas l'utiliser comme
+    // cible ON CONFLICT (erreur 42P10). Ça faisait échouer silencieusement la
+    // sauvegarde en base (le fichier montait bien sur le Storage, mais la ligne
+    // documents_formation n'était jamais créée/mise à jour). SELECT puis
+    // INSERT/UPDATE explicite à la place, avec gestion d'erreur cette fois.
+    const { data: existingDoc } = await supabase
+      .from("documents_formation")
+      .select("id")
+      .eq("formation_id", id)
+      .eq("type", type)
+      .maybeSingle();
+
+    const docPayload = {
       formation_id: id,
       type,
       nom_fichier: file.name,
       url,
       genere_par: "manuel",
       updated_at: new Date().toISOString(),
-    }, { onConflict: "formation_id,type" });
+    };
+
+    const { error: docErr } = existingDoc
+      ? await supabase.from("documents_formation").update(docPayload).eq("id", existingDoc.id)
+      : await supabase.from("documents_formation").insert(docPayload);
+
+    if (docErr) {
+      toast({ title: "Erreur sauvegarde", description: docErr.message, variant: "destructive" });
+      setUploading(null);
+      return;
+    }
 
     setDocuments(prev => ({ ...prev, [type]: url }));
     setUploading(null);
