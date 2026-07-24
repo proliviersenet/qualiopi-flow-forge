@@ -4,53 +4,95 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 
-interface Document {
+// Cette page n'est plus une liste de "documents" génériques (l'ancienne version
+// interrogeait des tables `documents`/`signatures` qui n'existent plus dans le
+// schéma actuel — lien mort dans le menu). Elle devient un moteur de recherche
+// de dossiers pour préparer un contrôle Qualiopi : le formateur sélectionne les
+// sessions concernées par l'audit et obtient en un coup d'œil, par dossier, la
+// complétude documentaire (formation + session + par stagiaire), imprimable.
+
+interface Formation {
   id: string;
-  type: string;
+  titre: string;
+}
+
+interface SessionRow {
+  id: string;
+  formation_id: string;
+  client_id: string;
+  date_debut: string | null;
+  date_fin: string | null;
+  lieu: string | null;
   statut: string;
-  origine: string;
-  chemin: string;
-  created_at: string;
+  formation?: { titre: string };
+  client?: { raison_sociale: string };
+}
+
+interface StagiaireRow {
+  id: string;
   session_id: string;
-  sessions?: { date_debut: string; formations?: { titre: string } };
+  nom: string;
+  prenom: string;
+  consentement_email: boolean | null;
+  consentement_sms: boolean | null;
+  doc_questionnaire_avant: string | null;
+  doc_questionnaire_apres: string | null;
 }
 
-interface Signature {
-  id: string;
-  statut: string;
-  document_id: string;
-  provider: string;
-}
+const DOCS_FORMATION = [
+  { type: "support", label: "Support pédagogique" },
+  { type: "programme", label: "Programme" },
+];
+const DOCS_SESSION = [
+  { type: "livret", label: "Livret d'accueil" },
+  { type: "emargement", label: "Feuille d'émargement" },
+  { type: "devis", label: "Devis" },
+];
 
-const TYPE_LABELS: Record<string, string> = {
-  programme: "Programme",
-  convention: "Convention",
-  emargement: "Émargement",
-  attestation: "Attestation",
-  evaluation_chaud: "Éval. à chaud",
-  evaluation_froid: "Éval. à froid",
-  livret_accueil: "Livret d'accueil",
-  support_pedagogique: "Support pédagogique",
+const statutLabel = (s: string) => {
+  const map: Record<string, string> = {
+    planifiee: "Planifiée", en_cours: "En cours", terminee: "Terminée", annulee: "Annulée",
+  };
+  return map[s] || s;
 };
 
 const Documents = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [formations, setFormations] = useState<Formation[]>([]);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+
+  // Filtres de recherche des dossiers
+  const [filtreFormation, setFiltreFormation] = useState<string>("toutes");
+  const [recherche, setRecherche] = useState("");
+
+  // Dossiers (sessions) sélectionnés comme concernés par l'audit
+  const [selectionnes, setSelectionnes] = useState<Set<string>>(new Set());
+
+  // Complétude chargée à la demande pour les dossiers sélectionnés
+  const [docsFormation, setDocsFormation] = useState<Record<string, Record<string, boolean>>>({});
+  const [docsSession, setDocsSession] = useState<Record<string, Record<string, boolean>>>({});
+  const [stagiairesParSession, setStagiairesParSession] = useState<Record<string, StagiaireRow[]>>({});
+  const [attestationsParStagiaire, setAttestationsParStagiaire] = useState<Record<string, boolean>>({});
+  const [analyseFaite, setAnalyseFaite] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate('/login');
+    navigate("/login");
   };
-  const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [signatures, setSignatures] = useState<Signature[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const init = async () => {
@@ -59,141 +101,283 @@ const Documents = () => {
       setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
 
       const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
-      if (profile?.organisme_id) {
-        const { data: docs } = await supabase
-          .from("documents")
-          .select("*, sessions(date_debut, formations(titre))")
-          .order("created_at", { ascending: false });
-        setDocuments(docs || []);
+      if (!profile?.organisme_id) { setLoading(false); return; }
 
-        const { data: sigs } = await supabase.from("signatures").select("*");
-        setSignatures(sigs || []);
+      const { data: formationsData } = await supabase
+        .from("formations")
+        .select("id, titre")
+        .eq("organisme_id", profile.organisme_id)
+        .order("titre");
+      const formationsList = (formationsData as Formation[]) || [];
+      setFormations(formationsList);
+
+      // On scope explicitement aux formations de CET organisme (via formation_id)
+      // plutôt que de compter sur une éventuelle RLS de la table sessions — même
+      // logique que ClientDetail.tsx qui, lui, scope par client_id déjà vérifié.
+      if (formationsList.length > 0) {
+        const { data: sessionsData } = await supabase
+          .from("sessions")
+          .select("id, formation_id, client_id, date_debut, date_fin, lieu, statut, formation:formation_id(titre), client:client_id(raison_sociale)")
+          .in("formation_id", formationsList.map(f => f.id))
+          .order("date_debut", { ascending: false });
+        setSessions((sessionsData as unknown as SessionRow[]) || []);
       }
+
       setLoading(false);
     };
     init();
   }, [navigate]);
 
-  const getSignature = (docId: string) => signatures.find(s => s.document_id === docId);
+  const toggleSession = (id: string) => {
+    setSelectionnes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    setAnalyseFaite(false);
+  };
 
-  const statutBadge = (statut: string) => {
-    if (statut === "pret") return "bg-green-100 text-green-700";
-    if (statut === "en_cours") return "bg-blue-100 text-blue-700";
+  const sessionsFiltrees = sessions.filter(s => {
+    if (filtreFormation !== "toutes" && s.formation_id !== filtreFormation) return false;
+    if (recherche.trim()) {
+      const q = recherche.toLowerCase();
+      const titre = (s.formation?.titre || "").toLowerCase();
+      const client = (s.client?.raison_sociale || "").toLowerCase();
+      if (!titre.includes(q) && !client.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const analyserCompletude = async () => {
+    if (selectionnes.size === 0) {
+      toast({ title: "Sélectionnez au moins un dossier", variant: "destructive" });
+      return;
+    }
+    setAnalysing(true);
+
+    const sessionIds = Array.from(selectionnes);
+    const sessionsSelectionnees = sessions.filter(s => sessionIds.includes(s.id));
+    const formationIds = [...new Set(sessionsSelectionnees.map(s => s.formation_id))];
+
+    const [{ data: docsData }, { data: stagData }] = await Promise.all([
+      supabase
+        .from("documents_formation")
+        .select("formation_id, session_id, stagiaire_id, type")
+        .or(`formation_id.in.(${formationIds.join(",")}),session_id.in.(${sessionIds.join(",")})`),
+      supabase
+        .from("stagiaires")
+        .select("id, session_id, nom, prenom, consentement_email, consentement_sms, doc_questionnaire_avant, doc_questionnaire_apres")
+        .in("session_id", sessionIds)
+        .order("nom"),
+    ]);
+
+    const df: Record<string, Record<string, boolean>> = {};
+    const ds: Record<string, Record<string, boolean>> = {};
+    const att: Record<string, boolean> = {};
+    (docsData as { formation_id: string | null; session_id: string | null; stagiaire_id: string | null; type: string }[] || []).forEach(d => {
+      if (d.stagiaire_id) { att[d.stagiaire_id] = true; return; }
+      if (d.session_id) {
+        if (!ds[d.session_id]) ds[d.session_id] = {};
+        ds[d.session_id][d.type] = true;
+      } else if (d.formation_id) {
+        if (!df[d.formation_id]) df[d.formation_id] = {};
+        df[d.formation_id][d.type] = true;
+      }
+    });
+    setDocsFormation(df);
+    setDocsSession(ds);
+    setAttestationsParStagiaire(att);
+
+    const byS: Record<string, StagiaireRow[]> = {};
+    (stagData as StagiaireRow[] || []).forEach(s => {
+      if (!byS[s.session_id]) byS[s.session_id] = [];
+      byS[s.session_id].push(s);
+    });
+    setStagiairesParSession(byS);
+
+    setAnalysing(false);
+    setAnalyseFaite(true);
+  };
+
+  const completudePct = (sessionId: string, formationId: string) => {
+    const dF = docsFormation[formationId] || {};
+    const dS = docsSession[sessionId] || {};
+    const items = [
+      ...DOCS_FORMATION.map(d => !!dF[d.type]),
+      ...DOCS_SESSION.map(d => !!dS[d.type]),
+    ];
+    return Math.round((items.filter(Boolean).length / items.length) * 100);
+  };
+
+  const badgePct = (pct: number) => {
+    if (pct === 100) return "bg-green-100 text-green-700";
+    if (pct >= 50) return "bg-orange-100 text-orange-700";
     return "bg-red-100 text-red-600";
   };
 
-  const signatureBadge = (statut: string) => {
-    if (statut === "signe") return "bg-green-100 text-green-700";
-    if (statut === "en_attente") return "bg-amber-100 text-amber-700";
-    if (statut === "refuse") return "bg-red-100 text-red-600";
-    return "bg-gray-100 text-gray-500";
-  };
-
-  const filtres = documents.filter(d =>
-    TYPE_LABELS[d.type]?.toLowerCase().includes(search.toLowerCase()) ||
-    (d.sessions?.formations?.titre || "").toLowerCase().includes(search.toLowerCase())
-  );
-
-  const parType = (type: string) => filtres.filter(d => d.type === type);
-  const aSignature = ["convention", "emargement", "attestation"];
-
-  const DocCard = ({ doc }: { doc: Document }) => {
-    const sig = getSignature(doc.id);
+  if (loading) {
     return (
-      <Card className="hover:shadow-md transition-shadow">
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <p className="font-medium text-gray-900">{TYPE_LABELS[doc.type] || doc.type}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {doc.sessions?.formations?.titre || "Formation"} · {doc.sessions?.date_debut || ""}
-              </p>
-            </div>
-            <div className="flex flex-col gap-1 items-end">
-              <Badge className={statutBadge(doc.statut)}>
-                {doc.statut === "pret" ? "Prêt" : doc.statut === "en_cours" ? "En cours" : "Erreur"}
-              </Badge>
-              {doc.origine === "import" && <Badge className="bg-purple-100 text-purple-700">Importé</Badge>}
-            </div>
-          </div>
-          {sig && (
-            <div className="mb-3">
-              <Badge className={signatureBadge(sig.statut)}>
-                ✍️ {sig.statut === "signe" ? "Signé" : sig.statut === "en_attente" ? "En attente de signature" : sig.statut === "refuse" ? "Refusé" : "—"}
-              </Badge>
-            </div>
-          )}
-          <div className="flex gap-2">
-            {doc.chemin && (
-              <Button variant="outline" size="sm" onClick={() => toast({ title: "Téléchargement en cours..." })}>
-                Télécharger
-              </Button>
-            )}
-            {aSignature.includes(doc.type) && !sig && doc.statut === "pret" && (
-              <Button size="sm" className="btn-cta" onClick={() => toast({ title: "Envoi pour signature via DocuSign..." })}>
-                Envoyer pour signature
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col min-h-screen">
+        <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+        <main className="flex-grow flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Chargement...</p>
+        </main>
+        <Footer />
+      </div>
     );
-  };
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: #fff !important; }
+        }
+      `}</style>
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+
       <main className="flex-grow bg-gray-50 py-6">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-gray-900">Documents</h1>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => toast({ title: "Import de document" })}>
-                Importer un document
-              </Button>
-              <Button className="btn-cta font-bold" onClick={() => toast({ title: "Génération en cours..." })}>
-                Générer des documents
-              </Button>
+        <div className="container mx-auto px-4 max-w-5xl">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4 no-print">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Documents — Préparation d'audit Qualiopi</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Sélectionnez les dossiers (sessions) concernés par le contrôle pour visualiser leur complétude documentaire en un coup d'œil, imprimable pour l'auditeur.
+              </p>
             </div>
+            {analyseFaite && (
+              <Button onClick={() => window.print()} style={{ background: "#25245e", color: "#fff" }} className="font-bold">
+                🖨️ Imprimer la vue audit
+              </Button>
+            )}
           </div>
 
-          <div className="mb-4">
-            <Input placeholder="Rechercher un document..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-md" />
-          </div>
+          {/* Recherche et sélection des dossiers */}
+          <Card className="mb-6 no-print">
+            <CardContent className="pt-5">
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <Input
+                  placeholder="Rechercher par formation ou client..."
+                  value={recherche}
+                  onChange={e => setRecherche(e.target.value)}
+                  className="flex-1"
+                />
+                <Select value={filtreFormation} onValueChange={setFiltreFormation}>
+                  <SelectTrigger className="sm:w-64">
+                    <SelectValue placeholder="Toutes les formations" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="toutes">Toutes les formations</SelectItem>
+                    {formations.map(f => (
+                      <SelectItem key={f.id} value={f.id}>{f.titre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {loading ? (
-            <div className="text-center py-16 text-gray-400">Chargement...</div>
-          ) : documents.length === 0 ? (
-            <Card className="p-12 text-center">
-              <p className="text-4xl mb-4">📄</p>
-              <p className="text-lg font-medium text-gray-700 mb-2">Aucun document pour l'instant</p>
-              <p className="text-gray-500 mb-6">Les documents sont générés automatiquement lors de la création de sessions de formation.</p>
-            </Card>
-          ) : (
-            <Tabs defaultValue="tous">
-              <TabsList className="mb-6 flex-wrap">
-                <TabsTrigger value="tous">Tous ({filtres.length})</TabsTrigger>
-                <TabsTrigger value="convention">Conventions</TabsTrigger>
-                <TabsTrigger value="emargement">Émargements</TabsTrigger>
-                <TabsTrigger value="attestation">Attestations</TabsTrigger>
-                <TabsTrigger value="evaluation_chaud">Évaluations</TabsTrigger>
-              </TabsList>
-              <TabsContent value="tous">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filtres.map(d => <DocCard key={d.id} doc={d} />)}
+              {sessionsFiltrees.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">Aucun dossier ne correspond à cette recherche.</p>
+              ) : (
+                <div className="space-y-1 max-h-96 overflow-y-auto">
+                  {sessionsFiltrees.map(s => (
+                    <label key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer">
+                      <Checkbox checked={selectionnes.has(s.id)} onCheckedChange={() => toggleSession(s.id)} />
+                      <span className="text-sm text-gray-800 flex-1">
+                        <strong>{s.formation?.titre || "Formation"}</strong> — {s.client?.raison_sociale || "Client inconnu"}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {s.date_debut ? new Date(s.date_debut).toLocaleDateString("fr-FR") : "—"}
+                        {s.date_fin ? ` au ${new Date(s.date_fin).toLocaleDateString("fr-FR")}` : ""}
+                      </span>
+                      <Badge className="text-xs bg-gray-100 text-gray-600">{statutLabel(s.statut)}</Badge>
+                    </label>
+                  ))}
                 </div>
-              </TabsContent>
-              {["convention", "emargement", "attestation", "evaluation_chaud"].map(type => (
-                <TabsContent key={type} value={type}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {parType(type).length > 0
-                      ? parType(type).map(d => <DocCard key={d.id} doc={d} />)
-                      : <p className="text-gray-500 col-span-3">Aucun document de ce type.</p>
-                    }
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+              )}
+
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <p className="text-sm text-gray-500">{selectionnes.size} dossier{selectionnes.size > 1 ? "s" : ""} sélectionné{selectionnes.size > 1 ? "s" : ""}</p>
+                <Button onClick={analyserCompletude} disabled={analysing || selectionnes.size === 0} style={{ background: "#f2901e", color: "#fff" }} className="font-bold">
+                  {analysing ? "Analyse en cours..." : "🔍 Analyser la complétude"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Résultat : une fiche de complétude par dossier sélectionné */}
+          {analyseFaite && (
+            <div className="space-y-4">
+              {Array.from(selectionnes).map(sessionId => {
+                const s = sessions.find(sess => sess.id === sessionId);
+                if (!s) return null;
+                const pct = completudePct(s.id, s.formation_id);
+                const dF = docsFormation[s.formation_id] || {};
+                const dS = docsSession[s.id] || {};
+                const stags = stagiairesParSession[s.id] || [];
+
+                return (
+                  <Card key={s.id} className="break-inside-avoid">
+                    <CardContent className="pt-5">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
+                        <div>
+                          <h2 className="text-lg font-bold" style={{ color: "#25245e" }}>{s.formation?.titre || "Formation"}</h2>
+                          <p className="text-sm text-gray-500">
+                            Client : {s.client?.raison_sociale || "—"} · {s.date_debut ? new Date(s.date_debut).toLocaleDateString("fr-FR") : "—"}
+                            {s.date_fin ? ` au ${new Date(s.date_fin).toLocaleDateString("fr-FR")}` : ""} · {s.lieu || "lieu non précisé"}
+                          </p>
+                        </div>
+                        <Badge className={badgePct(pct)}>{pct}% complet</Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                        {DOCS_FORMATION.map(d => (
+                          <div key={d.type} className={`flex items-center gap-2 text-xs rounded px-3 py-2 ${dF[d.type] ? "bg-green-50 text-green-700" : "bg-red-50 text-red-500"}`}>
+                            <span>{dF[d.type] ? "✅" : "❌"}</span><span>{d.label}</span>
+                          </div>
+                        ))}
+                        {DOCS_SESSION.map(d => (
+                          <div key={d.type} className={`flex items-center gap-2 text-xs rounded px-3 py-2 ${dS[d.type] ? "bg-green-50 text-green-700" : "bg-red-50 text-red-500"}`}>
+                            <span>{dS[d.type] ? "✅" : "❌"}</span><span>{d.label}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {stags.length === 0 ? (
+                        <p className="text-xs text-gray-400">Aucun stagiaire importé pour ce dossier.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-gray-100">
+                                <th className="text-left py-1.5 pr-3 text-gray-500 font-medium">Stagiaire</th>
+                                <th className="text-left py-1.5 pr-3 text-gray-500 font-medium">Opt-in RGPD</th>
+                                <th className="text-left py-1.5 pr-3 text-gray-500 font-medium">Q. Avant</th>
+                                <th className="text-left py-1.5 pr-3 text-gray-500 font-medium">Q. Après</th>
+                                <th className="text-left py-1.5 text-gray-500 font-medium">Attestation</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {stags.map(st => (
+                                <tr key={st.id} className="border-b border-gray-50">
+                                  <td className="py-1.5 pr-3 font-medium text-gray-800">{st.prenom} {st.nom}</td>
+                                  <td className="py-1.5 pr-3">
+                                    {st.consentement_email === null && st.consentement_sms === null ? "⏳" : `✉️${st.consentement_email ? "✓" : "✗"} 📱${st.consentement_sms ? "✓" : "✗"}`}
+                                  </td>
+                                  <td className="py-1.5 pr-3">{st.doc_questionnaire_avant === "signe" ? "✅" : "❌"}</td>
+                                  <td className="py-1.5 pr-3">{st.doc_questionnaire_apres === "signe" ? "✅" : "❌"}</td>
+                                  <td className="py-1.5">{attestationsParStagiaire[st.id] ? "✅" : "❌"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </div>
       </main>
