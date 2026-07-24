@@ -1,215 +1,475 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import StagiairesList from "@/components/StagiairesList";
+import { supabase } from "@/integrations/supabase/client";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+interface Client {
+  id: string;
+  raison_sociale: string;
+  siret: string;
+  siren: string;
+  adresse: string;
+  contact_nom: string;
+  contact_email: string;
+}
+
+interface Formation {
+  id: string;
+  titre: string;
+  duree: string;
+  statut: string;
+}
+
+interface Session {
+  id: string;
+  formation_id: string;
+  date_debut: string | null;
+  date_fin: string | null;
+  lieu: string | null;
+  lien_visio: string | null;
+  statut: string;
+  formation?: { titre: string; duree: string };
+}
+
+const statutColor = (s: string) => {
+  const m: Record<string, string> = {
+    planifiee: "bg-blue-100 text-blue-700",
+    en_cours: "bg-orange-100 text-orange-700",
+    terminee: "bg-green-100 text-green-700",
+    annulee: "bg-red-100 text-red-700",
+  };
+  return m[s] || "bg-gray-100 text-gray-600";
 };
 
-const esc = (s: string | null | undefined) =>
-  (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const ClientDetail = () => {
+  const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-const formatDateFr = (iso: string | null | undefined) =>
-  iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR") : "non précisée";
+  const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [formations, setFormations] = useState<Formation[]>([]);
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // Documents "session" générés automatiquement (livret, émargement, devis) — tous
+  // sur le même modèle : HTML stocké dans documents_formation, consultable/imprimable
+  // en un clic. docsSession[sessionId][type] = contenu_html.
+  const [docsSession, setDocsSession] = useState<Record<string, Record<string, string>>>({});
+  const [generatingDoc, setGeneratingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
 
-// Le devis est propre à UNE SESSION (un client, des dates précises) — contrairement
-// à l'ancien rattachement par formation, qui aurait partagé le même devis entre
-// tous les clients suivant la même formation. On le stocke donc avec session_id,
-// sur le même modèle que le livret et l'émargement.
+  const DOCS_SESSION_CONFIG = [
+    { type: "livret", label: "📘 Livret d'accueil", fn: "generer-livret" },
+    { type: "emargement", label: "✍️ Feuille d'émargement", fn: "generer-emargement" },
+    { type: "devis", label: "🧾 Devis", fn: "generer-devis" },
+  ] as const;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // Dialog affecter formation
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedFormation, setSelectedFormation] = useState("");
+  const [dateDebut, setDateDebut] = useState("");
+  const [dateFin, setDateFin] = useState("");
+  const [lieu, setLieu] = useState("");
+  const [lienVisio, setLienVisio] = useState("");
 
-  try {
-    const { session_id } = await req.json();
-    console.log("generer-devis: démarrage pour session_id =", session_id);
-    if (!session_id) throw new Error("session_id requis");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const fetchSessions = async (clientId: string) => {
+    const { data } = await supabase
+      .from("sessions")
+      .select("*, formation:formation_id(titre, duree)")
+      .eq("client_id", clientId)
+      .order("date_debut", { ascending: false });
+    const sessionsData = (data as Session[]) || [];
+    setSessions(sessionsData);
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
+    // Charger les documents "session" déjà générés (livret, émargement, devis)
+    if (sessionsData.length > 0) {
+      const { data: docsData } = await supabase
+        .from("documents_formation")
+        .select("session_id, type, contenu_html")
+        .in("session_id", sessionsData.map(s => s.id))
+        .in("type", DOCS_SESSION_CONFIG.map(c => c.type));
+      if (docsData) {
+        const map: Record<string, Record<string, string>> = {};
+        (docsData as { session_id: string; type: string; contenu_html: string | null }[]).forEach(d => {
+          if (!d.contenu_html) return;
+          if (!map[d.session_id]) map[d.session_id] = {};
+          map[d.session_id][d.type] = d.contenu_html;
+        });
+        setDocsSession(map);
+      }
+    }
+  };
+
+  const genererDocumentSession = async (sessionId: string, type: string, fn: string) => {
+    const cle = `${sessionId}:${type}`;
+    setGeneratingDoc(cle);
+    const { data, error } = await supabase.functions.invoke(fn, {
+      body: { session_id: sessionId },
+    });
+    setGeneratingDoc(null);
+
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur génération", description: message, variant: "destructive" });
+      return;
+    }
+
+    setDocsSession(prev => ({ ...prev, [sessionId]: { ...(prev[sessionId] || {}), [type]: data.contenu_html } }));
+    toast({ title: "✅ Document généré" });
+  };
+
+  const voirDocumentSession = (sessionId: string, type: string) => {
+    const html = docsSession[sessionId]?.[type];
+    if (!html) return;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { navigate("/login"); return; }
+
+        setUser({
+          name: session.user.user_metadata?.nom_complet || session.user.email || "",
+          email: session.user.email || "",
+          profileImage: "",
+        });
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("organisme_id")
+          .eq("id", session.user.id)
+          .single();
+
+        if (!profile?.organisme_id) { navigate("/clients"); return; }
+        setOrganismeId(profile.organisme_id);
+
+        // Charger le client
+        const { data: clientData, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("id", id)
+          .eq("organisme_id", profile.organisme_id)
+          .single();
+
+        if (error || !clientData) {
+          toast({ title: "Client introuvable", variant: "destructive" });
+          navigate("/clients");
+          return;
+        }
+        setClient(clientData as Client);
+
+        // Charger les formations publiées du formateur
+        const { data: formationsData } = await supabase
+          .from("formations")
+          .select("id, titre, duree, statut")
+          .eq("organisme_id", profile.organisme_id)
+          .eq("statut", "publie")
+          .order("titre");
+        setFormations((formationsData as Formation[]) || []);
+
+        // Charger les sessions existantes
+        await fetchSessions(id!);
+
+      } catch (err) {
+        console.error("Erreur ClientDetail:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, [id, navigate, toast]);
+
+  const handleAffecterFormation = async () => {
+    if (!selectedFormation) {
+      toast({ title: "Sélectionnez une formation", variant: "destructive" }); return;
+    }
+    if (!dateDebut) {
+      toast({ title: "La date de début est obligatoire", variant: "destructive" }); return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.from("sessions").insert({
+      formation_id: selectedFormation,
+      client_id: id,
+      date_debut: dateDebut || null,
+      date_fin: dateFin || null,
+      lieu: lieu || null,
+      lien_visio: lienVisio || null,
+      statut: "planifiee",
     });
 
-    const { data: session, error: sErr } = await supabase
-      .from("sessions")
-      .select(`
-        id, formation_id, client_id, date_debut, date_fin, lieu,
-        formation:formation_id ( titre, objectifs, programme, duree, tarif, organismes ( raison_sociale, nda, siret, adresse, telephone, email_contact, logo_url ) ),
-        client:client_id ( raison_sociale, adresse, contact_nom, contact_email )
-      `)
-      .eq("id", session_id)
-      .single();
+    setSaving(false);
 
-    if (sErr || !session) throw new Error("Session introuvable : " + sErr?.message);
-    const s = session as Record<string, unknown>;
-    const formation = s.formation as Record<string, unknown>;
-    const org = (formation?.organismes as Record<string, string>) || {};
-    const client = (s.client as Record<string, string>) || {};
-
-    const { count: nbStagiaires } = await supabase
-      .from("stagiaires")
-      .select("id", { count: "exact", head: true })
-      .eq("session_id", session_id);
-
-    // Paragraphe "objet" rédigé par Claude — non bloquant : si l'appel échoue,
-    // on retombe sur une phrase simple construite à partir des champs bruts,
-    // le devis reste généré (c'est un document commercial, pas question qu'une
-    // panne de l'API IA empêche de l'envoyer).
-    let objetTexte = `Formation « ${formation?.titre as string} » — ${formation?.objectifs || "voir programme détaillé"}.`;
-    try {
-      const prompt = `Rédige UNE SEULE phrase commerciale courte (30 mots maximum), en français, professionnelle, décrivant l'objet d'un devis de formation professionnelle intitulée "${formation?.titre}". Objectifs pédagogiques : ${formation?.objectifs || "non précisés"}. Réponds UNIQUEMENT avec la phrase, sans guillemets, sans markdown.`;
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 200, messages: [{ role: "user", content: prompt }] }),
-      });
-      if (claudeRes.ok) {
-        const claudeData = await claudeRes.json();
-        const texte = (claudeData.content?.[0]?.text || "").trim();
-        if (texte) objetTexte = texte;
-      } else {
-        console.error("generer-devis: Claude API non-ok, fallback utilisé:", claudeRes.status);
-      }
-    } catch (aiErr) {
-      console.error("generer-devis: échec appel Claude, fallback utilisé:", aiErr);
+    if (error) {
+      toast({ title: "Erreur", description: error.message, variant: "destructive" }); return;
     }
 
-    const tarif = String(formation?.tarif || "").trim();
-    const nb = nbStagiaires ?? 0;
-    const dateDevis = new Date().toLocaleDateString("fr-FR");
-    const numeroDevis = `DEV-${session_id.slice(0, 8).toUpperCase()}`;
+    toast({ title: "✅ Formation affectée", description: "La session a été créée. Le client peut maintenant importer ses stagiaires." });
+    setDialogOpen(false);
+    setSelectedFormation(""); setDateDebut(""); setDateFin(""); setLieu(""); setLienVisio("");
+    await fetchSessions(id!);
+  };
 
-    const html = `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Devis — ${esc(formation?.titre as string)}</title>
-<style>
-  body { font-family: Arial, sans-serif; color: #1a1a2e; padding: 24px; max-width: 800px; margin: 0 auto; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #25245e; padding-bottom: 16px; margin-bottom: 24px; }
-  .header-left { display: flex; align-items: center; gap: 14px; }
-  .header img { height: 52px; max-width: 130px; object-fit: contain; }
-  .header h1 { font-size: 15pt; color: #25245e; margin: 0; }
-  .header p { font-size: 9pt; color: #666; margin: 2px 0 0; }
-  .devis-ref { text-align: right; font-size: 10pt; color: #444; }
-  .devis-ref strong { color: #25245e; font-size: 13pt; }
-  .bloc-client { background: #f8f8fc; border-radius: 6px; padding: 14px 18px; margin-bottom: 20px; font-size: 10pt; }
-  h2 { font-size: 12pt; color: #25245e; margin-top: 24px; }
-  .objet { font-size: 10.5pt; line-height: 1.5; }
-  table { border-collapse: collapse; width: 100%; font-size: 10pt; margin-top: 10px; }
-  th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
-  th { background: #25245e; color: #fff; font-size: 9pt; }
-  td.montant { text-align: right; font-weight: bold; }
-  .a-verifier { background: #fff8e6; border: 1px solid #f2d98a; border-radius: 6px; padding: 10px 14px; font-size: 9.5pt; color: #8a6d1a; margin-top: 14px; }
-  .signature-zone { margin-top: 36px; display: flex; justify-content: space-between; font-size: 9.5pt; }
-  .signature-box { border: 1px solid #ccc; border-radius: 6px; padding: 12px; width: 45%; min-height: 70px; }
-  .footer { margin-top: 30px; font-size: 8pt; color: #999; text-align: center; }
-  .no-print { text-align: center; margin: 20px 0; }
-  @media print { .no-print { display: none; } }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div class="header-left">
-      ${org.logo_url ? `<img src="${esc(org.logo_url)}" alt="Logo" />` : ""}
-      <div>
-        <h1>${esc(org.raison_sociale || "")}</h1>
-        <p>${org.nda ? `NDA : ${esc(org.nda)}` : ""}${org.siret ? ` — SIRET : ${esc(org.siret)}` : ""}</p>
-        <p>${esc(org.adresse || "")}${org.telephone ? ` — ${esc(org.telephone)}` : ""}${org.email_contact ? ` — ${esc(org.email_contact)}` : ""}</p>
+  const supprimerSession = async (sessionId: string) => {
+    if (!confirm("Supprimer cette session ? Cette action est irréversible.")) return;
+    const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
+    if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Session supprimée" });
+    await fetchSessions(id!);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+        <main className="flex-grow flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Chargement...</p>
+        </main>
+        <Footer />
       </div>
-    </div>
-    <div class="devis-ref">
-      <strong>DEVIS</strong><br/>
-      N° ${esc(numeroDevis)}<br/>
-      Date : ${esc(dateDevis)}<br/>
-      Valable 30 jours
-    </div>
-  </div>
-
-  <div class="bloc-client">
-    <p><strong>Client :</strong> ${esc(client.raison_sociale || "")}</p>
-    ${client.contact_nom ? `<p>À l'attention de : ${esc(client.contact_nom)}</p>` : ""}
-    ${client.adresse ? `<p>${esc(client.adresse)}</p>` : ""}
-    ${client.contact_email ? `<p>${esc(client.contact_email)}</p>` : ""}
-  </div>
-
-  <h2>Objet</h2>
-  <p class="objet">${esc(objetTexte)}</p>
-  <p class="objet">Durée : ${esc(String(formation?.duree || "non précisée"))} — Dates prévisionnelles : du ${esc(formatDateFr(s.date_debut as string))} au ${esc(formatDateFr(s.date_fin as string))} — Lieu : ${esc(String(s.lieu || "non précisé"))}.</p>
-
-  <h2>Détail de la prestation</h2>
-  <table>
-    <thead>
-      <tr><th>Désignation</th><th>Nombre de stagiaires</th><th>Tarif</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>${esc(formation?.titre as string)}</td>
-        <td>${nb > 0 ? nb : "à confirmer"}</td>
-        <td class="montant">${tarif ? esc(tarif) : "à confirmer avec le formateur"}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  ${!tarif || nb === 0 ? `<div class="a-verifier">⚠️ ${!tarif ? "Aucun tarif n'est renseigné sur la fiche formation — complétez-le avant l'envoi. " : ""}${nb === 0 ? "Aucun stagiaire n'est encore importé pour cette session." : ""}</div>` : ""}
-
-  <div class="signature-zone">
-    <div class="signature-box"><strong>${esc(org.raison_sociale || "L'organisme de formation")}</strong><br/>Date, cachet et signature</div>
-    <div class="signature-box"><strong>${esc(client.raison_sociale || "Le client")}</strong><br/>Bon pour accord — Date et signature</div>
-  </div>
-
-  <div class="no-print">
-    <button onclick="window.print()" style="background:#25245e;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;">🖨️ Imprimer / Enregistrer en PDF</button>
-  </div>
-  <div class="footer">Document généré par QalioFlex — ${esc(org.raison_sociale || "")}</div>
-</body>
-</html>`;
-
-    // IMPORTANT : pas de .upsert(onConflict:"session_id,type") — l'index unique sur
-    // (session_id, type) est PARTIEL (WHERE session_id IS NOT NULL) et PostgREST ne
-    // sait pas l'utiliser comme cible ON CONFLICT (erreur 42P10, avalée jusqu'ici par
-    // un simple console.error qui ne faisait jamais échouer la requête). SELECT puis
-    // INSERT/UPDATE explicite à la place.
-    const { data: existingDoc } = await supabase
-      .from("documents_formation")
-      .select("id")
-      .eq("session_id", session_id)
-      .eq("type", "devis")
-      .maybeSingle();
-
-    const docPayload = {
-      formation_id: s.formation_id,
-      session_id,
-      type: "devis",
-      nom_fichier: `devis_${session_id}.html`,
-      genere_par: "auto",
-      contenu_html: html,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: saveErr } = existingDoc
-      ? await supabase.from("documents_formation").update(docPayload).eq("id", existingDoc.id)
-      : await supabase.from("documents_formation").insert(docPayload);
-
-    if (saveErr) {
-      console.error("generer-devis: erreur sauvegarde:", saveErr.message);
-      throw new Error("Échec de la sauvegarde du devis : " + saveErr.message);
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, contenu_html: html }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("generer-devis: ERREUR FATALE:", msg, err instanceof Error ? err.stack : "");
-    return new Response(
-      JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+
+  if (!client) return null;
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+
+      <main className="flex-grow bg-gray-50 py-8">
+        <div className="container mx-auto px-4 max-w-4xl">
+
+          <div className="flex items-center mb-6">
+            <Link to="/clients" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour aux clients</Link>
+          </div>
+
+          {/* Fiche client */}
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0" style={{ background: "#25245e" }}>
+                  {(client.raison_sociale || "?")[0].toUpperCase()}
+                </div>
+                <div>
+                  <CardTitle className="text-2xl" style={{ color: "#25245e" }}>{client.raison_sociale}</CardTitle>
+                  {client.siret && <p className="text-sm text-gray-400">SIRET : {client.siret}</p>}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                {client.adresse && <div><p className="text-xs text-gray-400 mb-1">📍 Adresse</p><p>{client.adresse}</p></div>}
+                {client.contact_nom && <div><p className="text-xs text-gray-400 mb-1">👤 Contact</p><p>{client.contact_nom}</p></div>}
+                {client.contact_email && <div><p className="text-xs text-gray-400 mb-1">✉️ Email</p><a href={`mailto:${client.contact_email}`} className="text-exsenco-blue hover:underline">{client.contact_email}</a></div>}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sessions de formation */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold" style={{ color: "#25245e" }}>Sessions de formation</h2>
+            <Button
+              onClick={() => setDialogOpen(true)}
+              style={{ background: "#f2901e", color: "#fff" }}
+              className="font-bold"
+              disabled={formations.length === 0}
+            >
+              + Affecter une formation
+            </Button>
+          </div>
+
+          {formations.length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-sm text-amber-700">
+              ⚠️ Vous n'avez aucune formation publiée. <Link to="/formations/creation" className="underline">Créez et publiez une formation</Link> pour pouvoir l'affecter à ce client.
+            </div>
+          )}
+
+          {sessions.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-400">
+                <p className="text-3xl mb-3">📅</p>
+                <p>Aucune session affectée pour ce client.</p>
+                <p className="text-sm mt-1">Cliquez sur "Affecter une formation" pour créer une session.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {sessions.map(session => (
+                <Card key={session.id}>
+                  <CardContent className="pt-4">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 w-full">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h3 className="font-semibold text-gray-900">
+                            {(session.formation as Record<string, string>)?.titre || "Formation"}
+                          </h3>
+                          <Badge className={statutColor(session.statut)}>
+                            {session.statut === "planifiee" ? "Planifiée" : session.statut === "en_cours" ? "En cours" : session.statut === "terminee" ? "Terminée" : "Annulée"}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                          {session.date_debut && <span>📅 Début : {new Date(session.date_debut).toLocaleDateString("fr-FR")}</span>}
+                          {session.date_fin && <span>📅 Fin : {new Date(session.date_fin).toLocaleDateString("fr-FR")}</span>}
+                          {session.lieu && <span>📍 {session.lieu}</span>}
+                          {session.lien_visio && <a href={session.lien_visio} target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">🖥 Lien visio</a>}
+                        </div>
+                        <div className="mt-4 mb-3 space-y-2">
+                          {DOCS_SESSION_CONFIG.map(({ type, label, fn }) => {
+                            const cle = `${session.id}:${type}`;
+                            const enCours = generatingDoc === cle;
+                            const html = docsSession[session.id]?.[type];
+                            return (
+                              <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-700">{label}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {enCours
+                                      ? "Génération en cours..."
+                                      : html
+                                      ? "Généré par QalioFlex — visible par le client"
+                                      : "À générer avant le début de la session"}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                  {enCours && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                                  <Button size="sm" variant="outline" disabled={enCours}
+                                    onClick={() => genererDocumentSession(session.id, type, fn)}>
+                                    {enCours ? "Génération..." : html ? "Regénérer" : "Générer"}
+                                  </Button>
+                                  {html && (
+                                    <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirDocumentSession(session.id, type)}>
+                                      Voir
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-4">
+                          <StagiairesList
+                            sessionId={session.id}
+                            canRelance={true}
+                            envoye_par="formateur"
+                            canal="les_deux"
+                            formationTitre={(session.formation as Record<string, string>)?.titre || ""}
+                            showSynthese={true}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-200 text-red-500 hover:bg-red-50 sm:ml-4 flex-shrink-0"
+                        onClick={() => supprimerSession(session.id)}
+                      >
+                        Supprimer
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+
+      {/* Dialog affecter formation */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle style={{ color: "#25245e" }}>Affecter une formation à {client.raison_sociale}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Formation <span className="text-red-500">*</span></Label>
+              <Select value={selectedFormation} onValueChange={setSelectedFormation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir une formation..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {formations.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.titre}{f.duree ? ` — ${f.duree}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date de début <span className="text-red-500">*</span></Label>
+                <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Date de fin</Label>
+                <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Lieu</Label>
+              <Input value={lieu} onChange={e => setLieu(e.target.value)} placeholder="ex: Tours, distanciel..." />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Lien visio (optionnel)</Label>
+              <Input value={lienVisio} onChange={e => setLienVisio(e.target.value)} placeholder="https://meet.google.com/..." />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+            <Button
+              onClick={handleAffecterFormation}
+              disabled={saving}
+              style={{ background: "#f2901e", color: "#fff" }}
+              className="font-bold"
+            >
+              {saving ? "Création..." : "Affecter la formation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ClientDetail;
