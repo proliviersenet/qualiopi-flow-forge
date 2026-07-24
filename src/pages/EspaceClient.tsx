@@ -316,8 +316,8 @@ const EspaceClient = () => {
                 <Card key={session.id} className="overflow-hidden">
                   <div className="h-1" style={{ background: isUpcoming ? "#f2901e" : "#25245e" }} />
                   <CardContent className="pt-5">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
+                    <div className="flex flex-wrap justify-between items-start mb-4 gap-2">
+                      <div className="flex-1 min-w-0">
                         <h2 className="text-xl font-bold text-gray-900">
                           {(session.formation as Record<string, string>)?.titre || "Formation"}
                         </h2>
