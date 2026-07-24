@@ -53,6 +53,15 @@ interface Stagiaire {
   doc_questionnaire_apres?: string | null;
   reponses_questionnaire_avant?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   reponses_questionnaire_apres?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
+  doc_evaluation_chaud?: string | null;
+  doc_evaluation_formateur?: string | null;
+  doc_evaluation_froid?: string | null;
+  token_evaluation_chaud?: string | null;
+  token_evaluation_formateur?: string | null;
+  token_evaluation_froid?: string | null;
+  reponses_evaluation_chaud?: { notes?: Record<string, number>; commentaire?: string | null } | null;
+  reponses_evaluation_formateur?: { notes?: Record<string, number>; commentaire?: string | null } | null;
+  reponses_evaluation_froid?: { notes?: Record<string, number>; commentaire?: string | null } | null;
   formation_titre?: string;
   consentement_email?: boolean | null;
   consentement_email_date?: string | null;
@@ -76,6 +85,17 @@ const consentInfo = (val: boolean | null | undefined, date: string | null | unde
   if (val === false) return { symbol: "✗", color: "text-red-500", title: `Consentement refusé${dateStr ? " le " + dateStr : ""}` };
   return { symbol: "–", color: "text-gray-300", title: "Consentement non renseigné (le stagiaire n'a pas encore répondu au questionnaire)" };
 };
+
+// Les 3 questionnaires d'évaluation stagiaire (chantier 2) — même token public
+// que le questionnaire de positionnement, mais généré ici directement par le
+// formateur (bouton "copier le lien"), car aucun mécanisme n'écrit encore ces
+// tokens automatiquement lors d'une relance (limitation existante, cf.
+// token_questionnaire_avant/apres — non traitée ici, chantier 3).
+const EVAL_TYPES_LIST: { key: "chaud" | "formateur" | "froid"; icon: string; label: string }[] = [
+  { key: "chaud", icon: "🔥", label: "Évaluation à chaud" },
+  { key: "formateur", icon: "🧑‍🏫", label: "Évaluation du formateur" },
+  { key: "froid", icon: "📈", label: "Évaluation à froid (J+90)" },
+];
 
 const motifs = [
   { value: "livret", label: "Livret d'accueil" },
@@ -228,6 +248,47 @@ const StagiairesList = ({
       <table>${competencesRows || "<tr><td style='padding:6px;'>Aucune réponse</td></tr>"}</table>
       <h2>Objectifs</h2>
       <table>${objectifsRows || "<tr><td style='padding:6px;'>Aucune réponse</td></tr>"}</table>
+      </body></html>`;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  // Génère (si besoin) le token public du questionnaire d'évaluation demandé pour
+  // ce stagiaire, puis copie le lien /evaluation/:token dans le presse-papiers.
+  // Le token est réutilisé s'il existe déjà (pas de régénération à chaque clic,
+  // sinon un lien déjà envoyé deviendrait invalide).
+  const genererLienEvaluation = async (s: Stagiaire, type: "chaud" | "formateur" | "froid") => {
+    const tokenField = `token_evaluation_${type}` as keyof Stagiaire;
+    let token = s[tokenField] as string | null | undefined;
+    if (!token) {
+      token = crypto.randomUUID();
+      const { error } = await supabase.from("stagiaires").update({ [tokenField]: token }).eq("id", s.id);
+      if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
+      setStagiaires(prev => prev.map(st => st.id === s.id ? { ...st, [tokenField]: token } as Stagiaire : st));
+    }
+    const url = `${window.location.origin}/evaluation/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "🔗 Lien copié", description: `Lien du questionnaire à transmettre à ${s.prenom} ${s.nom}.` });
+    } catch {
+      toast({ title: "Lien généré", description: url });
+    }
+  };
+
+  const voirReponsesEvaluation = (s: Stagiaire, type: "chaud" | "formateur" | "froid") => {
+    const reponses = s[`reponses_evaluation_${type}` as keyof Stagiaire] as { notes?: Record<string, number>; commentaire?: string | null } | null | undefined;
+    if (!reponses) return;
+    const libelleType = EVAL_TYPES_LIST.find(et => et.key === type)?.label || "Évaluation";
+    const ligne = (libelle: string, note: number | undefined) =>
+      `<tr><td style="padding:6px 10px;border:1px solid #eee;">${libelle}</td><td style="padding:6px 10px;border:1px solid #eee;text-align:center;font-weight:bold;">${note ?? "—"} / 4</td></tr>`;
+    const rows = Object.entries(reponses.notes || {}).map(([k, v]) => ligne(k, v)).join("");
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Réponses — ${s.prenom} ${s.nom}</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a2e;} h1{color:#25245e;font-size:16pt;} h2{color:#25245e;font-size:12pt;margin-top:20px;} table{border-collapse:collapse;width:100%;max-width:600px;font-size:10pt;}</style>
+      </head><body>
+      <h1>${libelleType}</h1>
+      <p>${s.prenom} ${s.nom}</p>
+      <table>${rows || "<tr><td style='padding:6px;'>Aucune réponse</td></tr>"}</table>
+      ${reponses.commentaire ? `<h2>Commentaire</h2><p>${reponses.commentaire}</p>` : ""}
       </body></html>`;
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
@@ -465,6 +526,7 @@ const StagiairesList = ({
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Émargement</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Après</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Attestation</th>
+              <th className="text-left py-2 pr-2 text-gray-500 font-medium" title="Cliquez sur un icône pour copier le lien du questionnaire, ou pour voir les réponses une fois complété">Évaluations</th>
               {canRelance && <th className="text-left py-2 pr-2 text-gray-500 font-medium">Relance</th>}
               {canRelance && <th className="text-left py-2 text-gray-500 font-medium">Actions</th>}
             </tr>
@@ -541,6 +603,26 @@ const StagiairesList = ({
                       <Badge className={`text-xs px-1.5 py-0.5 ${attestation.color}`}>{attestation.label}</Badge>
                     )}
                   </td>
+                  <td className="py-2 pr-2">
+                    <div className="flex gap-1">
+                      {EVAL_TYPES_LIST.map(et => {
+                        const status = s[`doc_evaluation_${et.key}` as keyof Stagiaire] as string | null | undefined;
+                        const st = docStatus(status);
+                        if (status === "signe") {
+                          return (
+                            <button key={et.key} onClick={() => voirReponsesEvaluation(s, et.key)} title={`${et.label} — voir les réponses`}>
+                              <Badge className={`text-xs px-1 py-0.5 ${st.color} cursor-pointer hover:opacity-75`}>{et.icon}✓</Badge>
+                            </button>
+                          );
+                        }
+                        return (
+                          <button key={et.key} onClick={() => genererLienEvaluation(s, et.key)} title={`${et.label} — ${status ? "copier à nouveau le lien" : "générer et copier le lien"}`}>
+                            <Badge className={`text-xs px-1 py-0.5 ${status ? st.color : "bg-gray-100 text-gray-400"} cursor-pointer hover:opacity-75`}>{et.icon}{status ? "" : "+"}</Badge>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </td>
                   {canRelance && (
                     <td className="py-2 pr-2">
                       {needsRelance ? (
@@ -573,7 +655,7 @@ const StagiairesList = ({
                 {/* Formulaire édition inline */}
                 {editingId === s.id && (
                   <tr>
-                    <td colSpan={9} className="py-2 px-0">
+                    <td colSpan={10} className="py-2 px-0">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-yellow-700">Modifier le stagiaire</p>
                         <div className="grid grid-cols-2 gap-2">
@@ -605,6 +687,9 @@ const StagiairesList = ({
         <span>📝 Q. avant complété : {stagiaires.filter(s => s.doc_questionnaire_avant === "signe").length}/{stagiaires.length}</span>
         <span>📝 Q. après complété : {stagiaires.filter(s => s.doc_questionnaire_apres === "signe").length}/{stagiaires.length}</span>
         <span>🎓 Attestations générées : {stagiaires.filter(s => attestations[s.id]).length}/{stagiaires.length}</span>
+        <span>🔥 Éval. à chaud complétée : {stagiaires.filter(s => s.doc_evaluation_chaud === "signe").length}/{stagiaires.length}</span>
+        <span>🧑‍🏫 Éval. formateur complétée : {stagiaires.filter(s => s.doc_evaluation_formateur === "signe").length}/{stagiaires.length}</span>
+        <span>📈 Éval. à froid complétée : {stagiaires.filter(s => s.doc_evaluation_froid === "signe").length}/{stagiaires.length}</span>
       </div>
       <p className="mt-1 text-[10px] text-gray-400">
         Opt-in ✉️/📱 : ✓ accepté · ✗ refusé · – pas encore répondu (consentement RGPD recueilli sur le questionnaire de positionnement)
