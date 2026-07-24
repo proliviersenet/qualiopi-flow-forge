@@ -55,6 +55,7 @@ const FormationDetail = () => {
   const [objectifsEval, setObjectifsEval] = useState<string[]>([]);
   const [generatingCompetences, setGeneratingCompetences] = useState(false);
   const [savingCompetences, setSavingCompetences] = useState(false);
+  const [generatingDevisGenerique, setGeneratingDevisGenerique] = useState(false);
 
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
@@ -227,6 +228,39 @@ const FormationDetail = () => {
     if (!documents.trame_pedagogique) return;
     const win = window.open("", "_blank");
     if (win) { win.document.write(documents.trame_pedagogique); win.document.close(); }
+  };
+
+  const lancerGenerationDevisGenerique = async () => {
+    if (!id) return;
+    setGeneratingDevisGenerique(true);
+    const { data, error } = await supabase.functions.invoke("generer-devis-generique", {
+      body: { formation_id: id },
+    });
+    setGeneratingDevisGenerique(false);
+
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur génération devis générique", description: message, variant: "destructive" });
+      return;
+    }
+
+    setDocuments(prev => ({ ...prev, devis_generique: data.contenu_html }));
+    toast({ title: "✅ Devis générique généré", description: "Cliquez sur 'Voir le devis' pour le consulter, l'imprimer ou le personnaliser avant envoi." });
+  };
+
+  const voirDevisGenerique = () => {
+    if (!documents.devis_generique) return;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(documents.devis_generique); win.document.close(); }
   };
 
   const handleLogout = async () => {
@@ -469,6 +503,32 @@ const FormationDetail = () => {
                       {documents.trame_pedagogique && (
                         <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirTrame} disabled={generatingTrame}>
                           Voir la trame
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={`flex items-center justify-between p-3 rounded-lg ${documents.devis_generique ? "bg-blue-50 border border-blue-200" : "bg-gray-50"}`}>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">🧾 Devis générique</p>
+                      <p className="text-xs text-gray-400">
+                        {generatingDevisGenerique
+                          ? "Génération en cours..."
+                          : documents.devis_generique
+                          ? "Généré par QalioFlex — à personnaliser (client, dates) avant envoi"
+                          : "Devis de prospection, utilisable avant même d'avoir un client ou une session"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      {generatingDevisGenerique && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                      {!generatingDevisGenerique && documents.devis_generique && <Badge className="bg-blue-100 text-blue-700">✓ Généré</Badge>}
+                      <Button size="sm" variant="outline" disabled={generatingDevisGenerique}
+                        onClick={lancerGenerationDevisGenerique}>
+                        {generatingDevisGenerique ? "Génération..." : documents.devis_generique ? "Regénérer" : "Générer"}
+                      </Button>
+                      {documents.devis_generique && (
+                        <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={voirDevisGenerique} disabled={generatingDevisGenerique}>
+                          Voir le devis
                         </Button>
                       )}
                     </div>
