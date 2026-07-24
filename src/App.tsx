@@ -29,6 +29,7 @@ import InvitationClient from "./pages/InvitationClient";
 import EspaceClient from "./pages/EspaceClient";
 import ClientDetail from "./pages/ClientDetail";
 import Positionnement from "./pages/Positionnement";
+import EvaluationPublic from "./pages/EvaluationPublic";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -68,6 +69,7 @@ const App = () => (
           <Route path="/invitation/:token" element={<InvitationClient />} />
           <Route path="/espace-client" element={<EspaceClient />} />
           <Route path="/positionnement/:token" element={<Positionnement />} />
+          <Route path="/evaluation/:token" element={<EvaluationPublic />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
