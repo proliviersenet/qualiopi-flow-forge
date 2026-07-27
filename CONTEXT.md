@@ -93,7 +93,7 @@ Puis préciser la tâche du jour — voir §8 "Roadmap" pour la liste des priori
 | Clients | ✅ CRUD + autocomplétion SIRET — **bouton logout fixé le 30/06** |
 | Documents | ✅ Liste avec statut signatures DocuSign — **bouton logout fixé le 30/06** |
 | FormationCreation | ✅ CRUD branché Supabase — **formulaire mappé sur le schéma réel, insert réel, boutons Brouillon / Publier, onLogout câblé — livré le 30/06** |
-| Module BPF | ✅ Livré le 03/07 — liste, création, édition, validation, répartition thématiques (jsonb). **PDF MAF à faire** |
+| Module BPF | ✅ Livré le 03/07 — liste, création, édition, validation, répartition thématiques (jsonb). **Export PDF + guide MAF livré le 04/07** |
 | Module pré-audit | ❌ Edge function `lancer-preaudit` déployée mais pas de page réelle |
 
 Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index.tsx`, `Mockup.tsx`, `NotFound.tsx`.
@@ -159,7 +159,7 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 
 **Prochaines priorités :**
 
-7. **BPF — export PDF MAF** : générer un PDF du BPF au format compatible avec la déclaration sur MAF (Mon Activité Formation / DREETS), téléchargeable depuis la page BPF. Inclure un guide pas-à-pas de déclaration sur MAF.
+7. ~~**BPF — export PDF MAF**~~ ✅ Fait le 04/07 — bouton "Télécharger PDF" sur chaque BPF (fonction `imprimerBPF` dans `BPF.tsx`), document imprimable aux couleurs ExSenCo avec Cadres A-D (identification, période, financier, pédagogique) + guide pas-à-pas de déclaration sur le portail MAF (URL, échéance 30 avril, amende jusqu'à 4 500€ en cas de retard).
 8. **Module notation formateurs** : notes des formateurs par clients ET stagiaires, avec tableau de bord stats consultable (moyenne, évolution, verbatims). Tables à créer en base : `notations_formateurs` (formation_id, session_id, auteur_type: client|stagiaire, note, commentaire, created_at). Interface : formulaire public (lien envoyé par email) + page stats privée dans l'app.
 9. **Pages footer** : CGU, Politique de confidentialité, RGPD, Contact, Centre d'aide, Référentiel Qualiopi
 10. **Pré-audit** — page réelle (edge function `lancer-preaudit` déjà prête en base)
@@ -380,3 +380,39 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 - Questionnaire_de_positionnement_après_formation_-_prospection_commerciale.xlsx
 - Trame_pédagogique_-_Construire_son_PAC-_20210615.docx
 - grille_de_qualification_-_besoin_en_formation_202105.xlsx
+
+---
+
+## Session 6 — 21-27 juillet 2026 (Chantier 5)
+
+### ✅ Livré cette session
+
+**Chantier 5 — Volet A (déjà fait avant compaction) :** génération devis/émargement/évaluations en HTML + PDF.
+
+**Volet B — Relances automatiques :**
+- Edge Function `relance-documents-auto` déployée, cron quotidien `relance-documents-quotidien` (6h15) via pg_cron/pg_net
+- J+2 relance, J+5 alerte (émargement, évaluation chaud, évaluation froid)
+- Testée en prod (statut 200, `{success:true}`)
+
+**Volet C — Bandeau d'alerte session :**
+- `StagiairesList.tsx` : bandeau visuel (orange/rouge) listant les documents en attente de signature > 2 jours, au-dessus du radar de synthèse
+
+**Volet D — Convention de formation + signature DocuSign :**
+- Edge Function `generer-convention` : génère la convention en HTML (Cerfa-like), pré-remplie avec les stagiaires, seulement si le client a transmis sa liste de stagiaires
+- `docusign-integration` : ajout d'un champ `ancre` par signataire pour supporter 2 zones de signature distinctes sur un même document (`/signature_formateur/`, `/signature_client/`)
+- `ClientDetail.tsx` (formateur) et `EspaceClient.tsx` (client) : UI génération + envoi signature + statut, conversion HTML→PDF côté client via html2pdf.js (CDN)
+- Fix RLS proactif sur la table `signatures` (policy encore basée sur l'ancienne table `documents` — corrigée pour `documents_formation`)
+
+**DocuSign production — EN PAUSE, bloqué sur le forfait :**
+- Le compte de production DocuSign d'Olivier est en forfait **eSignature Personal** (108€/an, 1 utilisateur, 5 enveloppes/mois) → **pas d'accès API**, donc impossible de terminer le Go-Live (clé d'intégration sandbox `dbc125da-...`, app "QualiFlow-ExSenCo")
+- Olivier a choisi de passer au forfait **Standard** (23€/mois, 276€/an facturé annuellement — inclut priori API/intégrations) mais ne branchera les secrets de prod qu'au moment du test final complet
+- ⚠️ Discrepancy notée à vérifier avant de configurer les secrets prod : le secret Supabase `DOCUSIGN_API_ACCOUNT_ID` actuel (`a5d1bca6-d904-41b5-ba57-13e33b0ca01f`) correspond en fait à l'account ID du compte de **production**, pas à un compte développeur — à re-vérifier une fois le nouveau forfait actif
+- **Prochaine étape** : une fois le forfait Standard actif, reprendre le Go-Live sur `apps-d.docusign.com/admin/apps-and-keys` (app QualiFlow-ExSenCo → Actions → Sélectionnez le compte Go-Live), accepter les CGU, sélectionner le compte de prod, remplir le questionnaire business, attendre validation DocuSign (asynchrone), puis générer une nouvelle paire de clés RSA pour la prod et faire le JWT consent grant
+
+**Bug résolu — icônes documents espace client :** signalé "Edge Function returned a non-2xx status code" au clic sur une icône document côté client ; résolu par l'utilisateur lui-même en cours de session (cause exacte non confirmée côté Claude — à surveiller si ça revient).
+
+**Vérifié (déjà fait, doc mise à jour) :** le point roadmap #7 "BPF export PDF MAF" était déjà livré le 04/07 (voir §5 et §8) — ce n'était qu'un oubli de mise à jour du CONTEXT.md, aucun développement nécessaire.
+
+### 🔜 Prochaines priorités
+1. Finaliser le Go-Live DocuSign production une fois le forfait Standard actif, puis faire le test joint complet (génération convention → PDF → envoi DocuSign → signature → webhook)
+2. Reprendre la roadmap §8 : module notation formateurs, pré-audit (page réelle), pages footer, Stripe, historique mots de passe
