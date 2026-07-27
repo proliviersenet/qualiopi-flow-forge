@@ -479,6 +479,44 @@ const StagiairesList = ({
         )}
       </div>
 
+      {/* Chantier 5 : voyant d'alerte au niveau de la session — agrège les retards de
+          tous les stagiaires (émargement, éval à chaud, éval à froid) plutôt que de
+          laisser le formateur les repérer un par un via les badges ⚠️ de chaque ligne.
+          Mêmes seuils que côté serveur (relance-documents-auto) : ⚠️ dès J+2 (relance déjà
+          partie), 🚨 à partir de J+5 (alerte formateur + client déjà déclenchée). */}
+      {(() => {
+        const alertes: { nom: string; label: string; jours: number }[] = [];
+        stagiaires.forEach(s => {
+          const em = alerteRetard(s.doc_emargement, s.doc_emargement_envoye_le);
+          if (em !== null) alertes.push({ nom: `${s.prenom} ${s.nom}`, label: "la feuille d'émargement", jours: em });
+          const ch = alerteRetard(s.doc_evaluation_chaud, s.doc_evaluation_chaud_envoye_le);
+          if (ch !== null) alertes.push({ nom: `${s.prenom} ${s.nom}`, label: "l'évaluation à chaud", jours: ch });
+          const fr = alerteRetard(s.doc_evaluation_froid, s.doc_evaluation_froid_envoye_le);
+          if (fr !== null) alertes.push({ nom: `${s.prenom} ${s.nom}`, label: "l'évaluation à froid", jours: fr });
+        });
+        if (alertes.length === 0) return null;
+        alertes.sort((a, b) => b.jours - a.jours);
+        const critiques = alertes.filter(a => a.jours >= 5);
+        const bg = critiques.length > 0 ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200";
+        const text = critiques.length > 0 ? "text-red-700" : "text-orange-700";
+        return (
+          <div className={`border rounded-lg p-3 mb-4 ${bg}`}>
+            <p className={`text-xs font-semibold mb-1 ${text}`}>
+              {critiques.length > 0 ? "🚨" : "⚠️"} {alertes.length} document{alertes.length > 1 ? "s" : ""} en attente de signature depuis plus de 2 jours
+              {critiques.length > 0 && ` — dont ${critiques.length} depuis plus de 5 jours (alerte déjà envoyée au formateur et au client)`}
+            </p>
+            <ul className="text-[11px] text-gray-600 space-y-0.5 mt-1">
+              {alertes.map((a, i) => (
+                <li key={i}>
+                  • <strong>{a.nom}</strong> — {a.label}, envoyée depuis {a.jours} jour{a.jours > 1 ? "s" : ""}
+                  {a.jours >= 5 ? " 🚨" : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
+
       {/* Synthèse questionnaire de positionnement — format radar, avant/après superposés
           sur les mêmes axes pour visualiser la progression du groupe. Affichée côté
           formateur (ClientDetail.tsx) ET côté client (EspaceClient.tsx). */}
