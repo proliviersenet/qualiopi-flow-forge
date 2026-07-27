@@ -23,13 +23,16 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "");
 
     // Client "identité" : respecte le JWT de l'appelant, sert uniquement à savoir QUI pose la question.
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data: { user }, error: userErr } = await authClient.auth.getUser();
+    // Important : getUser() sans argument s'appuie sur la session interne du client (vide ici),
+    // PAS sur le header global — il faut lui passer explicitement le JWT de l'appelant.
+    const { data: { user }, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !user) throw new Error("Utilisateur non authentifié");
 
     // Client "service" : accès complet en base pour lire/écrire les conversations (RLS gérée ici, pas par Postgres).
@@ -137,6 +140,9 @@ ${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 - Réponses COURTES et synthétiques (quelques phrases, façon message plutôt qu'article). Pas de longues listes
   à puces sauf si vraiment nécessaire pour une procédure en plusieurs étapes.
 - Tu peux utiliser 1 emoji maximum si ça sert la clarté, jamais plus.
+- IMPORTANT : n'utilise JAMAIS de syntaxe markdown (pas d'astérisques **gras**, pas de dièses #titre, pas de
+  tirets de liste -). L'interface affiche du texte brut : écris en phrases normales, avec des numéros suivis
+  d'un point (1. 2. 3.) si une procédure en plusieurs étapes est vraiment nécessaire.
 - Ne mentionne jamais que tu es "Claude" ou un modèle d'IA générique : tu es "l'assistant QalioFlex".
 
 ## Escalade vers Olivier (niveau 2)
