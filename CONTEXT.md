@@ -424,3 +424,23 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 1. Finaliser le Go-Live DocuSign production une fois le forfait Standard actif, puis faire le test joint complet (génération convention → PDF → envoi DocuSign → signature → webhook)
 2. Décider avec Olivier s'il garde ou supprime le BPF 2025 de test créé pendant la vérification (données réelles, mais créé à titre de validation)
 3. Reprendre la roadmap §8 : module notation formateurs, pré-audit (page réelle), pages footer, Stripe, historique mots de passe
+
+## Session 7 — 27 juillet 2026 (Chatbot SAV niveau 1 + On-boarding IA)
+
+### ✅ Livré cette session
+
+**Chatbot assistant IA (SAV niveau 1 + on-boarding) — déployé formateur + client :**
+- Décisions validées avec Olivier : 100% IA générative (Claude), déploiement simultané formateur + client, base de connaissance rédigée par Claude à partir des vraies fonctionnalités de l'appli, escalade niveau 2 par email avec résumé de conversation
+- Tables `chatbot_conversations` et `chatbot_messages` créées (RLS : chacun voit ses propres conversations, le formateur voit aussi celles de ses clients pour contrôle qualité)
+- Edge Function `chatbot-assistant` déployée : identifie l'appelant (formateur ou client) via son rôle, construit un contexte dynamique (organisme, nb formations/clients, profil complet ou non pour un formateur ; fiche entreprise pour un client), appelle l'API Claude (`claude-sonnet-4-6`) avec une base de connaissance complète rédigée à partir des fonctionnalités réelles de QalioFlex
+- Détection automatique d'escalade (`[ESCALADE: raison]` dans la réponse du modèle) → email HTML envoyé à olivier@exsenco.fr via Brevo avec résumé de la conversation, statut conversation mis à jour
+- Widget `ChatbotWidget.tsx` : bulle flottante bas-droite, visible uniquement pour utilisateurs connectés, historique persistant (localStorage + DB), montée globalement dans `App.tsx` donc disponible sur tout le site sans toucher chaque page
+- **Bug trouvé et corrigé en test réel** : `authClient.auth.getUser()` sans argument s'appuie sur la session interne du client Supabase (vide côté edge function) et non sur le header `Authorization` global → toutes les requêtes échouaient en 500 "Utilisateur non authentifié". Fix : passer explicitement le JWT à `getUser(jwt)`.
+- **Fix qualité réponses** : consigne ajoutée au system prompt pour bannir la syntaxe markdown (le widget affiche du texte brut, les astérisques `**gras**` s'affichaient tels quels)
+- Testé en conditions réelles sur qualioflex.fr (session formateur Olivier) : question fonctionnelle (génération convention) → bonne réponse sans markdown ; question sensible (résiliation abonnement) → escalade déclenchée, statut DB `escaladee` confirmé, email Brevo envoyé sans erreur
+- Code source de l'Edge Function poussé sur GitHub (`supabase/functions/chatbot-assistant/`) pour cohérence avec le reste du repo (rappel : déploiement Supabase se fait manuellement via le Dashboard, pas de CI/CD Git)
+
+### 🔜 Prochaines priorités
+1. Construire un écran de suivi des conversations escaladées côté formateur (actuellement consultable seulement en base/SQL, RLS déjà prête)
+2. Enrichir la base de connaissance au fil de l'eau selon les vraies questions posées par les utilisateurs
+3. Reprendre la roadmap §8 : DocuSign Go-Live prod, module notation formateurs, pré-audit (page réelle), pages footer, Stripe
