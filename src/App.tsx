@@ -30,6 +30,7 @@ import EspaceClient from "./pages/EspaceClient";
 import ClientDetail from "./pages/ClientDetail";
 import Positionnement from "./pages/Positionnement";
 import EvaluationPublic from "./pages/EvaluationPublic";
+import EmargementPublic from "./pages/EmargementPublic";
 import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
@@ -70,6 +71,7 @@ const App = () => (
           <Route path="/espace-client" element={<EspaceClient />} />
           <Route path="/positionnement/:token" element={<Positionnement />} />
           <Route path="/evaluation/:token" element={<EvaluationPublic />} />
+          <Route path="/emargement/:token" element={<EmargementPublic />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/features" element={<Features />} />
           <Route path="/demo" element={<Demo />} />
