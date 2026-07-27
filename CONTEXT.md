@@ -411,8 +411,16 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 
 **Bug résolu — icônes documents espace client :** signalé "Edge Function returned a non-2xx status code" au clic sur une icône document côté client ; résolu par l'utilisateur lui-même en cours de session (cause exacte non confirmée côté Claude — à surveiller si ça revient).
 
-**Vérifié (déjà fait, doc mise à jour) :** le point roadmap #7 "BPF export PDF MAF" était déjà livré le 04/07 (voir §5 et §8) — ce n'était qu'un oubli de mise à jour du CONTEXT.md, aucun développement nécessaire.
+**Vérifié (déjà fait, doc mise à jour) :** le point roadmap #7 "BPF export PDF MAF" était déjà livré le 04/07 (voir §5 et §8) — première analyse. **Corrigé ensuite** : ce module simplifié ne couvrait qu'environ 15% du vrai Cerfa 10443*17 (comparaison faite avec le BPF 2025 réel d'Olivier, 111 champs extraits du PDF officiel télétransmis DREETS) et incluait un champ non-officiel ("taux_satisfaction"). Voir refonte complète ci-dessous.
+
+**Volet E — Refonte complète du module BPF (Cerfa 10443*17, tous cadres A à H) :**
+- Diagnostic : comparaison champ par champ entre l'ancien module BPF et le vrai Cerfa (111 champs AcroForm extraits du BPF 2025 réel d'Olivier via `pypdf`) → gap majeur identifié (Cadre C détaillé, D, E, F détaillé, G, H manquants ou trop simplifiés)
+- Migration base de données (`bpf` table) : suppression des colonnes non-officielles (`nb_stagiaires`, `nb_heures_formation`, `ca_formation`, `taux_satisfaction`, `repartition_thematiques`), ajout de toutes les colonnes officielles par cadre (`cadre_c`, `cadre_f1`, `cadre_f3`, `cadre_f4` en jsonb + colonnes scalaires D/E/G/H), + `organismes.forme_juridique`
+- Réécriture complète de `BPF.tsx` : formulaire en accordéon couvrant les 8 cadres officiels (A Identification, B Période, C Origine des produits ligne par ligne 1/a-h/2/3-11, D Charges, E Personnes formatrices, F Bilan pédagogique détaillé F-1 à F-4 avec spécialités NSF, G Sous-traitance reçue, H Dirigeant), export PDF entièrement réécrit avec numérotation Cerfa exacte sur chaque ligne + guide MAF pas-à-pas mis à jour
+- **Vérifié en conditions réelles** : ré-saisie des vraies données du BPF 2025 d'Olivier (SARL EXSENCO, 17 750€ de produits via contrats avec autres organismes, 3 600€ de charges, 1 personne/123h formatrices, 28 stagiaires confiés par un autre organisme/123h, dirigeant SENET Olivier - Gérant) → totaux calculés en direct dans l'UI et export PDF généré comparés au vrai document : **correspondance exacte** sur tous les montants, cadres et libellés Cerfa
+- Déployé en production (commit GitHub direct sur `main`, build Vercel confirmé live sur qualioflex.fr)
 
 ### 🔜 Prochaines priorités
 1. Finaliser le Go-Live DocuSign production une fois le forfait Standard actif, puis faire le test joint complet (génération convention → PDF → envoi DocuSign → signature → webhook)
-2. Reprendre la roadmap §8 : module notation formateurs, pré-audit (page réelle), pages footer, Stripe, historique mots de passe
+2. Décider avec Olivier s'il garde ou supprime le BPF 2025 de test créé pendant la vérification (données réelles, mais créé à titre de validation)
+3. Reprendre la roadmap §8 : module notation formateurs, pré-audit (page réelle), pages footer, Stripe, historique mots de passe
