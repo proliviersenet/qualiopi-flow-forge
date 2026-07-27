@@ -73,6 +73,14 @@ const ClientDetail = () => {
   // en un clic. docsSession[sessionId][type] = contenu_html.
   const [docsSession, setDocsSession] = useState<Record<string, Record<string, string>>>({});
   const [generatingDoc, setGeneratingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
+  // Chantier 5 : la convention ne peut être générée qu'une fois que le client a
+  // transmis la liste des stagiaires (elle se préremplit avec leurs noms) — même
+  // logique que côté EspaceClient.tsx pour débloquer l'import de stagiaires.
+  // conventionSignatures reflète le statut DocuSign (signatures.statut) du
+  // document de type "convention" de chaque session, une fois envoyé pour signature.
+  const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
+  const [conventionSignatures, setConventionSignatures] = useState<Record<string, string>>({});
+  const [sendingSignature, setSendingSignature] = useState<string | null>(null);
 
   const DOCS_SESSION_CONFIG = [
     { type: "livret", label: "📘 Livret d'accueil", fn: "generer-livret" },
@@ -102,21 +110,50 @@ const ClientDetail = () => {
     const sessionsData = (data as Session[]) || [];
     setSessions(sessionsData);
 
-    // Charger les documents "session" déjà générés (livret, émargement, devis)
+    // Charger les documents "session" déjà générés (livret, émargement, devis, convention)
     if (sessionsData.length > 0) {
+      const sessionIds = sessionsData.map(s => s.id);
       const { data: docsData } = await supabase
         .from("documents_formation")
-        .select("session_id, type, contenu_html")
-        .in("session_id", sessionsData.map(s => s.id))
-        .in("type", DOCS_SESSION_CONFIG.map(c => c.type));
+        .select("id, session_id, type, contenu_html")
+        .in("session_id", sessionIds)
+        .in("type", [...DOCS_SESSION_CONFIG.map(c => c.type), "convention"]);
       if (docsData) {
         const map: Record<string, Record<string, string>> = {};
-        (docsData as { session_id: string; type: string; contenu_html: string | null }[]).forEach(d => {
+        const rows = docsData as { id: string; session_id: string; type: string; contenu_html: string | null }[];
+        rows.forEach(d => {
           if (!d.contenu_html) return;
           if (!map[d.session_id]) map[d.session_id] = {};
           map[d.session_id][d.type] = d.contenu_html;
         });
         setDocsSession(map);
+
+        // Chantier 5 : statut de signature DocuSign de la/des convention(s) déjà générée(s).
+        const conventionDocs = rows.filter(d => d.type === "convention");
+        if (conventionDocs.length > 0) {
+          const { data: sigs } = await supabase
+            .from("signatures")
+            .select("document_id, statut")
+            .in("document_id", conventionDocs.map(d => d.id));
+          if (sigs) {
+            const sigMap: Record<string, string> = {};
+            (sigs as { document_id: string; statut: string }[]).forEach(s => {
+              const doc = conventionDocs.find(d => d.id === s.document_id);
+              if (doc) sigMap[doc.session_id] = s.statut;
+            });
+            setConventionSignatures(sigMap);
+          }
+        }
+      }
+
+      // Sessions pour lesquelles le client a déjà transmis au moins un stagiaire —
+      // condition qui débloque la génération de la convention.
+      const { data: stagData } = await supabase
+        .from("stagiaires")
+        .select("session_id")
+        .in("session_id", sessionIds);
+      if (stagData) {
+        setUploadedSessions(new Set((stagData as { session_id: string }[]).map(s => s.session_id)));
       }
     }
   };
@@ -153,6 +190,100 @@ const ClientDetail = () => {
     if (!html) return;
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  // Chantier 5 : charge html2pdf.js à la volée depuis un CDN (aucune génération de
+  // PDF n'existait dans l'app) — évite d'ajouter une dépendance npm juste pour ce
+  // point d'entrée ponctuel.
+  const chargerHtml2pdf = () =>
+    new Promise<void>((resolve, reject) => {
+      if ((window as unknown as { html2pdf?: unknown }).html2pdf) { resolve(); return; }
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Impossible de charger l'outil de génération PDF."));
+      document.head.appendChild(script);
+    });
+
+  // Chantier 5 : convertit la convention (HTML) en PDF côté client, puis l'envoie
+  // à DocuSign pour signature par le formateur ET le client (docusign-integration,
+  // jusqu'ici jamais déclenché depuis l'interface). On régénère la convention juste
+  // avant l'envoi pour garantir un PDF à jour et récupérer les emails de contact.
+  const envoyerConventionSignature = async (sessionId: string, formationTitre: string) => {
+    setSendingSignature(sessionId);
+    try {
+      const { data: gen, error: genErr } = await supabase.functions.invoke("generer-convention", {
+        body: { session_id: sessionId },
+      });
+      if (genErr || gen?.error) throw new Error(gen?.error || genErr?.message || "Erreur génération convention");
+
+      setDocsSession(prev => ({ ...prev, [sessionId]: { ...(prev[sessionId] || {}), convention: gen.contenu_html } }));
+
+      await chargerHtml2pdf();
+
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.left = "-9999px";
+      container.style.top = "0";
+      container.style.width = "800px";
+      container.innerHTML = gen.contenu_html;
+      document.body.appendChild(container);
+
+      type Html2PdfWorker = { outputPdf: (type: string) => Promise<Blob> };
+      type Html2Pdf = () => { set: (opts: Record<string, unknown>) => { from: (el: HTMLElement) => Html2PdfWorker } };
+      const html2pdf = (window as unknown as { html2pdf: Html2Pdf }).html2pdf;
+
+      let pdfBlob: Blob;
+      try {
+        pdfBlob = await html2pdf().set({
+          margin: 10,
+          filename: "convention.pdf",
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        }).from(container).outputPdf("blob");
+      } finally {
+        document.body.removeChild(container);
+      }
+
+      const pdfBase64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = () => reject(new Error("Erreur de lecture du PDF généré."));
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      const { data: sigData, error: sigErr } = await supabase.functions.invoke("docusign-integration", {
+        body: {
+          document_id: gen.document_id,
+          pdf_base64: pdfBase64,
+          nom_document: `Convention de formation - ${formationTitre}`,
+          signataires: [
+            { email: gen.formateur.email, nom: gen.formateur.nom, ordre: 1, ancre: "/signature_formateur/" },
+            { email: gen.client.email, nom: gen.client.nom, ordre: 2, ancre: "/signature_client/" },
+          ],
+        },
+      });
+      if (sigErr || sigData?.error) throw new Error(sigData?.error || sigErr?.message || "Erreur envoi DocuSign");
+
+      setConventionSignatures(prev => ({ ...prev, [sessionId]: "en_attente" }));
+      toast({ title: "✅ Convention envoyée pour signature", description: "Le formateur et le client vont recevoir un email DocuSign." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      toast({ title: "Erreur envoi signature", description: msg, variant: "destructive" });
+    } finally {
+      setSendingSignature(null);
+    }
+  };
+
+  const conventionStatutLabel = (statut: string | undefined) => {
+    if (!statut) return null;
+    const m: Record<string, string> = {
+      en_attente: "📤 Envoyée — en attente de signature",
+      signe: "✅ Signée par les deux parties",
+      refuse: "❌ Signature refusée",
+      expire: "⌛ Signature expirée",
+    };
+    return m[statut] || statut;
   };
 
   useEffect(() => {
@@ -378,6 +509,65 @@ const ClientDetail = () => {
                               </div>
                             );
                           })}
+
+                          {/* Chantier 5 : convention de formation — ne se génère qu'une fois les
+                              stagiaires transmis par le client, préremplie avec leurs infos +
+                              dates + client, puis envoyée au formateur ET au client pour
+                              signature DocuSign. Archivée dans la session (documents_formation),
+                              jamais visible par les stagiaires. */}
+                          {(() => {
+                            const hasStag = uploadedSessions.has(session.id);
+                            const cle = `${session.id}:convention`;
+                            const enCours = generatingDoc === cle;
+                            const html = docsSession[session.id]?.convention;
+                            const statut = conventionSignatures[session.id];
+                            const titreFormation = (session.formation as Record<string, string>)?.titre || "";
+                            return (
+                              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-700">📝 Convention de formation</p>
+                                  <p className="text-xs text-gray-400">
+                                    {!hasStag
+                                      ? "🔒 Disponible une fois les stagiaires transmis par le client"
+                                      : enCours
+                                      ? "Génération en cours..."
+                                      : sendingSignature === session.id
+                                      ? "Envoi pour signature en cours..."
+                                      : statut
+                                      ? conventionStatutLabel(statut)
+                                      : html
+                                      ? "Générée — accessible au client, pas encore envoyée pour signature"
+                                      : "À générer une fois les stagiaires transmis"}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                  {(enCours || sendingSignature === session.id) && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                                  <Button
+                                    size="sm" variant="outline"
+                                    disabled={!hasStag || enCours}
+                                    title={!hasStag ? "Le client doit d'abord transmettre la liste des stagiaires" : undefined}
+                                    onClick={() => genererDocumentSession(session.id, "convention", "generer-convention")}
+                                  >
+                                    {!hasStag ? "🔒 En attente" : enCours ? "Génération..." : html ? "Régénérer" : "Générer"}
+                                  </Button>
+                                  {html && (
+                                    <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirDocumentSession(session.id, "convention")}>
+                                      Voir
+                                    </Button>
+                                  )}
+                                  {html && !statut && (
+                                    <Button
+                                      size="sm" style={{ background: "#f2901e", color: "#fff" }}
+                                      disabled={sendingSignature === session.id}
+                                      onClick={() => envoyerConventionSignature(session.id, titreFormation)}
+                                    >
+                                      {sendingSignature === session.id ? "Envoi..." : "📤 Envoyer signature"}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="mt-4">
                           <StagiairesList

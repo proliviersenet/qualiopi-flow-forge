@@ -38,6 +38,17 @@ const statutLabel = (s: string) => {
   return map[s] || { label: s, color: "bg-gray-100 text-gray-600" };
 };
 
+// Chantier 5 : libellé du statut de signature DocuSign de la convention.
+const conventionStatutLabel = (statut: string | undefined) => {
+  const m: Record<string, string> = {
+    en_attente: "Convention envoyée pour signature — en attente",
+    signe: "Convention signée par les deux parties",
+    refuse: "Signature de la convention refusée",
+    expire: "Signature de la convention expirée",
+  };
+  return statut ? m[statut] || statut : undefined;
+};
+
 const EspaceClient = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -48,6 +59,9 @@ const EspaceClient = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [documentsByFormation, setDocumentsByFormation] = useState<Record<string, Record<string, string>>>({});
   const [documentsBySession, setDocumentsBySession] = useState<Record<string, Record<string, string>>>({});
+  // Chantier 5 : statut DocuSign (signatures.statut) de la convention par session,
+  // pour informer le client qu'elle attend sa signature ou est déjà signée.
+  const [conventionSignatures, setConventionSignatures] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [uploadingSession, setUploadingSession] = useState<string | null>(null);
   const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
@@ -106,7 +120,7 @@ const EspaceClient = () => {
           const formationIds = [...new Set(sessionsData.map((s: Session) => s.formation_id))];
           const { data: docsData } = await supabase
             .from("documents_formation")
-            .select("formation_id, session_id, type, url, contenu_html")
+            .select("id, formation_id, session_id, type, url, contenu_html")
             .or(`formation_id.in.(${formationIds.join(",")}),session_id.in.(${sessionIds.join(",")})`)
             .neq("type", "trame_pedagogique")
             // Les attestations sont propres à un STAGIAIRE (stagiaire_id renseigné) —
@@ -118,7 +132,8 @@ const EspaceClient = () => {
           if (docsData) {
             const byFormation: Record<string, Record<string, string>> = {};
             const bySession: Record<string, Record<string, string>> = {};
-            (docsData as { formation_id: string; session_id: string | null; type: string; url: string | null; contenu_html: string | null }[]).forEach((d) => {
+            const rows = docsData as { id: string; formation_id: string; session_id: string | null; type: string; url: string | null; contenu_html: string | null }[];
+            rows.forEach((d) => {
               const value = d.url || d.contenu_html;
               if (!value) return;
               if (d.session_id) {
@@ -131,6 +146,24 @@ const EspaceClient = () => {
             });
             setDocumentsByFormation(byFormation);
             setDocumentsBySession(bySession);
+
+            // Chantier 5 : statut de signature DocuSign de la convention, pour l'afficher
+            // au client (signable par lui via l'email DocuSign qu'il recevra).
+            const conventionDocs = rows.filter(d => d.type === "convention" && d.session_id);
+            if (conventionDocs.length > 0) {
+              const { data: sigs } = await supabase
+                .from("signatures")
+                .select("document_id, statut")
+                .in("document_id", conventionDocs.map(d => d.id));
+              if (sigs) {
+                const sigMap: Record<string, string> = {};
+                (sigs as { document_id: string; statut: string }[]).forEach(s => {
+                  const doc = conventionDocs.find(d => d.id === s.document_id);
+                  if (doc && doc.session_id) sigMap[doc.session_id] = s.statut;
+                });
+                setConventionSignatures(sigMap);
+              }
+            }
           }
         }
       } catch (err) {
@@ -371,6 +404,7 @@ const EspaceClient = () => {
                           { key: "livret", label: "Livret d'accueil", scope: "session" as const },
                           { key: "emargement", label: "Feuille d'émargement", scope: "session" as const },
                           { key: "devis", label: "Devis", scope: "session" as const },
+                          { key: "convention", label: "Convention de formation", scope: "session" as const },
                         ].map((docConfig) => {
                           const key = docConfig.key;
                           const label = docConfig.label;
@@ -381,16 +415,25 @@ const EspaceClient = () => {
                             : scope === "session"
                             ? documentsBySession[session.id]?.[key]
                             : documentsByFormation[session.formation_id]?.[key];
-                          // Livret, émargement et devis sont tous générés en HTML autonome
-                          // (contenu_html), affichable directement dans un nouvel onglet —
-                          // contrairement à support/programme qui sont des fichiers uploadés
-                          // (url) ouverts tels quels.
-                          const isInlineHtml = key === "livret" || key === "emargement" || key === "devis";
+                          // Livret, émargement, devis et convention sont tous générés en HTML
+                          // autonome (contenu_html), affichable directement dans un nouvel
+                          // onglet — contrairement à support/programme qui sont des fichiers
+                          // uploadés (url) ouverts tels quels.
+                          const isInlineHtml = key === "livret" || key === "emargement" || key === "devis" || key === "convention";
+                          // Chantier 5 : la convention affiche en plus son statut de signature
+                          // DocuSign (le client la signe via l'email qu'il reçoit de DocuSign,
+                          // pas depuis cette page).
+                          const conventionStatut = key === "convention" ? conventionSignatures[session.id] : undefined;
+                          const conventionBadge = conventionStatut === "signe" ? " ✅"
+                            : conventionStatut === "en_attente" ? " 📤"
+                            : conventionStatut === "refuse" ? " ❌"
+                            : conventionStatut === "expire" ? " ⌛"
+                            : "";
                           if (value && isInlineHtml) {
                             return (
-                              <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left">
+                              <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left" title={key === "convention" && conventionStatut ? conventionStatutLabel(conventionStatut) : undefined}>
                                 <span>📎</span>
-                                <span>{label}</span>
+                                <span>{label}{conventionBadge}</span>
                                 <span className="ml-auto">↗</span>
                               </button>
                             );
