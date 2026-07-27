@@ -48,14 +48,20 @@ interface Stagiaire {
   doc_convention?: string | null;
   doc_programme?: string | null;
   doc_emargement?: string | null;
+  doc_emargement_envoye_le?: string | null;
+  doc_emargement_signe_le?: string | null;
+  token_emargement?: string | null;
   doc_attestation?: string | null;
+  doc_attestation_envoye_le?: string | null;
   doc_questionnaire_avant?: string | null;
   doc_questionnaire_apres?: string | null;
   reponses_questionnaire_avant?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   reponses_questionnaire_apres?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   doc_evaluation_chaud?: string | null;
+  doc_evaluation_chaud_envoye_le?: string | null;
   doc_evaluation_formateur?: string | null;
   doc_evaluation_froid?: string | null;
+  doc_evaluation_froid_envoye_le?: string | null;
   token_evaluation_chaud?: string | null;
   token_evaluation_formateur?: string | null;
   token_evaluation_froid?: string | null;
@@ -75,6 +81,24 @@ const docStatus = (val: string | null | undefined) => {
   if (val === "signe") return { label: "Signé ✓", color: "bg-green-100 text-green-700" };
   if (val === "erreur") return { label: "Erreur ⚠️", color: "bg-red-100 text-red-600" };
   return { label: val, color: "bg-gray-100 text-gray-500" };
+};
+
+// Chantier 5 : alerte visuelle ⚠️ quand un document a été envoyé (lien transmis
+// au stagiaire) mais reste non signé plus de 2 jours après — même seuil que la
+// relance automatique J+2 côté serveur (relance-documents-auto). Sert juste à
+// prévenir le formateur dans l'UI ; l'envoi de la relance/alerte réelle est géré
+// côté serveur, indépendamment de l'ouverture ou non de cette page.
+const joursDepuis = (dateIso: string | null | undefined): number | null => {
+  if (!dateIso) return null;
+  const diffMs = Date.now() - new Date(dateIso).getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+};
+
+const alerteRetard = (statut: string | null | undefined, envoyeLe: string | null | undefined) => {
+  if (statut !== "envoye") return null;
+  const jours = joursDepuis(envoyeLe);
+  if (jours === null || jours < 2) return null;
+  return jours;
 };
 
 // Consentement RGPD opt-in (email/SMS) : reflète le choix explicite du stagiaire
@@ -165,6 +189,14 @@ const StagiairesList = ({
     };
     fetch();
   }, [sessionId]);
+
+  // Chantier 5 : blocage — l'attestation de fin de formation ne peut être générée
+  // que si l'émargement ET l'évaluation à chaud sont tous les deux signés par le
+  // stagiaire (exigence Qualiopi : traçabilité de l'assiduité + recueil de la
+  // satisfaction avant la délivrance de l'attestation). Vérifié aussi côté
+  // serveur dans generer-attestation (ce contrôle client n'est qu'un affichage).
+  const peutGenererAttestation = (s: Stagiaire) =>
+    s.doc_emargement === "signe" && s.doc_evaluation_chaud === "signe";
 
   // Génération de l'attestation réservée au formateur (comme livret/émargement/devis
   // dans ClientDetail.tsx) — le client ne fait que la consulter une fois disponible.
@@ -574,7 +606,18 @@ const StagiairesList = ({
                     </button>
                   </td>
                   <td className="py-2 pr-2">
-                    <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
+                      {!s.doc_emargement && s.doc_questionnaire_avant !== "signe" && (
+                        <span title="Bloqué : le questionnaire avant formation doit être complété par le stagiaire avant de pouvoir lui envoyer l'émargement." className="text-gray-400 text-xs">🔒</span>
+                      )}
+                      {(() => {
+                        const retard = alerteRetard(s.doc_emargement, s.doc_emargement_envoye_le);
+                        return retard !== null ? (
+                          <span title={`Envoyé il y a ${retard} jour${retard > 1 ? "s" : ""}, toujours non signé`} className="text-orange-500 text-xs">⚠️{retard}j</span>
+                        ) : null;
+                      })()}
+                    </div>
                   </td>
                   <td className="py-2 pr-2">
                     <button
@@ -592,22 +635,33 @@ const StagiairesList = ({
                         <Badge className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 hover:opacity-75">Générée ✓</Badge>
                       </button>
                     ) : envoye_par === "formateur" ? (
-                      <Button
-                        size="sm" variant="outline" className="h-6 text-xs px-2"
-                        disabled={generatingAttestation === s.id}
-                        onClick={() => genererAttestation(s)}
-                      >
-                        {generatingAttestation === s.id ? "..." : "🎓 Générer"}
-                      </Button>
+                      peutGenererAttestation(s) ? (
+                        <Button
+                          size="sm" variant="outline" className="h-6 text-xs px-2"
+                          disabled={generatingAttestation === s.id}
+                          onClick={() => genererAttestation(s)}
+                        >
+                          {generatingAttestation === s.id ? "..." : "🎓 Générer"}
+                        </Button>
+                      ) : (
+                        <Badge
+                          className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-400"
+                          title="Bloqué : l'émargement et l'évaluation à chaud doivent être signés avant de générer l'attestation."
+                        >
+                          🔒 En attente
+                        </Badge>
+                      )
                     ) : (
                       <Badge className={`text-xs px-1.5 py-0.5 ${attestation.color}`}>{attestation.label}</Badge>
                     )}
                   </td>
                   <td className="py-2 pr-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                       {EVAL_TYPES_LIST.map(et => {
                         const status = s[`doc_evaluation_${et.key}` as keyof Stagiaire] as string | null | undefined;
                         const st = docStatus(status);
+                        const envoyeLe = et.key !== "formateur" ? (s[`doc_evaluation_${et.key}_envoye_le` as keyof Stagiaire] as string | null | undefined) : null;
+                        const retard = alerteRetard(status, envoyeLe);
                         if (status === "signe") {
                           return (
                             <button key={et.key} onClick={() => voirReponsesEvaluation(s, et.key)} title={`${et.label} — voir les réponses`}>
@@ -616,9 +670,14 @@ const StagiairesList = ({
                           );
                         }
                         return (
-                          <button key={et.key} onClick={() => genererLienEvaluation(s, et.key)} title={`${et.label} — ${status ? "copier à nouveau le lien" : "générer et copier le lien"}`}>
-                            <Badge className={`text-xs px-1 py-0.5 ${status ? st.color : "bg-gray-100 text-gray-400"} cursor-pointer hover:opacity-75`}>{et.icon}{status ? "" : "+"}</Badge>
-                          </button>
+                          <span key={et.key} className="flex items-center gap-0.5">
+                            <button onClick={() => genererLienEvaluation(s, et.key)} title={`${et.label} — ${status ? "copier à nouveau le lien" : "générer et copier le lien"}`}>
+                              <Badge className={`text-xs px-1 py-0.5 ${status ? st.color : "bg-gray-100 text-gray-400"} cursor-pointer hover:opacity-75`}>{et.icon}{status ? "" : "+"}</Badge>
+                            </button>
+                            {retard !== null && (
+                              <span title={`${et.label} envoyée il y a ${retard} jour${retard > 1 ? "s" : ""}, toujours non complétée`} className="text-orange-500 text-xs">⚠️{retard}j</span>
+                            )}
+                          </span>
                         );
                       })}
                     </div>
@@ -633,9 +692,23 @@ const StagiairesList = ({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {motifs.map(m => (
-                              <DropdownMenuItem key={m.value} onClick={() => handleRelance(s, m.value)} className="text-xs cursor-pointer">{m.label}</DropdownMenuItem>
-                            ))}
+                            {motifs.map(m => {
+                              // Chantier 5 : le questionnaire avant formation doit être
+                              // complété avant de pouvoir solliciter la signature de
+                              // l'émargement (bloqué aussi côté serveur, cf. envoyer-relance).
+                              const bloque = m.value === "emargement" && s.doc_questionnaire_avant !== "signe";
+                              return (
+                                <DropdownMenuItem
+                                  key={m.value}
+                                  disabled={bloque}
+                                  onClick={() => !bloque && handleRelance(s, m.value)}
+                                  className="text-xs cursor-pointer"
+                                  title={bloque ? "Questionnaire avant formation non complété" : undefined}
+                                >
+                                  {bloque ? "🔒 " : ""}{m.label}
+                                </DropdownMenuItem>
+                              );
+                            })}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
@@ -685,6 +758,7 @@ const StagiairesList = ({
           attente" en permanence quel que soit l'état réel. */}
       <div className="mt-3 flex gap-4 text-xs text-gray-500 flex-wrap">
         <span>📝 Q. avant complété : {stagiaires.filter(s => s.doc_questionnaire_avant === "signe").length}/{stagiaires.length}</span>
+        <span>✍️ Émargement signé : {stagiaires.filter(s => s.doc_emargement === "signe").length}/{stagiaires.length}</span>
         <span>📝 Q. après complété : {stagiaires.filter(s => s.doc_questionnaire_apres === "signe").length}/{stagiaires.length}</span>
         <span>🎓 Attestations générées : {stagiaires.filter(s => attestations[s.id]).length}/{stagiaires.length}</span>
         <span>🔥 Éval. à chaud complétée : {stagiaires.filter(s => s.doc_evaluation_chaud === "signe").length}/{stagiaires.length}</span>
