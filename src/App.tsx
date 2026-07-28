@@ -36,6 +36,7 @@ import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
 import ChatbotWidget from "./components/ChatbotWidget";
+import OnboardingChecklist from "./components/OnboardingChecklist";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <ChatbotWidget />
+      <OnboardingChecklist />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
