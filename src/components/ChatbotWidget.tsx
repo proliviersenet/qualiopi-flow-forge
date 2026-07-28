@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
+import qualiosAvatar from "@/assets/qualios.png";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -98,10 +99,13 @@ const ChatbotWidget = () => {
     <div className="fixed bottom-5 right-5 z-50">
       {open && (
         <div className="mb-3 w-[340px] sm:w-[380px] h-[520px] max-h-[70vh] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3" style={{ background: "#25245e" }}>
-            <div>
-              <p className="text-white font-semibold text-sm">Assistant QalioFlex</p>
-              <p className="text-white/60 text-xs">Réponse en quelques secondes</p>
+          <div className="flex items-center gap-3 px-4 py-3" style={{ background: "#25245e" }}>
+            <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
+              <img src={qualiosAvatar} alt="Qualios" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-semibold text-sm">Qualios</p>
+              <p className="text-white/60 text-xs">Assistant QalioFlex · réponse en quelques secondes</p>
             </div>
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white">
               <X size={18} />
@@ -111,7 +115,7 @@ const ChatbotWidget = () => {
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
             {messages.length === 0 && !loading && (
               <div className="text-sm text-gray-500 px-2 py-4">
-                👋 Salut ! Je suis l'assistant QalioFlex. Pose-moi une question sur l'appli, ou dis-moi ce que
+                👋 Salut ! Je suis Qualios, l'assistant QalioFlex. Pose-moi une question sur l'appli, ou dis-moi ce que
                 tu cherches à faire — je t'aide à démarrer.
               </div>
             )}
@@ -131,7 +135,7 @@ const ChatbotWidget = () => {
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-gray-100 rounded-lg px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
-                    <Loader2 size={14} className="animate-spin" /> L'assistant réfléchit...
+                    <Loader2 size={14} className="animate-spin" /> Qualios réfléchit...
                   </div>
                 </div>
               )}
@@ -156,11 +160,10 @@ const ChatbotWidget = () => {
 
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-white hover:scale-105 transition-transform"
-        style={{ background: "#f2901e" }}
-        aria-label="Ouvrir l'assistant QalioFlex"
+        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center bg-white hover:scale-105 transition-transform overflow-hidden"
+        aria-label="Ouvrir Qualios, l'assistant QalioFlex"
       >
-        {open ? <X size={22} /> : <MessageCircle size={22} />}
+        {open ? <X size={22} style={{ color: "#25245e" }} /> : <img src={qualiosAvatar} alt="Qualios" className="w-full h-full object-contain p-1" />}
       </button>
     </div>
   );
