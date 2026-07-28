@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, Check, Circle, Info } from "lucide-react";
@@ -20,7 +21,10 @@ interface ChecklistItem {
 // 1ère formation créée...) — ce n'est pas juste un diaporama figé. Une fois vue
 // une 1ère fois, elle reste accessible via la petite bulle "?" en bas à gauche.
 const OnboardingChecklist = () => {
-  const [role, setRole] = useState<"formateur" | "client" | null>(null);
+  const { user } = useAuth();
+  const role: "formateur" | "client" | null = user
+    ? (user.user_metadata?.role === "client" ? "client" : "formateur")
+    : null;
   const [items, setItems] = useState<ChecklistItem[] | null>(null);
   const [open, setOpen] = useState(false);
   const { seen, markSeen } = useSeenHint(role ? "onboarding_tour" : null);
@@ -92,25 +96,21 @@ const OnboardingChecklist = () => {
     ];
   }, []);
 
+  // La session vient du contexte d'authentification partagé (AuthContext) — une
+  // seule vérification pour toute l'appli — plutôt que d'un appel indépendant ici.
   useEffect(() => {
     let cancelled = false;
+    if (!user) { setItems(null); return; }
 
+    const isClient = user.user_metadata?.role === "client";
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { if (!cancelled) { setRole(null); setItems(null); } return; }
-
-      const u = session.user;
-      const isClient = u.user_metadata?.role === "client";
-      if (!cancelled) setRole(isClient ? "client" : "formateur");
-
-      const data = isClient ? await loadClientItems(u.email || "") : await loadFormateurItems(u.id);
+      const data = isClient ? await loadClientItems(user.email || "") : await loadFormateurItems(user.id);
       if (!cancelled) setItems(data);
     };
 
     load();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => load());
-    return () => { cancelled = true; listener.subscription.unsubscribe(); };
-  }, [loadFormateurItems, loadClientItems]);
+    return () => { cancelled = true; };
+  }, [user, loadFormateurItems, loadClientItems]);
 
   // Ouverture automatique, une seule fois, dès que le contenu est prêt.
   useEffect(() => {
