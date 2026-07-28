@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { validatePassword } from "@/lib/passwordUtils";
 
 // Étapes du tunnel de suppression
@@ -25,6 +26,7 @@ type DeleteStep = "idle" | "confirm" | "recovery" | "payment" | "done";
 const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,17 +44,18 @@ const Settings = () => {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
+
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
-      const u = session.user;
+      const u = authSession.user;
       setUser({ name: u.user_metadata?.nom_complet || u.email || "", email: u.email || "", profileImage: "" });
       setNotifRelances(u.user_metadata?.notif_relances !== false);
       setNotifSignatures(u.user_metadata?.notif_signatures !== false);
       setLoading(false);
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPasswordForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
