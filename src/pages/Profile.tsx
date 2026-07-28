@@ -8,10 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Profile = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [organismeId, setOrganismeId] = useState<string | null>(null);
@@ -45,11 +47,11 @@ const Profile = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
 
-      const u = session.user;
+    const init = async () => {
+      const u = authSession.user;
       setUser({
         name: u.user_metadata?.nom_complet || u.email || "",
         email: u.email || "",
@@ -96,7 +98,7 @@ const Profile = () => {
       setLoading(false);
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setProfileForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
