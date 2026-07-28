@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import DashboardCard from '@/components/DashboardCard';
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -15,6 +16,7 @@ const COLORS = ['#4CAF50', '#8BC34A', '#FFC107', '#FF9800', '#F44336'];
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
@@ -36,12 +38,11 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const init = async () => {
-      // Vérifier la session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/login'); return; }
+    if (authLoading) return;
+    if (!authSession) { navigate('/login'); return; }
 
-      const u = session.user;
+    const init = async () => {
+      const u = authSession.user;
       setUser({ name: u.user_metadata?.nom_complet || u.email || '', email: u.email || '', profileImage: '' });
 
       // Récupérer le profil + organisme
@@ -152,7 +153,7 @@ const Dashboard = () => {
       setLoading(false);
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const statsData = [
     {
