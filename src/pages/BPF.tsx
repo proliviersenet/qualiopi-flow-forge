@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -490,6 +491,15 @@ const BPF = () => {
   return (
     <div className="flex flex-col min-h-screen">
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+      <HelpPopup
+        hintKey="bpf_intro"
+        title="Le module BPF, c'est quoi ?"
+        items={[
+          "Le Bilan Pédagogique et Financier (BPF) est ta déclaration annuelle obligatoire auprès de la DREETS.",
+          "QalioFlex pré-remplit automatiquement les cadres du Cerfa à partir de tes formations et sessions de l'année.",
+          "Vérifie chaque cadre, complète ce qui manque, puis télétransmets-le sur monactiviteformation.emploi.gouv.fr.",
+        ]}
+      />
 
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4 max-w-4xl">
