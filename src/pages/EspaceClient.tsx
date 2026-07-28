@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import StagiairesList from "@/components/StagiairesList";
 import * as XLSX from "xlsx";
 
@@ -52,6 +53,7 @@ const conventionStatutLabel = (statut: string | undefined) => {
 const EspaceClient = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
@@ -72,12 +74,12 @@ const EspaceClient = () => {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
+
     const init = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { navigate("/login"); return; }
-
-        const u = session.user;
+        const u = authSession.user;
         const role = u.user_metadata?.role;
 
         if (role && role !== "client") { navigate("/dashboard"); return; }
@@ -173,7 +175,7 @@ const EspaceClient = () => {
       }
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
