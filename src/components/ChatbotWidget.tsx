@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { X, Send, Loader2 } from "lucide-react";
 import qualiosAvatar from "@/assets/qualios.png";
@@ -40,7 +41,8 @@ const loadSavedPos = (): Pos => {
 };
 
 const ChatbotWidget = () => {
-  const [visible, setVisible] = useState(false);
+  const { session } = useAuth();
+  const visible = !!session;
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -59,19 +61,12 @@ const ChatbotWidget = () => {
   }, [open]);
 
   // Le widget ne s'affiche que pour les utilisateurs connectés (formateur ou client) —
-  // pas sur les pages publiques/marketing, pour rester léger et pertinent.
+  // pas sur les pages publiques/marketing, pour rester léger et pertinent. La session
+  // vient du contexte d'authentification partagé (une seule vérification pour toute
+  // l'appli, voir AuthContext) plutôt que d'un appel indépendant à chaque composant.
   useEffect(() => {
-    const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setVisible(!!session);
-    };
-    check();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setVisible(!!session);
-      if (!session) { setOpen(false); setMessages([]); setConversationId(null); }
-    });
-    return () => listener.subscription.unsubscribe();
-  }, []);
+    if (!session) { setOpen(false); setMessages([]); setConversationId(null); }
+  }, [session]);
 
   // Repositionne le widget si la fenêtre est redimensionnée, pour qu'il reste
   // toujours visible et cliquable à l'écran.
