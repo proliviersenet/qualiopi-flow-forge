@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Formation {
   id: string;
@@ -24,6 +25,7 @@ interface Formation {
 const Formations = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
@@ -35,12 +37,13 @@ const Formations = () => {
   const [organismeId, setOrganismeId] = useState<string | null>(null);
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
-      setUser({ name: session.user.user_metadata?.nom_complet || session.user.email || "", email: session.user.email || "", profileImage: "" });
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
 
-      const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", session.user.id).single();
+    const init = async () => {
+      setUser({ name: authSession.user.user_metadata?.nom_complet || authSession.user.email || "", email: authSession.user.email || "", profileImage: "" });
+
+      const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", authSession.user.id).single();
       if (profile?.organisme_id) {
         setOrganismeId(profile.organisme_id);
         const { data } = await supabase.from("formations").select("*").eq("organisme_id", profile.organisme_id).order("created_at", { ascending: false });
@@ -49,7 +52,7 @@ const Formations = () => {
       setLoading(false);
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const filtrees = formations.filter(f =>
     f.titre?.toLowerCase().includes(search.toLowerCase()) ||
