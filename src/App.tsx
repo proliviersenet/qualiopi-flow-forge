@@ -37,11 +37,13 @@ import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
 import ChatbotWidget from "./components/ChatbotWidget";
 import OnboardingChecklist from "./components/OnboardingChecklist";
+import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <AuthProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -85,6 +87,7 @@ const App = () => (
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
