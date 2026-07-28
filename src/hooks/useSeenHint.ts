@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Mémorise, par utilisateur connecté, si une popup d'aide contextuelle donnée
 // (tour de bienvenue, aide BPF, aide préparation d'audit...) a déjà été vue —
@@ -10,22 +11,19 @@ import { supabase } from "@/integrations/supabase/client";
 // flash d'affichage avant qu'on sache si le hint a déjà été vu), puis `true`
 // ou `false`.
 //
-// On utilise getSession() (lecture locale, quasi instantanée) plutôt que
-// getUser() (qui force un aller-retour réseau de revalidation à chaque appel)
-// pour éviter de multiplier les appels d'authentification concurrents au
-// chargement d'une page — plusieurs composants (widget de chat, checklist
-// d'onboarding, popups d'aide) vérifient chacun la session de leur côté.
+// L'utilisateur vient du contexte d'authentification partagé (AuthContext) —
+// une seule vérification de session pour toute l'appli — plutôt que d'un
+// nouvel appel réseau indépendant à chaque composant qui utilise ce hook.
 export const useSeenHint = (hintKey: string | null) => {
+  const { user } = useAuth();
   const [seen, setSeen] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!hintKey) return;
+    if (!user) { setSeen(true); return; } // pas connecté : ne rien afficher
     let cancelled = false;
 
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) { if (!cancelled) setSeen(true); return; } // pas connecté : ne rien afficher
       const { data } = await supabase
         .from("ui_hints_seen")
         .select("hint_key")
@@ -37,16 +35,14 @@ export const useSeenHint = (hintKey: string | null) => {
 
     load();
     return () => { cancelled = true; };
-  }, [hintKey]);
+  }, [hintKey, user]);
 
   const markSeen = useCallback(async () => {
     if (!hintKey) return;
     setSeen(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
     if (!user) return;
     await supabase.from("ui_hints_seen").upsert({ user_id: user.id, hint_key: hintKey });
-  }, [hintKey]);
+  }, [hintKey, user]);
 
   return { seen, markSeen };
 };
