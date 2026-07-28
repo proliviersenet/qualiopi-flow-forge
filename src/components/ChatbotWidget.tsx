@@ -18,6 +18,7 @@ const ChatbotWidget = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [showHelpBubble, setShowHelpBubble] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Le widget ne s'affiche que pour les utilisateurs connectés (formateur ou client) —
@@ -34,6 +35,23 @@ const ChatbotWidget = () => {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // Petite bulle "Besoin d'aide ?" qui apparaît de temps en temps à côté de
+  // l'avatar tant que le chat est fermé, pour rappeler discrètement que Qualios
+  // est disponible — sans être intrusif (courte apparition, espacée dans le temps).
+  useEffect(() => {
+    if (!visible || open) { setShowHelpBubble(false); return; }
+    let hideTimer: ReturnType<typeof setTimeout>;
+    const showTimer = setInterval(() => {
+      setShowHelpBubble(true);
+      hideTimer = setTimeout(() => setShowHelpBubble(false), 7000);
+    }, 150000); // toutes les 2,5 min environ tant que le chat reste fermé
+    const firstTimer = setTimeout(() => {
+      setShowHelpBubble(true);
+      hideTimer = setTimeout(() => setShowHelpBubble(false), 7000);
+    }, 45000); // 1ère apparition 45s après l'arrivée sur la page
+    return () => { clearInterval(showTimer); clearTimeout(firstTimer); clearTimeout(hideTimer); };
+  }, [visible, open]);
 
   // Reprise d'une conversation existante (continuité entre deux visites)
   useEffect(() => {
@@ -158,8 +176,17 @@ const ChatbotWidget = () => {
         </div>
       )}
 
+      {showHelpBubble && !open && (
+        <button
+          onClick={() => { setShowHelpBubble(false); setOpen(true); }}
+          className="absolute bottom-16 right-0 mb-2 bg-white shadow-xl border border-gray-100 rounded-2xl rounded-br-sm px-4 py-2.5 text-sm font-medium text-gray-700 whitespace-nowrap animate-in fade-in slide-in-from-bottom-2"
+        >
+          Besoin d'aide ? 👋
+        </button>
+      )}
+
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setShowHelpBubble(false); setOpen(o => !o); }}
         className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center bg-white hover:scale-105 transition-transform overflow-hidden"
         aria-label="Ouvrir Qualios, l'assistant QalioFlex"
       >
