@@ -16,11 +16,13 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const FormationEdit = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,13 +45,13 @@ const FormationEdit = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
 
+    const init = async () => {
       setUser({
-        name: session.user.user_metadata?.nom_complet || session.user.email || "",
-        email: session.user.email || "",
+        name: authSession.user.user_metadata?.nom_complet || authSession.user.email || "",
+        email: authSession.user.email || "",
         profileImage: "",
       });
 
@@ -80,7 +82,7 @@ const FormationEdit = () => {
       setLoading(false);
     };
     init();
-  }, [id, navigate, toast]);
+  }, [id, navigate, toast, authSession, authLoading]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
