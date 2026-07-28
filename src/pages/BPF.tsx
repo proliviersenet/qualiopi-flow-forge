@@ -24,6 +24,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Chantier BPF v2 (juillet 2026) — refonte complète pour coller EXACTEMENT
@@ -248,6 +249,7 @@ const num = (v: string) => (v === "" ? 0 : Number(v));
 const BPF = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { session: authSession, loading: authLoading } = useAuth();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [organismeId, setOrganismeId] = useState<string | null>(null);
@@ -279,20 +281,20 @@ const BPF = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate("/login"); return; }
+    if (authLoading) return;
+    if (!authSession) { navigate("/login"); return; }
 
+    const init = async () => {
       setUser({
-        name: session.user.user_metadata?.nom_complet || session.user.email || "",
-        email: session.user.email || "",
+        name: authSession.user.user_metadata?.nom_complet || authSession.user.email || "",
+        email: authSession.user.email || "",
         profileImage: "",
       });
 
       const { data: profile } = await supabase
         .from("profiles")
         .select("organisme_id")
-        .eq("id", session.user.id)
+        .eq("id", authSession.user.id)
         .single();
 
       if (profile?.organisme_id) {
@@ -309,7 +311,7 @@ const BPF = () => {
       setLoading(false);
     };
     init();
-  }, [navigate]);
+  }, [navigate, authSession, authLoading]);
 
   const openCreate = () => {
     setEditingId(null);
