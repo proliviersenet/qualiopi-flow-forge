@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
 
 // Cette page n'est plus une liste de "documents" génériques (l'ancienne version
@@ -236,6 +237,15 @@ const Documents = () => {
         }
       `}</style>
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+      <HelpPopup
+        hintKey="audit_intro"
+        title="Prépare ton audit Qualiopi sereinement"
+        items={[
+          "Cette page te permet de vérifier, dossier par dossier, que tous les documents obligatoires sont bien présents.",
+          "Sélectionne les sessions concernées par le contrôle pour voir en un coup d'œil ce qui est complet et ce qui manque.",
+          "Imprime le récapitulatif pour l'avoir sous la main le jour de l'audit.",
+        ]}
+      />
 
       <main className="flex-grow bg-gray-50 py-6">
         <div className="container mx-auto px-4 max-w-5xl">
