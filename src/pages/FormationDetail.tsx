@@ -331,6 +331,28 @@ const FormationDetail = () => {
     toast({ title: "✅ Questions enregistrées" });
   };
 
+  // Radar ROI (chantier progression avant/après/à froid) : pour que l'évaluation à
+  // froid (J+90) soit comparable point par point avec le questionnaire de
+  // positionnement avant/après, elle doit interroger les MÊMES compétences/objectifs
+  // plutôt que des questions génériques d'impact. Ce bouton remplace le contenu de
+  // "Évaluation à froid" par la liste de compétences + objectifs déjà enregistrée
+  // (au lieu d'appeler generer-questions-evaluation, qui produit des questions
+  // libres non garanties alignées).
+  const reutiliserCompetencesFroid = () => {
+    const liste = [...competences, ...objectifsEval].filter(Boolean);
+    if (liste.length === 0) {
+      toast({
+        title: "Aucune compétence enregistrée",
+        description: "Renseignez d'abord la liste de compétences/objectifs ci-dessus, puis réessayez.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEvalQuestions(prev => ({ ...prev, froid: liste }));
+    setEvalSaved(prev => ({ ...prev, froid: false }));
+    toast({ title: "✅ Questions reprises", description: "Les compétences/objectifs ont été copiés dans l'évaluation à froid. Pensez à enregistrer." });
+  };
+
   const modifierEvalItem = (type: string, index: number, valeur: string) => {
     setEvalQuestions(prev => ({ ...prev, [type]: (prev[type] || []).map((q, i) => i === index ? valeur : q) }));
     setEvalSaved(prev => ({ ...prev, [type]: false }));
@@ -703,11 +725,26 @@ const FormationDetail = () => {
                         </div>
                         <div className="flex gap-2 items-center shrink-0">
                           {evalSaved[et.key] && (evalQuestions[et.key]?.length || 0) > 0 && <Badge className="bg-green-100 text-green-700">✓ Enregistré</Badge>}
+                          {et.key === "froid" && (
+                            <Button
+                              size="sm" variant="outline"
+                              title="Remplace les questions par la liste de compétences/objectifs, pour un radar de progression avant/après/à froid comparable axe par axe"
+                              onClick={reutiliserCompetencesFroid}
+                            >
+                              🎯 Reprendre les compétences
+                            </Button>
+                          )}
                           <Button size="sm" variant="outline" disabled={evalGenerating[et.key]} onClick={() => genererEvaluation(et.key)}>
                             {evalGenerating[et.key] ? "Génération..." : (evalQuestions[et.key]?.length || 0) > 0 ? "Regénérer par Claude" : "Générer par Claude"}
                           </Button>
                         </div>
                       </div>
+
+                      {et.key === "froid" && (
+                        <p className="text-[11px] text-gray-400 mb-2">
+                          💡 Pour afficher un vrai ROI (progression avant → après → à froid) côté client, utilisez "Reprendre les compétences" plutôt que "Générer par Claude" : les questions seront alors les mêmes que le questionnaire de positionnement, donc comparables sur le même graphique.
+                        </p>
+                      )}
 
                       {(evalQuestions[et.key]?.length || 0) === 0 ? (
                         <p className="text-sm text-gray-400">Aucune question générée pour le moment.</p>
