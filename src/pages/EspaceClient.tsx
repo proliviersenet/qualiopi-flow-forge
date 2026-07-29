@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import StagiairesList from "@/components/StagiairesList";
+import ClientHeader from "@/components/ClientHeader";
+import Footer from "@/components/Footer";
 import * as XLSX from "xlsx";
 
 interface Session {
@@ -58,6 +60,9 @@ const EspaceClient = () => {
 
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
+  // Profil client (fiche entreprise) : sert à afficher le bandeau "Complétez votre
+  // profil" tant que la fiche n'a pas été renseignée depuis /espace-client/profil.
+  const [onboardingComplete, setOnboardingComplete] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [documentsByFormation, setDocumentsByFormation] = useState<Record<string, Record<string, string>>>({});
   const [documentsBySession, setDocumentsBySession] = useState<Record<string, Record<string, string>>>({});
@@ -88,7 +93,7 @@ const EspaceClient = () => {
 
         const { data: clientData } = await supabase
           .from("clients")
-          .select("id")
+          .select("id, raison_sociale, onboarding_complete")
           .eq("contact_email", u.email)
           .single();
 
@@ -98,6 +103,7 @@ const EspaceClient = () => {
         }
 
         setClientId(clientData.id);
+        setOnboardingComplete(!!(clientData as { onboarding_complete?: boolean }).onboarding_complete);
 
         const { data: sessionsData } = await supabase
           .from("sessions")
@@ -316,38 +322,10 @@ const EspaceClient = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/espace-client")}>
-          <span className="text-xl font-bold" style={{ color: "#25245e" }}>QalioFlex</span>
-          <span className="text-xs text-gray-400">Espace client</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">{user?.email}</span>
-          <Button variant="outline" size="sm" onClick={handleLogout}>Se déconnecter</Button>
-        </div>
-      </header>
+  const sessionsEnCours = sessions.filter((s) => s.statut === "planifiee" || s.statut === "en_cours");
+  const sessionsHistorique = sessions.filter((s) => s.statut === "terminee" || s.statut === "annulee");
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold" style={{ color: "#25245e" }}>
-            Bonjour{user?.name && user.name !== user.email ? ` ${user.name}` : ""} 👋
-          </h1>
-          <p className="text-gray-500 mt-1">Retrouvez vos sessions de formation et gérez vos participants.</p>
-        </div>
-
-        {sessions.length === 0 ? (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <p className="text-4xl mb-4">📚</p>
-              <p className="text-gray-500">Aucune session de formation pour le moment.</p>
-              <p className="text-sm text-gray-400 mt-2">Votre formateur va prochainement affecter vos formations.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {sessions.map((session) => {
+  const renderSessionCard = (session: Session) => {
               const statut = statutLabel(session.statut);
               const isUpcoming = session.date_debut && new Date(session.date_debut) > new Date();
               const hasStag = uploadedSessions.has(session.id);
@@ -533,11 +511,65 @@ const EspaceClient = () => {
                     </div>
                   </CardContent>
                 </Card>
-              );
-            })}
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <ClientHeader active="formations" email={user?.email} onLogout={handleLogout} />
+
+      <main className="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold" style={{ color: "#25245e" }}>
+            Bonjour{user?.name && user.name !== user.email ? ` ${user.name}` : ""} 👋
+          </h1>
+          <p className="text-gray-500 mt-1">Retrouvez vos sessions de formation et gérez vos participants.</p>
+        </div>
+
+        {!onboardingComplete && clientId && (
+          <div className="mb-8 bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-orange-800 text-sm">📋 Complétez votre profil</p>
+              <p className="text-xs text-orange-600 mt-0.5">Renseignez les informations de votre entreprise pour finaliser votre espace.</p>
+            </div>
+            <Link to="/espace-client/profil">
+              <Button size="sm" style={{ background: "#f2901e", color: "#fff" }} className="font-bold">
+                Compléter mon profil
+              </Button>
+            </Link>
           </div>
         )}
+
+        {sessions.length === 0 ? (
+          <Card>
+            <CardContent className="py-16 text-center">
+              <p className="text-4xl mb-4">📚</p>
+              <p className="text-gray-500">Aucune session de formation pour le moment.</p>
+              <p className="text-sm text-gray-400 mt-2">Votre formateur va prochainement affecter vos formations.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-3">📌 Formation{sessionsEnCours.length > 1 ? "s" : ""} en cours / à venir</h2>
+              {sessionsEnCours.length === 0 ? (
+                <p className="text-sm text-gray-400">Aucune formation en cours ou à venir pour le moment.</p>
+              ) : (
+                <div className="space-y-4">{sessionsEnCours.map(renderSessionCard)}</div>
+              )}
+            </div>
+
+            {sessionsHistorique.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 mb-3">🗂 Historique</h2>
+                <div className="space-y-4">{sessionsHistorique.map(renderSessionCard)}</div>
+              </div>
+            )}
+          </>
+        )}
       </main>
+
+      <Footer />
     </div>
   );
 };
