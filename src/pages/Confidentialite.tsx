@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 
 const Confidentialite = () => (
   <div className="flex flex-col min-h-screen">
-    <Header user={{ name: "", email: "", profileImage: "" }} onLogout={() => {}} />
+    <Header />
     <main className="flex-grow bg-gray-50 py-12">
       <div className="container mx-auto px-4 max-w-3xl">
         <Link to="/" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
