@@ -1,9 +1,9 @@
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { User } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface HeaderProps {
   user?: {
@@ -24,13 +26,40 @@ interface HeaderProps {
   logoHref?: string;
 }
 
-const Header = ({ user, onLogout, logoHref }: HeaderProps) => {
-  const defaultHref = user?.email ? "/dashboard" : "/login";
+const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
+  // La détection "connecté ou non" ne doit JAMAIS reposer uniquement sur le prop
+  // `user` passé par la page : certaines pages publiques (mentions légales, aide,
+  // contact...) passent un objet vide, et la page d'accueil n'en passe aucun. Si on
+  // se basait dessus, le logo et tous les liens "Retour" qui ramènent vers ces pages
+  // publiques donneraient l'impression à un utilisateur connecté qu'il a été
+  // déconnecté. On se base donc sur la session réelle, partagée par toute
+  // l'application via AuthContext.
+  const { session, user: authUser } = useAuth();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
+  const isAuthenticated = !!session;
+  const role = authUser?.user_metadata?.role;
+
+  const user = isAuthenticated
+    ? {
+        name: userProp?.name || authUser?.user_metadata?.nom_complet || authUser?.email || "",
+        email: userProp?.email || authUser?.email || "",
+        profileImage: userProp?.profileImage || "",
+      }
+    : undefined;
+
+  const defaultHref = isAuthenticated ? (role === "client" ? "/espace-client" : "/dashboard") : "/login";
+
   const toggleMobileMenu = () => {
     setShowMobileMenu(!showMobileMenu);
+  };
+
+  const handleLogoutClick = async () => {
+    if (onLogout) { onLogout(); return; }
+    await supabase.auth.signOut();
+    navigate("/login");
   };
 
   return (
@@ -93,7 +122,7 @@ const Header = ({ user, onLogout, logoHref }: HeaderProps) => {
                     <Link to="/settings">Paramètres</Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onLogout}>
+                  <DropdownMenuItem onClick={handleLogoutClick}>
                     Se déconnecter
                   </DropdownMenuItem>
                 </DropdownMenuContent>
