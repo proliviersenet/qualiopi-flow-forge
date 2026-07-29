@@ -591,7 +591,17 @@ const StagiairesList = ({
         const dataProgression = [...(dataCompetences || []), ...(dataObjectifs || [])];
         const noteFormateur = calculerNoteFormateur();
 
-        const chartHeight = Math.max(90, dataProgression.length * 32);
+        // Hauteur réelle nécessaire pour que chaque ligne reste lisible (une ligne par
+        // compétence/objectif). Certaines formations plus anciennes (créées avant le
+        // plafond de 15 questions imposé côté génération) ont beaucoup plus de lignes —
+        // sans plafond, le bloc explosait en hauteur et devenait illisible. Au-delà de
+        // MAX_VISIBLE, on garde la hauteur des lignes (donc les barres restent lisibles)
+        // mais on plafonne la zone visible et on scrolle dedans, plutôt que de tasser
+        // les lignes pour les faire toutes rentrer.
+        const ROW_HEIGHT = 24;
+        const MAX_VISIBLE = 240;
+        const chartHeight = Math.max(90, dataProgression.length * ROW_HEIGHT);
+        const scrollable = chartHeight > MAX_VISIBLE;
 
         // Légende compacte, une seule fois au-dessus du graphique — mêmes couleurs que
         // les <Bar> ci-dessous.
@@ -625,23 +635,30 @@ const StagiairesList = ({
               {syntheseApres && legendeItem("Après", "#f2901e")}
               {hasFroid && legendeItem("Froid (J+90)", "#16a34a")}
             </div>
-            <ResponsiveContainer width="100%" height={chartHeight}>
-              <BarChart data={dataProgression} layout="vertical" barGap={2} barCategoryGap="25%" margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 9, fill: "#9ca3af" }} height={16} />
-                <YAxis type="category" dataKey="subject" width={140} tick={<CompetenceTick />} />
-                <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
-                {syntheseAvant && (
-                  <Bar name="Avant" dataKey="Avant" fill="#25245e" radius={[0, 3, 3, 0]} barSize={8} />
-                )}
-                {syntheseApres && (
-                  <Bar name="Après" dataKey="Après" fill="#f2901e" radius={[0, 3, 3, 0]} barSize={8} />
-                )}
-                {hasFroid && (
-                  <Bar name="Froid (J+90)" dataKey="Froid (J+90)" fill="#16a34a" radius={[0, 3, 3, 0]} barSize={8} />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={scrollable ? { maxHeight: MAX_VISIBLE, overflowY: "auto" } : undefined}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={dataProgression} layout="vertical" barGap={2} barCategoryGap="25%" margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                  <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 9, fill: "#9ca3af" }} height={16} />
+                  <YAxis type="category" dataKey="subject" width={140} tick={<CompetenceTick />} />
+                  <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
+                  {syntheseAvant && (
+                    <Bar name="Avant" dataKey="Avant" fill="#25245e" radius={[0, 3, 3, 0]} barSize={8} />
+                  )}
+                  {syntheseApres && (
+                    <Bar name="Après" dataKey="Après" fill="#f2901e" radius={[0, 3, 3, 0]} barSize={8} />
+                  )}
+                  {hasFroid && (
+                    <Bar name="Froid (J+90)" dataKey="Froid (J+90)" fill="#16a34a" radius={[0, 3, 3, 0]} barSize={8} />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {scrollable && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                ↕ Faites défiler pour voir les {dataProgression.length} lignes.
+              </p>
+            )}
           </div>
         );
       })()}
