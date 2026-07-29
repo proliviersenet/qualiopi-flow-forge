@@ -27,6 +27,9 @@ import Qualiopi from "./pages/Qualiopi";
 import MentionsLegales from "./pages/MentionsLegales";
 import InvitationClient from "./pages/InvitationClient";
 import EspaceClient from "./pages/EspaceClient";
+import EspaceClientProfil from "./pages/EspaceClientProfil";
+import EspaceClientParametres from "./pages/EspaceClientParametres";
+import Factures from "./pages/Factures";
 import ClientDetail from "./pages/ClientDetail";
 import Positionnement from "./pages/Positionnement";
 import EvaluationPublic from "./pages/EvaluationPublic";
@@ -75,6 +78,9 @@ const App = () => (
           <Route path="/mentions-legales" element={<MentionsLegales />} />
           <Route path="/invitation/:token" element={<InvitationClient />} />
           <Route path="/espace-client" element={<EspaceClient />} />
+          <Route path="/espace-client/profil" element={<EspaceClientProfil />} />
+          <Route path="/espace-client/parametres" element={<EspaceClientParametres />} />
+          <Route path="/factures" element={<Factures />} />
           <Route path="/positionnement/:token" element={<Positionnement />} />
           <Route path="/evaluation/:token" element={<EvaluationPublic />} />
           <Route path="/emargement/:token" element={<EmargementPublic />} />
