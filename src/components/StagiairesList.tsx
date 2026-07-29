@@ -9,7 +9,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  ResponsiveContainer, Legend, Tooltip,
+  ResponsiveContainer, Tooltip,
 } from "recharts";
 import { EVAL_TYPES } from "@/lib/documentTypes";
 
@@ -23,7 +23,7 @@ const CompetenceTick = (props: { x?: number; y?: number; payload?: { value: stri
   const lines: string[] = [];
   let current = "";
   words.forEach((w) => {
-    if ((current + " " + w).trim().length > 22) {
+    if ((current + " " + w).trim().length > 16) {
       if (current) lines.push(current.trim());
       current = w;
     } else {
@@ -587,32 +587,43 @@ const StagiairesList = ({
         if (!dataCompetences && !dataObjectifs) return null;
         const noteFormateur = calculerNoteFormateur();
 
-        // Hauteur proportionnelle au nombre d'axes pour que les barres groupées restent
-        // lisibles (pas tassées) sans avoir à scroller dans un graphique trop court.
-        const chartHeight = (data: Record<string, string | number>[]) => Math.max(160, data.length * 60);
+        // Hauteur compacte, proportionnelle au nombre d'axes mais resserrée pour tenir
+        // "en un coup d'œil" : barres fines, pas de légende répétée par graphique (une
+        // seule légende partagée au-dessus), et les deux graphiques côte à côte sur
+        // desktop (empilés seulement sur mobile faute de place) plutôt que l'un sous
+        // l'autre — ce qui divisait par deux la hauteur totale du bloc.
+        const chartHeight = (data: Record<string, string | number>[]) => Math.max(90, data.length * 32);
 
         const chart = (titre: string, data: Record<string, string | number>[]) => (
           <div>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide text-center mb-1">{titre}</p>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide text-center mb-0.5">{titre}</p>
             <ResponsiveContainer width="100%" height={chartHeight(data)}>
-              <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              <BarChart data={data} layout="vertical" barGap={2} barCategoryGap="25%" margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
-                <YAxis type="category" dataKey="subject" width={150} tick={<CompetenceTick />} />
+                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 9, fill: "#9ca3af" }} height={16} />
+                <YAxis type="category" dataKey="subject" width={110} tick={<CompetenceTick />} />
                 <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
                 {syntheseAvant && (
-                  <Bar name="Avant" dataKey="Avant" fill="#25245e" radius={[0, 4, 4, 0]} barSize={12} />
+                  <Bar name="Avant" dataKey="Avant" fill="#25245e" radius={[0, 3, 3, 0]} barSize={8} />
                 )}
                 {syntheseApres && (
-                  <Bar name="Après" dataKey="Après" fill="#f2901e" radius={[0, 4, 4, 0]} barSize={12} />
+                  <Bar name="Après" dataKey="Après" fill="#f2901e" radius={[0, 3, 3, 0]} barSize={8} />
                 )}
                 {hasFroid && (
-                  <Bar name="Froid (J+90)" dataKey="Froid (J+90)" fill="#16a34a" radius={[0, 4, 4, 0]} barSize={12} />
+                  <Bar name="Froid (J+90)" dataKey="Froid (J+90)" fill="#16a34a" radius={[0, 3, 3, 0]} barSize={8} />
                 )}
               </BarChart>
             </ResponsiveContainer>
           </div>
+        );
+
+        // Légende compacte, commune aux deux graphiques (évite de la répéter deux fois
+        // et de gaspiller de la hauteur) — mêmes couleurs que les <Bar> ci-dessus.
+        const legendeItem = (label: string, couleur: string) => (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-sm" style={{ background: couleur }} />
+            {label}
+          </span>
         );
 
         return (
@@ -628,12 +639,17 @@ const StagiairesList = ({
               </p>
             </div>
             {noteFormateur && (
-              <p className="text-xs text-gray-600 mb-2">
+              <p className="text-xs text-gray-600 mb-1">
                 🧑‍🏫 Note formateur (moyenne des évaluations stagiaires) : <strong>{noteFormateur.note.toFixed(1)}/5</strong>
                 <span className="text-gray-400"> · {noteFormateur.nbRepondants} réponse{noteFormateur.nbRepondants > 1 ? "s" : ""}</span>
               </p>
             )}
-            <div className="grid grid-cols-1 gap-4">
+            <div className="flex items-center gap-3 text-[11px] text-gray-600 mb-1">
+              {syntheseAvant && legendeItem("Avant", "#25245e")}
+              {syntheseApres && legendeItem("Après", "#f2901e")}
+              {hasFroid && legendeItem("Froid (J+90)", "#16a34a")}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {dataCompetences && chart("Compétences", dataCompetences)}
               {dataObjectifs && chart("Objectifs", dataObjectifs)}
             </div>
