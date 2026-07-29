@@ -67,18 +67,42 @@ const Dashboard = () => {
           .eq('organisme_id', profile.organisme_id)
           .eq('statut', 'publie');
 
-        // Stats sessions
-        const { data: sessions } = await supabase
-          .from('sessions')
-          .select('id, statut, date_debut, date_fin, formations(titre)')
-          .eq('formations.organisme_id', profile.organisme_id)
-          .order('date_debut', { ascending: false })
-          .limit(5);
+        // IDs des formations de l'organisme (toutes, pas seulement publiées) — sert de
+        // périmètre pour scoper sessions/documents/signatures à CET organisme. Sans ce
+        // filtre, les requêtes ci-dessous remontaient les données de TOUS les organismes
+        // de la plateforme (bug multi-tenant : deux formateurs différents auraient vu les
+        // mêmes chiffres) — invisible avec un seul organisme, critique dès qu'il y en a
+        // plusieurs sur la plateforme.
+        const { data: formationsOrg } = await supabase
+          .from('formations')
+          .select('id')
+          .eq('organisme_id', profile.organisme_id);
+        const formationIds = (formationsOrg || []).map((f: { id: string }) => f.id);
 
-        const { count: nbSessions } = await supabase
-          .from('sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('statut', 'terminee');
+        // Stats sessions — scopées aux formations de l'organisme.
+        const { data: sessions } = formationIds.length > 0
+          ? await supabase
+              .from('sessions')
+              .select('id, statut, date_debut, date_fin, formations(titre)')
+              .in('formation_id', formationIds)
+              .order('date_debut', { ascending: false })
+              .limit(5)
+          : { data: [] as Record<string, unknown>[] };
+
+        const { count: nbSessions } = formationIds.length > 0
+          ? await supabase
+              .from('sessions')
+              .select('*', { count: 'exact', head: true })
+              .eq('statut', 'terminee')
+              .in('formation_id', formationIds)
+          : { count: 0 };
+
+        // Toutes les sessions de l'organisme (tous statuts) — périmètre pour les
+        // documents/signatures ci-dessous.
+        const { data: allSessionsOrg } = formationIds.length > 0
+          ? await supabase.from('sessions').select('id').in('formation_id', formationIds)
+          : { data: [] as { id: string }[] };
+        const sessionIds = (allSessionsOrg || []).map((s: { id: string }) => s.id);
 
         // Stats bénéficiaires — la table "beneficiaires" est un reliquat d'un ancien
         // schéma, plus alimentée par le reste de l'app (confirmé : aucun autre écran
@@ -98,11 +122,30 @@ const Dashboard = () => {
               .in('client_id', clientIds)
           : { count: 0, data: [] as { doc_questionnaire_avant?: string | null; reponses_evaluation_chaud?: { notes?: Record<string, number> } | null }[] };
 
-        // Documents en attente de signature
-        const { count: nbDocs } = await supabase
-          .from('signatures')
-          .select('*', { count: 'exact', head: true })
-          .eq('statut', 'en_attente');
+        // Documents en attente de signature — scopés à l'organisme via les formations/
+        // sessions ci-dessus (les signatures pointent sur documents_formation, rattaché
+        // soit à une formation soit à une session). Avant ce correctif, cette requête
+        // n'était filtrée par aucun organisme et remontait les signatures de toute la
+        // plateforme, pas seulement celles de l'organisme connecté.
+        let nbDocs = 0;
+        if (formationIds.length > 0 || sessionIds.length > 0) {
+          const orParts: string[] = [];
+          if (formationIds.length > 0) orParts.push(`formation_id.in.(${formationIds.join(',')})`);
+          if (sessionIds.length > 0) orParts.push(`session_id.in.(${sessionIds.join(',')})`);
+          const { data: docsOrg } = await supabase
+            .from('documents_formation')
+            .select('id')
+            .or(orParts.join(','));
+          const docIds = (docsOrg || []).map((d: { id: string }) => d.id);
+          if (docIds.length > 0) {
+            const { count } = await supabase
+              .from('signatures')
+              .select('*', { count: 'exact', head: true })
+              .eq('statut', 'en_attente')
+              .in('document_id', docIds);
+            nbDocs = count || 0;
+          }
+        }
 
         // Relances en attente — remis à 0 : "envoyer-relance" envoie l'email/SMS mais
         // n'écrit dans aucune table de suivi aujourd'hui (confirmé à la lecture de
