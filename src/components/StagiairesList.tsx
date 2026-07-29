@@ -11,6 +11,7 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Legend, Tooltip,
 } from "recharts";
+import { EVAL_TYPES } from "@/lib/documentTypes";
 
 // Tick personnalisé pour l'axe des angles du radar : découpe les libellés longs
 // (compétences/objectifs rédigés en phrases) sur plusieurs lignes plutôt que de
@@ -45,8 +46,6 @@ interface Stagiaire {
   prenom: string;
   email_pro: string;
   telephone: string;
-  doc_convention?: string | null;
-  doc_programme?: string | null;
   doc_emargement?: string | null;
   doc_emargement_envoye_le?: string | null;
   doc_emargement_signe_le?: string | null;
@@ -115,21 +114,22 @@ const consentInfo = (val: boolean | null | undefined, date: string | null | unde
 // formateur (bouton "copier le lien"), car aucun mécanisme n'écrit encore ces
 // tokens automatiquement lors d'une relance (limitation existante, cf.
 // token_questionnaire_avant/apres — non traitée ici, chantier 3).
-const EVAL_TYPES_LIST: { key: "chaud" | "formateur" | "froid"; icon: string; label: string }[] = [
-  { key: "chaud", icon: "🔥", label: "Évaluation à chaud" },
-  { key: "formateur", icon: "🧑‍🏫", label: "Évaluation du formateur" },
-  { key: "froid", icon: "📈", label: "Évaluation à froid (J+90)" },
-];
+// EVAL_TYPES_LIST vient de src/lib/documentTypes.ts (source unique, partagée avec
+// FormationDetail.tsx) — évite les 2 copies divergentes qui existaient avant
+// (audit vocabulaire, juillet 2026).
+const EVAL_TYPES_LIST = EVAL_TYPES;
 
+// motifs : dérive ses 3 entrées "évaluation" de EVAL_TYPES_LIST plutôt que de les
+// recopier en dur, pour rester synchronisé si un libellé change un jour.
 const motifs = [
   { value: "livret", label: "Livret d'accueil" },
   { value: "questionnaire_avant", label: "Questionnaire positionnement avant" },
   { value: "emargement", label: "Feuille d'émargement" },
   { value: "questionnaire_apres", label: "Questionnaire positionnement après" },
-  { value: "evaluation_chaud", label: "Évaluation à chaud" },
-  { value: "evaluation_formateur", label: "Évaluation du formateur" },
+  { value: `evaluation_${EVAL_TYPES[0].key}`, label: EVAL_TYPES[0].label },
+  { value: `evaluation_${EVAL_TYPES[1].key}`, label: EVAL_TYPES[1].label },
   { value: "attestation", label: "Attestation de fin de formation" },
-  { value: "evaluation_froid", label: "Évaluation à froid (J+90)" },
+  { value: `evaluation_${EVAL_TYPES[2].key}`, label: EVAL_TYPES[2].label },
 ];
 
 const StagiairesList = ({
