@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 const faqs = [
   { q: "Comment créer ma première formation ?", r: "Depuis le menu 'Formations', cliquez sur '+ Nouvelle formation'. Remplissez les 3 étapes (informations générales, détails, confirmation) puis choisissez 'Enregistrer en brouillon' ou 'Publier'." },
@@ -16,13 +17,16 @@ const faqs = [
 
 const Aide = () => {
   const [open, setOpen] = useState<number | null>(null);
+  const { session, user: authUser } = useAuth();
+  const role = authUser?.user_metadata?.role;
+  const retourHref = session ? (role === "client" ? "/espace-client" : "/dashboard") : "/";
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-grow bg-gray-50 py-12">
         <div className="container mx-auto px-4 max-w-3xl">
-          <Link to="/" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
+          <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
           <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Centre d'aide</h1>
           <p className="text-gray-500 mb-8">Retrouvez les réponses aux questions les plus fréquentes sur QalioFlex.</p>
 
