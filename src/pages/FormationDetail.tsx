@@ -10,6 +10,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { EVAL_TYPES } from "@/lib/documentTypes";
 
 interface Formation {
   id: string;
@@ -41,11 +42,8 @@ const badgeLabel = (statut: string) => {
 // Les 3 questionnaires d'évaluation stagiaire (chantier 2) — même principe que
 // "Compétences à évaluer" (génération Claude + édition + sauvegarde), mais
 // factorisé sur 3 types plutôt que dupliqué 3 fois.
-const EVAL_TYPES: { key: "chaud" | "formateur" | "froid"; label: string; icon: string; desc: string }[] = [
-  { key: "chaud", label: "Évaluation à chaud", icon: "🔥", desc: "Envoyée au stagiaire juste après la fin de la formation." },
-  { key: "formateur", label: "Évaluation du formateur", icon: "🧑‍🏫", desc: "Porte spécifiquement sur l'animateur de la formation." },
-  { key: "froid", label: "Évaluation à froid (J+90)", icon: "📈", desc: "Envoyée environ 90 jours après la formation, mesure l'impact sur le poste." },
-];
+// Vient de src/lib/documentTypes.ts (source unique, partagée avec StagiairesList.tsx)
+// — évite les 2 copies divergentes qui existaient avant (audit vocabulaire, juillet 2026).
 
 const FormationDetail = () => {
   const { id } = useParams<{ id: string }>();
