@@ -1,13 +1,18 @@
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
-const Conditions = () => (
+const Conditions = () => {
+  const { session, user: authUser } = useAuth();
+  const role = authUser?.user_metadata?.role;
+  const retourHref = session ? (role === "client" ? "/espace-client" : "/dashboard") : "/";
+  return (
   <div className="flex flex-col min-h-screen">
     <Header />
     <main className="flex-grow bg-gray-50 py-12">
       <div className="container mx-auto px-4 max-w-3xl">
-        <Link to="/" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
+        <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
         <h1 className="text-3xl font-bold mt-4 mb-8" style={{ color: "#25245e" }}>Conditions d'utilisation</h1>
         <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
           <p className="text-sm text-gray-400">Dernière mise à jour : 4 juillet 2026</p>
@@ -61,6 +66,7 @@ const Conditions = () => (
     </main>
     <Footer />
   </div>
-);
+  );
+};
 
 export default Conditions;
