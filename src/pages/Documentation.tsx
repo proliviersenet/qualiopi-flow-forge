@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 const sections = [
   {
@@ -46,12 +47,16 @@ const sections = [
   },
 ];
 
-const Documentation = () => (
+const Documentation = () => {
+  const { session, user: authUser } = useAuth();
+  const role = authUser?.user_metadata?.role;
+  const retourHref = session ? (role === "client" ? "/espace-client" : "/dashboard") : "/";
+  return (
   <div className="flex flex-col min-h-screen">
     <Header />
     <main className="flex-grow bg-gray-50 py-12">
       <div className="container mx-auto px-4 max-w-3xl">
-        <Link to="/" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
+        <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
         <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Documentation</h1>
         <p className="text-gray-500 mb-8">Tout ce que vous devez savoir pour utiliser QalioFlex efficacement.</p>
 
@@ -85,6 +90,7 @@ const Documentation = () => (
     </main>
     <Footer />
   </div>
-);
+  );
+};
 
 export default Documentation;
