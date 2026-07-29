@@ -7,9 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Contact = () => {
   const { toast } = useToast();
+  const { session, user: authUser } = useAuth();
+  const role = authUser?.user_metadata?.role;
+  const retourHref = session ? (role === "client" ? "/espace-client" : "/dashboard") : "/";
   const [form, setForm] = useState({ nom: "", email: "", sujet: "", message: "" });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -68,7 +72,7 @@ const Contact = () => {
       <Header />
       <main className="flex-grow bg-gray-50 py-12">
         <div className="container mx-auto px-4 max-w-2xl">
-          <Link to="/" className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
+          <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
           <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Nous contacter</h1>
           <p className="text-gray-500 mb-8">Une question, un bug, une suggestion ? On répond sous 24h ouvrées.</p>
 
