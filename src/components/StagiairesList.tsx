@@ -8,21 +8,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   ResponsiveContainer, Legend, Tooltip,
 } from "recharts";
 import { EVAL_TYPES } from "@/lib/documentTypes";
 
-// Tick personnalisé pour l'axe des angles du radar : découpe les libellés longs
-// (compétences/objectifs rédigés en phrases) sur plusieurs lignes plutôt que de
-// les laisser déborder ou d'être tronqués illisibles.
-const RadarTick = (props: { x?: number; y?: number; payload?: { value: string }; textAnchor?: string }) => {
-  const { x = 0, y = 0, payload, textAnchor = "middle" } = props;
+// Tick personnalisé pour l'axe des catégories (compétences/objectifs) du graphique à
+// barres avant/après/à froid : découpe les libellés longs (rédigés en phrases) sur
+// plusieurs lignes, centrées verticalement sur la barre, plutôt que de les laisser
+// déborder ou d'être tronqués illisibles.
+const CompetenceTick = (props: { x?: number; y?: number; payload?: { value: string } }) => {
+  const { x = 0, y = 0, payload } = props;
   const words = String(payload?.value || "").split(" ");
   const lines: string[] = [];
   let current = "";
   words.forEach((w) => {
-    if ((current + " " + w).trim().length > 16) {
+    if ((current + " " + w).trim().length > 22) {
       if (current) lines.push(current.trim());
       current = w;
     } else {
@@ -30,11 +31,13 @@ const RadarTick = (props: { x?: number; y?: number; payload?: { value: string };
     }
   });
   if (current) lines.push(current);
-  const shown = lines.slice(0, 3);
+  const shown = lines.slice(0, 2);
+  const lineHeight = 11;
+  const startDy = -((shown.length - 1) * lineHeight) / 2;
   return (
-    <text x={x} y={y} textAnchor={textAnchor} fontSize={9} fill="#4b5563">
+    <text x={x} y={y} textAnchor="end" fontSize={10} fill="#4b5563">
       {shown.map((line, i) => (
-        <tspan key={i} x={x} dy={i === 0 ? 0 : 11}>{line}</tspan>
+        <tspan key={i} x={x} dy={i === 0 ? startDy : lineHeight}>{line}</tspan>
       ))}
     </text>
   );
@@ -356,15 +359,16 @@ const StagiairesList = ({
     };
   };
 
-  // Construit les données du radar pour une clé donnée (compétences ou objectifs) en
-  // fusionnant avant/après sur les mêmes axes, pour visualiser la progression en un coup d'œil.
+  // Construit les données du graphique à barres pour une clé donnée (compétences ou
+  // objectifs) en fusionnant avant/après sur les mêmes axes, pour visualiser la
+  // progression en un coup d'œil.
   // syntheseFroidMap (optionnel) : moyennes de l'évaluation à froid par libellé — la
   // colonne reponses_evaluation_froid n'est pas séparée en competences/objectifs (ce
   // sont des questions libres, cf. évaluation_questions), donc on la fusionne par
   // simple correspondance de libellé avec les axes avant/après. Un libellé "à froid"
   // qui ne correspond à aucun axe avant/après (formation dont l'évaluation à froid
   // n'a pas été alignée sur les compétences) est silencieusement ignoré ici.
-  const construireRadarData = (
+  const construireDonneesProgression = (
     syntheseAvant: ReturnType<typeof calculerSynthese>,
     syntheseApres: ReturnType<typeof calculerSynthese>,
     cle: "competences" | "objectifs",
@@ -568,40 +572,45 @@ const StagiairesList = ({
         );
       })()}
 
-      {/* Synthèse questionnaire de positionnement — format radar, avant/après superposés
-          sur les mêmes axes pour visualiser la progression du groupe. Affichée côté
-          formateur (ClientDetail.tsx) ET côté client (EspaceClient.tsx). */}
+      {/* Synthèse questionnaire de positionnement — barres avant/après (+ à froid J+90 si
+          disponible) groupées par compétence, plus lisible pour comparer une progression
+          qu'un radar dès qu'il y a plus de 3-4 axes. Affichée côté formateur
+          (ClientDetail.tsx) ET côté client (EspaceClient.tsx). */}
       {showSynthese && (() => {
         const syntheseAvant = calculerSynthese("avant");
         const syntheseApres = calculerSynthese("apres");
         if (!syntheseAvant && !syntheseApres) return null;
         const syntheseFroid = calculerSyntheseFroid();
         const hasFroid = syntheseFroid.map.size > 0;
-        const radarCompetences = construireRadarData(syntheseAvant, syntheseApres, "competences", syntheseFroid.map);
-        const radarObjectifs = construireRadarData(syntheseAvant, syntheseApres, "objectifs", syntheseFroid.map);
-        if (!radarCompetences && !radarObjectifs) return null;
+        const dataCompetences = construireDonneesProgression(syntheseAvant, syntheseApres, "competences", syntheseFroid.map);
+        const dataObjectifs = construireDonneesProgression(syntheseAvant, syntheseApres, "objectifs", syntheseFroid.map);
+        if (!dataCompetences && !dataObjectifs) return null;
         const noteFormateur = calculerNoteFormateur();
 
-        const radar = (titre: string, data: Record<string, string | number>[]) => (
+        // Hauteur proportionnelle au nombre d'axes pour que les barres groupées restent
+        // lisibles (pas tassées) sans avoir à scroller dans un graphique trop court.
+        const chartHeight = (data: Record<string, string | number>[]) => Math.max(160, data.length * 60);
+
+        const chart = (titre: string, data: Record<string, string | number>[]) => (
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide text-center mb-1">{titre}</p>
-            <ResponsiveContainer width="100%" height={340}>
-              <RadarChart data={data} outerRadius="70%">
-                <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis dataKey="subject" tick={<RadarTick />} />
-                <PolarRadiusAxis domain={[0, 4]} tickCount={5} tick={{ fontSize: 9, fill: "#9ca3af" }} />
-                {syntheseAvant && (
-                  <Radar name="Avant" dataKey="Avant" stroke="#25245e" fill="#25245e" fillOpacity={0.25} />
-                )}
-                {syntheseApres && (
-                  <Radar name="Après" dataKey="Après" stroke="#f2901e" fill="#f2901e" fillOpacity={0.3} />
-                )}
-                {hasFroid && (
-                  <Radar name="Froid (J+90)" dataKey="Froid (J+90)" stroke="#16a34a" fill="#16a34a" fillOpacity={0.2} />
-                )}
+            <ResponsiveContainer width="100%" height={chartHeight(data)}>
+              <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+                <YAxis type="category" dataKey="subject" width={150} tick={<CompetenceTick />} />
                 <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-              </RadarChart>
+                {syntheseAvant && (
+                  <Bar name="Avant" dataKey="Avant" fill="#25245e" radius={[0, 4, 4, 0]} barSize={12} />
+                )}
+                {syntheseApres && (
+                  <Bar name="Après" dataKey="Après" fill="#f2901e" radius={[0, 4, 4, 0]} barSize={12} />
+                )}
+                {hasFroid && (
+                  <Bar name="Froid (J+90)" dataKey="Froid (J+90)" fill="#16a34a" radius={[0, 4, 4, 0]} barSize={12} />
+                )}
+              </BarChart>
             </ResponsiveContainer>
           </div>
         );
@@ -624,9 +633,9 @@ const StagiairesList = ({
                 <span className="text-gray-400"> · {noteFormateur.nbRepondants} réponse{noteFormateur.nbRepondants > 1 ? "s" : ""}</span>
               </p>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {radarCompetences && radar("Compétences", radarCompetences)}
-              {radarObjectifs && radar("Objectifs", radarObjectifs)}
+            <div className="grid grid-cols-1 gap-4">
+              {dataCompetences && chart("Compétences", dataCompetences)}
+              {dataObjectifs && chart("Objectifs", dataObjectifs)}
             </div>
           </div>
         );
