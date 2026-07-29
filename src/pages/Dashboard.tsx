@@ -80,11 +80,23 @@ const Dashboard = () => {
           .select('*', { count: 'exact', head: true })
           .eq('statut', 'terminee');
 
-        // Stats bénéficiaires
-        const { count: nbBenef } = await supabase
-          .from('beneficiaires')
-          .select('*', { count: 'exact', head: true })
+        // Stats bénéficiaires — la table "beneficiaires" est un reliquat d'un ancien
+        // schéma, plus alimentée par le reste de l'app (confirmé : aucun autre écran
+        // n'y écrit). Les vrais stagiaires vivent dans "stagiaires", rattachés à
+        // l'organisme via clients.organisme_id (pas de colonne organisme_id directe
+        // sur stagiaires, donc on passe par la liste des clients de l'organisme).
+        const { data: clientsOrg } = await supabase
+          .from('clients')
+          .select('id')
           .eq('organisme_id', profile.organisme_id);
+        const clientIds = (clientsOrg || []).map((c: { id: string }) => c.id);
+
+        const { count: nbBenef, data: stagiairesOrg } = clientIds.length > 0
+          ? await supabase
+              .from('stagiaires')
+              .select('doc_questionnaire_avant, reponses_evaluation_chaud', { count: 'exact' })
+              .in('client_id', clientIds)
+          : { count: 0, data: [] as { doc_questionnaire_avant?: string | null; reponses_evaluation_chaud?: { notes?: Record<string, number> } | null }[] };
 
         // Documents en attente de signature
         const { count: nbDocs } = await supabase
@@ -92,18 +104,17 @@ const Dashboard = () => {
           .select('*', { count: 'exact', head: true })
           .eq('statut', 'en_attente');
 
-        // Relances en attente
-        const { count: nbRelances } = await supabase
-          .from('relances')
-          .select('*', { count: 'exact', head: true })
-          .eq('statut', 'planifiee')
-          .lte('echeance', new Date().toISOString());
+        // Relances en attente — remis à 0 : "envoyer-relance" envoie l'email/SMS mais
+        // n'écrit dans aucune table de suivi aujourd'hui (confirmé à la lecture de
+        // l'edge function), la table "relances" ne reflète donc rien de réel.
+        const nbRelances = 0;
 
-        // Questionnaires non complétés
-        const { count: nbQuestionnaires } = await supabase
-          .from('enquetes_preformation')
-          .select('*', { count: 'exact', head: true })
-          .eq('complete', false);
+        // Questionnaires non complétés — calculé directement sur les vrais stagiaires
+        // de l'organisme (doc_questionnaire_avant non signé), au lieu de la table
+        // "enquetes_preformation" qui n'est alimentée par aucun autre écran.
+        const nbQuestionnaires = (stagiairesOrg || []).filter(
+          (s) => s.doc_questionnaire_avant !== 'signe'
+        ).length;
 
         // Indicateurs Qualiopi OK
         const { count: nbIndicateurs } = await supabase
@@ -112,13 +123,17 @@ const Dashboard = () => {
           .eq('organisme_id', profile.organisme_id)
           .eq('statut', 'ok');
 
-        // Taux de satisfaction (moyenne des notes)
-        const { data: evals } = await supabase
-          .from('evaluations_formations')
-          .select('note_globale');
-        const notes = (evals || []).map(e => e.note_globale).filter(Boolean);
+        // Taux de satisfaction — calculé à partir des vraies réponses de l'évaluation
+        // à chaud (reponses_evaluation_chaud, échelle 0 à 4 par question), au lieu de
+        // la table "evaluations_formations"/note_globale qui n'est alimentée par aucun
+        // autre écran de l'application.
+        const notes: number[] = [];
+        (stagiairesOrg || []).forEach((s) => {
+          const reponses = s.reponses_evaluation_chaud?.notes || {};
+          Object.values(reponses).forEach((v) => { if (typeof v === 'number') notes.push(v); });
+        });
         const tauxSat = notes.length > 0
-          ? Math.round((notes.reduce((a: number, b: number) => a + b, 0) / notes.length / 5) * 100)
+          ? Math.round((notes.reduce((a: number, b: number) => a + b, 0) / notes.length / 4) * 100)
           : 0;
 
         setStats({
@@ -134,11 +149,13 @@ const Dashboard = () => {
 
         setSessionsRecentes((sessions || []) as Record<string, unknown>[]);
 
-        // Données satisfaction pour graphique
+        // Données satisfaction pour graphique — notes sur une échelle 0 à 4 (même
+        // échelle que reponses_evaluation_chaud), donc bucket direct par valeur
+        // arrondie plutôt que la formule "/5" qui supposait une échelle sur 5.
         if (notes.length > 0) {
           const tranches = [0, 0, 0, 0, 0];
           notes.forEach((n: number) => {
-            const idx = Math.min(4, Math.floor((n / 5) * 5));
+            const idx = Math.max(0, Math.min(4, Math.round(n)));
             tranches[4 - idx]++;
           });
           setSatisfactionData([
