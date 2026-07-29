@@ -358,10 +358,17 @@ const StagiairesList = ({
 
   // Construit les données du radar pour une clé donnée (compétences ou objectifs) en
   // fusionnant avant/après sur les mêmes axes, pour visualiser la progression en un coup d'œil.
+  // syntheseFroidMap (optionnel) : moyennes de l'évaluation à froid par libellé — la
+  // colonne reponses_evaluation_froid n'est pas séparée en competences/objectifs (ce
+  // sont des questions libres, cf. évaluation_questions), donc on la fusionne par
+  // simple correspondance de libellé avec les axes avant/après. Un libellé "à froid"
+  // qui ne correspond à aucun axe avant/après (formation dont l'évaluation à froid
+  // n'a pas été alignée sur les compétences) est silencieusement ignoré ici.
   const construireRadarData = (
     syntheseAvant: ReturnType<typeof calculerSynthese>,
     syntheseApres: ReturnType<typeof calculerSynthese>,
-    cle: "competences" | "objectifs"
+    cle: "competences" | "objectifs",
+    syntheseFroidMap?: Map<string, number>
   ) => {
     const avantMap = new Map((syntheseAvant?.[cle] || []).map(i => [i.libelle, i.moyenne]));
     const apresMap = new Map((syntheseApres?.[cle] || []).map(i => [i.libelle, i.moyenne]));
@@ -371,8 +378,52 @@ const StagiairesList = ({
       const point: Record<string, string | number> = { subject: libelle };
       if (syntheseAvant) point.Avant = avantMap.get(libelle) ?? 0;
       if (syntheseApres) point.Après = apresMap.get(libelle) ?? 0;
+      if (syntheseFroidMap && syntheseFroidMap.has(libelle)) {
+        point["Froid (J+90)"] = syntheseFroidMap.get(libelle) as number;
+      }
       return point;
     });
+  };
+
+  // Agrège les réponses "évaluation à froid" (J+90) de tous les stagiaires par
+  // libellé de question — flat comme reponses_evaluation_froid.notes (pas de
+  // séparation competences/objectifs à la source). Sert à alimenter le radar ROI
+  // (avant/après/à froid) quand l'évaluation à froid a été alignée sur les mêmes
+  // compétences/objectifs (cf. bouton "Reprendre les compétences", FormationDetail.tsx).
+  const calculerSyntheseFroid = () => {
+    const repondants = stagiaires.filter(s => s.reponses_evaluation_froid?.notes);
+    if (repondants.length === 0) return { map: new Map<string, number>(), nbRepondants: 0 };
+    const totaux: Record<string, { somme: number; count: number }> = {};
+    repondants.forEach(s => {
+      const notes = s.reponses_evaluation_froid?.notes || {};
+      Object.entries(notes).forEach(([libelle, note]) => {
+        if (!totaux[libelle]) totaux[libelle] = { somme: 0, count: 0 };
+        totaux[libelle].somme += Number(note);
+        totaux[libelle].count += 1;
+      });
+    });
+    const map = new Map(Object.entries(totaux).map(([libelle, { somme, count }]) => [libelle, somme / count]));
+    return { map, nbRepondants: repondants.length };
+  };
+
+  // Note formateur affichée au client : moyenne de TOUTES les réponses de
+  // l'évaluation formateur (toutes questions, tous stagiaires confondus), convertie
+  // de l'échelle native 0-4 vers une note sur 5 — plus lisible pour un client que
+  // "2.8/4". Il n'existe pas encore de "note globale" unique côté formulaire (chaque
+  // question est notée séparément), donc c'est une moyenne, pas une valeur saisie
+  // isolément par les stagiaires.
+  const calculerNoteFormateur = () => {
+    const repondants = stagiaires.filter(s => s.reponses_evaluation_formateur?.notes);
+    if (repondants.length === 0) return null;
+    const valeurs: number[] = [];
+    repondants.forEach(s => {
+      Object.values(s.reponses_evaluation_formateur?.notes || {}).forEach(v => {
+        if (typeof v === "number") valeurs.push(v);
+      });
+    });
+    if (valeurs.length === 0) return null;
+    const moyenneSur4 = valeurs.reduce((a, b) => a + b, 0) / valeurs.length;
+    return { note: (moyenneSur4 / 4) * 5, nbRepondants: repondants.length };
   };
 
   const normalizePhone = (phone: string) => {
@@ -524,9 +575,12 @@ const StagiairesList = ({
         const syntheseAvant = calculerSynthese("avant");
         const syntheseApres = calculerSynthese("apres");
         if (!syntheseAvant && !syntheseApres) return null;
-        const radarCompetences = construireRadarData(syntheseAvant, syntheseApres, "competences");
-        const radarObjectifs = construireRadarData(syntheseAvant, syntheseApres, "objectifs");
+        const syntheseFroid = calculerSyntheseFroid();
+        const hasFroid = syntheseFroid.map.size > 0;
+        const radarCompetences = construireRadarData(syntheseAvant, syntheseApres, "competences", syntheseFroid.map);
+        const radarObjectifs = construireRadarData(syntheseAvant, syntheseApres, "objectifs", syntheseFroid.map);
         if (!radarCompetences && !radarObjectifs) return null;
+        const noteFormateur = calculerNoteFormateur();
 
         const radar = (titre: string, data: Record<string, string | number>[]) => (
           <div>
@@ -542,8 +596,11 @@ const StagiairesList = ({
                 {syntheseApres && (
                   <Radar name="Après" dataKey="Après" stroke="#f2901e" fill="#f2901e" fillOpacity={0.3} />
                 )}
+                {hasFroid && (
+                  <Radar name="Froid (J+90)" dataKey="Froid (J+90)" stroke="#16a34a" fill="#16a34a" fillOpacity={0.2} />
+                )}
                 <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}/4`} />
-                {syntheseAvant && syntheseApres && <Legend wrapperStyle={{ fontSize: 11 }} />}
+                <Legend wrapperStyle={{ fontSize: 11 }} />
               </RadarChart>
             </ResponsiveContainer>
           </div>
@@ -551,14 +608,22 @@ const StagiairesList = ({
 
         return (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-semibold text-gray-700">📊 Synthèse questionnaire de positionnement</p>
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+              <p className="text-xs font-semibold text-gray-700">📊 ROI formation — progression des compétences</p>
               <p className="text-[11px] text-gray-400">
                 {syntheseAvant ? `Avant : ${syntheseAvant.nbRepondants} réponse${syntheseAvant.nbRepondants > 1 ? "s" : ""}` : ""}
                 {syntheseAvant && syntheseApres ? " · " : ""}
                 {syntheseApres ? `Après : ${syntheseApres.nbRepondants} réponse${syntheseApres.nbRepondants > 1 ? "s" : ""}` : ""}
+                {(syntheseAvant || syntheseApres) && hasFroid ? " · " : ""}
+                {hasFroid ? `À froid : ${syntheseFroid.nbRepondants} réponse${syntheseFroid.nbRepondants > 1 ? "s" : ""}` : ""}
               </p>
             </div>
+            {noteFormateur && (
+              <p className="text-xs text-gray-600 mb-2">
+                🧑‍🏫 Note formateur (moyenne des évaluations stagiaires) : <strong>{noteFormateur.note.toFixed(1)}/5</strong>
+                <span className="text-gray-400"> · {noteFormateur.nbRepondants} réponse{noteFormateur.nbRepondants > 1 ? "s" : ""}</span>
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {radarCompetences && radar("Compétences", radarCompetences)}
               {radarObjectifs && radar("Objectifs", radarObjectifs)}
