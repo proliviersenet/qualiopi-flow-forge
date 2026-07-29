@@ -121,6 +121,11 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                   <DropdownMenuItem asChild>
                     <Link to="/settings">Paramètres</Link>
                   </DropdownMenuItem>
+                  {role !== "client" && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/factures">Factures</Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogoutClick}>
                     Se déconnecter
