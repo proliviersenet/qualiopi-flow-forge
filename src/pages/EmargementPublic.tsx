@@ -152,7 +152,7 @@ const EmargementPublic = () => {
                 onChange={(e) => setCertifie(e.target.checked)}
                 className="mt-1"
               />
-              <span>Je certifie avoir suivi l'intégralité de cette formation aux dates et lieu indiqués ci-dessus.</span>
+              <span>Je certifie ma présence à cette session de formation, aux dates et lieu indiqués ci-dessus. Cette signature atteste ma présence — elle ne remplace pas l'attestation de fin de formation, délivrée séparément à l'issue du parcours.</span>
             </label>
             <div>
               <label className="text-sm text-gray-500 mb-1 block">Nom et prénom (valeur de signature)</label>
