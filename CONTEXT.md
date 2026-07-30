@@ -403,11 +403,12 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 - `ClientDetail.tsx` (formateur) et `EspaceClient.tsx` (client) : UI génération + envoi signature + statut, conversion HTML→PDF côté client via html2pdf.js (CDN)
 - Fix RLS proactif sur la table `signatures` (policy encore basée sur l'ancienne table `documents` — corrigée pour `documents_formation`)
 
-**DocuSign production — EN PAUSE, bloqué sur le forfait :**
-- Le compte de production DocuSign d'Olivier est en forfait **eSignature Personal** (108€/an, 1 utilisateur, 5 enveloppes/mois) → **pas d'accès API**, donc impossible de terminer le Go-Live (clé d'intégration sandbox `dbc125da-...`, app "QualiFlow-ExSenCo")
-- Olivier a choisi de passer au forfait **Standard** (23€/mois, 276€/an facturé annuellement — inclut priori API/intégrations) mais ne branchera les secrets de prod qu'au moment du test final complet
-- ⚠️ Discrepancy notée à vérifier avant de configurer les secrets prod : le secret Supabase `DOCUSIGN_API_ACCOUNT_ID` actuel (`a5d1bca6-d904-41b5-ba57-13e33b0ca01f`) correspond en fait à l'account ID du compte de **production**, pas à un compte développeur — à re-vérifier une fois le nouveau forfait actif
-- **Prochaine étape** : une fois le forfait Standard actif, reprendre le Go-Live sur `apps-d.docusign.com/admin/apps-and-keys` (app QualiFlow-ExSenCo → Actions → Sélectionnez le compte Go-Live), accepter les CGU, sélectionner le compte de prod, remplir le questionnaire business, attendre validation DocuSign (asynchrone), puis générer une nouvelle paire de clés RSA pour la prod et faire le JWT consent grant
+**DocuSign production — Go-Live soumis, en attente de validation DocuSign (30 juillet 2026) :**
+• Forfait **Standard** confirmé actif sur le compte production (672336548) → accès API débloqué, le blocage précédent est levé
+• Formulaire de mise en production (Go-Live) rempli et signé par Olivier depuis `apps-d.docusign.com/admin/apps-and-keys` (app "QualiFlow-ExSenCo", clé `dbc125da-0b6b-46d8-aa3e-ff348aafe9da`) : CGU acceptées, compte de production "672336548" sélectionné, questionnaire business rempli (usage externe — stagiaires/clients signataires ; description QalioFlex ; lien `https://qualioflex.fr`), Account ID production `a5d1bca6-d904-41b5-ba57-13e33b0ca01f` renseigné, formulaire signé via DocuSign PowerForm
+• Statut DocuSign au 30/07 : **"En attente d'approbation"** — délai annoncé par DocuSign jusqu'à 48h de révision
+• **Prochaine étape une fois l'approbation reçue** : générer une nouvelle paire de clés RSA spécifique à la prod, faire le JWT consent grant pour cette nouvelle clé, puis mettre à jour les secrets Supabase (`DOCUSIGN_API_ACCOUNT_ID` → `a5d1bca6-d904-41b5-ba57-13e33b0ca01f`, `DOCUSIGN_USER_ID` → `e484eee4-d3ee-4557-8c9d-a9f504b9e9d4`, `DOCUSIGN_BASE_URL` → `https://eu.docusign.net`, `DOCUSIGN_AUTH_URL` → `https://account.docusign.com` à confirmer, `DOCUSIGN_PRIVATE_KEY` → nouvelle clé RSA prod une fois générée), puis tester un vrai envoi de signature en prod
+• Repères non-secrets côté compte développeur/sandbox (EXSENCO, id 48719560) : User ID `efa94943-6de2-49a6-9560-b7eda8eadffa`, API Account ID `f2bc363a-6ca2-4323-ada6-87ffe387ce34`, Base URI `https://demo.docusign.net`
 
 **Bug résolu — icônes documents espace client :** signalé "Edge Function returned a non-2xx status code" au clic sur une icône document côté client ; résolu par l'utilisateur lui-même en cours de session (cause exacte non confirmée côté Claude — à surveiller si ça revient).
 
