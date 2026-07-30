@@ -31,6 +31,7 @@ import EspaceClientProfil from "./pages/EspaceClientProfil";
 import EspaceClientParametres from "./pages/EspaceClientParametres";
 import Factures from "./pages/Factures";
 import NotationsFormateur from "./pages/NotationsFormateur";
+import AvisPublic from "./pages/AvisPublic";
 import ClientDetail from "./pages/ClientDetail";
 import Positionnement from "./pages/Positionnement";
 import EvaluationPublic from "./pages/EvaluationPublic";
@@ -83,6 +84,7 @@ const App = () => (
           <Route path="/espace-client/parametres" element={<EspaceClientParametres />} />
           <Route path="/factures" element={<Factures />} />
           <Route path="/notations-formateur" element={<NotationsFormateur />} />
+          <Route path="/avis/:organismeId" element={<AvisPublic />} />
           <Route path="/positionnement/:token" element={<Positionnement />} />
           <Route path="/evaluation/:token" element={<EvaluationPublic />} />
           <Route path="/emargement/:token" element={<EmargementPublic />} />

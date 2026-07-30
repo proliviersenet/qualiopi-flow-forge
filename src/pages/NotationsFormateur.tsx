@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
@@ -42,8 +44,10 @@ const NotationsFormateur = () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
+  const { toast } = useToast();
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [moyenneGlobale, setMoyenneGlobale] = useState<number | null>(null);
   const [nbRepondants, setNbRepondants] = useState(0);
   const [evolution, setEvolution] = useState<PointMensuel[]>([]);
@@ -65,6 +69,7 @@ const NotationsFormateur = () => {
 
         if (!profile?.organisme_id) { setLoading(false); return; }
         const organismeId = profile.organisme_id as string;
+        setOrganismeId(organismeId);
 
         // Toutes les notes individuelles (0-4), avec la date de fin de
         // session pour construire l'évolution mensuelle, et le commentaire
@@ -182,6 +187,32 @@ const NotationsFormateur = () => {
         <div className="container mx-auto px-4">
           <h1 className="text-2xl font-bold mb-1" style={{ color: "#25245e" }}>🧑‍🏫 Notation des formateurs</h1>
           <p className="text-sm text-gray-500 mb-6">Moyenne, évolution et verbatims des évaluations reçues (stagiaires + clients).</p>
+
+          {organismeId && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>📎 Partagez votre note</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500 mb-3">
+                  Un widget à coller sur votre site, une image pour votre fiche Google My Business ou vos réseaux sociaux,
+                  et une page à partager en lien — tout est réuni sur une page dédiée.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://qualioflex.fr/avis/${organismeId}`);
+                    toast({ title: "Copié !", description: "Le lien de votre page d'avis a été copié." });
+                  }}
+                  className="mr-2"
+                  style={{ background: "#25245e", color: "#fff" }}
+                >
+                  Copier le lien de ma page d'avis
+                </Button>
+                <a href={`/avis/${organismeId}`} target="_blank" rel="noreferrer">
+                  <Button size="sm" variant="outline">Voir ma page d'avis</Button>
+                </a>
+              </CardContent>
+            </Card>
+          )}
 
           {loading ? (
             <p className="text-gray-400">Chargement...</p>
