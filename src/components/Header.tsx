@@ -92,6 +92,9 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
               <Link to="/notations-formateur" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Notations
               </Link>
+              <Link to="/chatbot-escalades" className="text-gray-700 hover:text-exsenco-blue font-medium">
+                Escalades
+              </Link>
             </nav>
           )}
 
@@ -210,6 +213,13 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
               onClick={() => setShowMobileMenu(false)}
             >
               Notations
+            </Link>
+            <Link
+              to="/chatbot-escalades"
+              className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              Escalades
             </Link>
           </nav>
         )}
