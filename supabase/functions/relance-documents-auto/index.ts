@@ -43,6 +43,20 @@ const DOC_TYPES = [
     path: "evaluation",
     label: "le questionnaire d'évaluation à froid",
   },
+  {
+    // Module de notation des formateurs (juillet 2026) — l'envoi initial est
+    // désormais automatique (relance-eval-formateur-auto), ce bloc ne gère
+    // que les relances J+2 / alertes J+5 une fois le premier envoi fait,
+    // exactement comme pour chaud/froid.
+    key: "evaluation_formateur",
+    docField: "doc_evaluation_formateur",
+    envoyeLeField: "doc_evaluation_formateur_envoye_le",
+    relanceFlag: "doc_evaluation_formateur_relance_j2_envoyee",
+    alerteFlag: "doc_evaluation_formateur_alerte_envoyee",
+    tokenField: "token_evaluation_formateur",
+    path: "evaluation",
+    label: "l'évaluation du formateur",
+  },
 ] as const;
 
 const SEUIL_RELANCE_JOURS = 2;

@@ -9,8 +9,8 @@ interface EvaluationData {
   type: "chaud" | "formateur" | "froid";
   titre_questionnaire: string;
   deja_complete: boolean;
-  stagiaire_prenom: string;
-  stagiaire_nom: string;
+  destinataire_prenom: string;
+  destinataire_nom: string;
   formation_titre: string;
   organisme_raison_sociale: string;
   organisme_logo_url: string;
@@ -18,10 +18,14 @@ interface EvaluationData {
 }
 
 // Page PUBLIQUE — accessible sans compte via un lien à token unique (généré
-// depuis StagiairesList.tsx). Toute la logique d'autorisation passe par
-// l'Edge Function evaluation-public (le token fait office de clé), sur le
-// même principe que Positionnement.tsx. Un seul composant pour les 3 types
-// d'évaluation (chaud / formateur / froid) — le token détermine lequel.
+// depuis StagiairesList.tsx pour les stagiaires, ou automatiquement pour les
+// clients — module de notation des formateurs). Toute la logique
+// d'autorisation passe par l'Edge Function evaluation-public (le token fait
+// office de clé), sur le même principe que Positionnement.tsx. Un seul
+// composant pour les 3 types d'évaluation stagiaire (chaud / formateur /
+// froid) ET pour l'évaluation du formateur remplie par le client — le token
+// détermine lequel, et les champs destinataire_prenom/nom sont génériques
+// pour couvrir les deux cas.
 const EvaluationPublic = () => {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<EvaluationData | null>(null);
@@ -96,7 +100,7 @@ const EvaluationPublic = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="max-w-md w-full"><CardContent className="pt-6 text-center">
           <p className="text-4xl mb-3">✅</p>
-          <h1 className="text-lg font-bold mb-1" style={{ color: "#25245e" }}>Merci {data.stagiaire_prenom} !</h1>
+          <h1 className="text-lg font-bold mb-1" style={{ color: "#25245e" }}>Merci {data.destinataire_prenom} !</h1>
           <p className="text-gray-500 text-sm">Votre évaluation a bien été enregistrée.</p>
         </CardContent></Card>
       </div>
@@ -118,7 +122,7 @@ const EvaluationPublic = () => {
 
         <Card className="mb-4">
           <CardContent className="pt-5 text-sm text-gray-600">
-            <p>Bonjour <strong>{data.stagiaire_prenom} {data.stagiaire_nom}</strong>,</p>
+            <p>Bonjour <strong>{data.destinataire_prenom} {data.destinataire_nom}</strong>,</p>
             <p className="mt-2">
               Merci d'attribuer une note sur chacun des critères ci-dessous, 0 correspondant à un désaccord total, 4 à un accord total.
             </p>
