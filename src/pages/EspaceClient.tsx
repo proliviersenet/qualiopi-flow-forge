@@ -72,6 +72,11 @@ const EspaceClient = () => {
   const [loading, setLoading] = useState(true);
   const [uploadingSession, setUploadingSession] = useState<string | null>(null);
   const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
+  // Déverrouillage du support pédagogique (juillet 2026, demande Olivier) : ce
+  // document reste masqué au client tant que l'émargement n'a pas été signé par
+  // TOUS les stagiaires de la session — évite de partager le support de cours
+  // avant que la présence ne soit confirmée. { total, signes } par session_id.
+  const [emargementParSession, setEmargementParSession] = useState<Record<string, { total: number; signes: number }>>({});
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -117,12 +122,21 @@ const EspaceClient = () => {
           const sessionIds = sessionsData.map((s: Session) => s.id);
           const { data: stagData } = await supabase
             .from("stagiaires")
-            .select("session_id")
+            .select("session_id, doc_emargement")
             .in("session_id", sessionIds);
 
           if (stagData) {
-            const ids = new Set(stagData.map((s: { session_id: string }) => s.session_id));
+            const rows = stagData as { session_id: string; doc_emargement: string | null }[];
+            const ids = new Set(rows.map((s) => s.session_id));
             setUploadedSessions(ids);
+
+            const emargementTally: Record<string, { total: number; signes: number }> = {};
+            rows.forEach((s) => {
+              if (!emargementTally[s.session_id]) emargementTally[s.session_id] = { total: 0, signes: 0 };
+              emargementTally[s.session_id].total += 1;
+              if (s.doc_emargement === "signe") emargementTally[s.session_id].signes += 1;
+            });
+            setEmargementParSession(emargementTally);
           }
 
           const formationIds = [...new Set(sessionsData.map((s: Session) => s.formation_id))];
@@ -322,6 +336,13 @@ const EspaceClient = () => {
     );
   }
 
+  // Vrai seulement si la session a des stagiaires ET que TOUS ont signé leur
+  // émargement (voir emargementParSession ci-dessus).
+  const emargementComplet = (sessionId: string) => {
+    const e = emargementParSession[sessionId];
+    return !!e && e.total > 0 && e.signes === e.total;
+  };
+
   const sessionsEnCours = sessions.filter((s) => s.statut === "planifiee" || s.statut === "en_cours");
   const sessionsHistorique = sessions.filter((s) => s.statut === "terminee" || s.statut === "annulee");
 
@@ -379,7 +400,7 @@ const EspaceClient = () => {
                       <p className="text-sm font-semibold text-gray-700 mb-3">📄 Documents Qualiopi</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {[
-                          { key: "support", label: "Support pédagogique", locked: true, scope: "formation" as const },
+                          { key: "support", label: "Support pédagogique", scope: "formation" as const },
                           { key: "programme", label: "Programme", scope: "formation" as const },
                           { key: "livret", label: "Livret d'accueil", scope: "session" as const },
                           { key: "emargement", label: "Feuille d'émargement", scope: "session" as const },
@@ -388,7 +409,10 @@ const EspaceClient = () => {
                         ].map((docConfig) => {
                           const key = docConfig.key;
                           const label = docConfig.label;
-                          const locked = docConfig.locked;
+                          // Le support pédagogique reste verrouillé tant que tous les stagiaires
+                          // de la session n'ont pas signé leur émargement (voir emargementComplet
+                          // ci-dessus) — les autres documents ne sont jamais verrouillés ici.
+                          const locked = key === "support" && !emargementComplet(session.id);
                           const scope = docConfig.scope;
                           const value = locked
                             ? undefined
@@ -428,8 +452,11 @@ const EspaceClient = () => {
                               </a>
                             );
                           }
+                          const lockedTitle = key === "support"
+                            ? "Disponible dès que tous les stagiaires de la session ont signé leur émargement"
+                            : "Document réservé à l'organisme de formation, non communiqué aux stagiaires/clients";
                           return (
-                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2" title={locked ? "Document réservé à l'organisme de formation, non communiqué aux stagiaires/clients" : "Pas encore généré par votre formateur"}>
+                            <div key={key} className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded px-3 py-2" title={locked ? lockedTitle : "Pas encore généré par votre formateur"}>
                               <span>📎</span>
                               <span>{label}</span>
                               <span className="ml-auto text-gray-300">{locked ? "🔒" : "🕓 Bientôt"}</span>
