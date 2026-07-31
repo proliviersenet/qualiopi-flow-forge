@@ -30,6 +30,24 @@ serve(async (req) => {
     const titre = formation_titre ?? "votre formation";
     const lien = "https://qualioflex.fr/espace-client";
 
+    // Correctif audit du 31/07 : l'opt-in RGPD (préférences de contact email/SMS)
+    // n'était recueilli que dans le questionnaire de positionnement — trop tardif,
+    // car le motif "livret" est envoyé en même temps et constitue en pratique le
+    // tout premier contact avec le stagiaire après son import. On informe donc
+    // dès ce premier email de l'usage des données et du moment où ses préférences
+    // lui seront demandées, sans dupliquer ici la collecte elle-même (qui reste
+    // dans positionnement-public, seul endroit où un choix explicite est recueilli).
+    const estPremierContact = motif === "livret";
+    const blocRgpdHtml = estPremierContact
+      ? `<div style="background:#f7f7fb;border-radius:6px;padding:14px 18px;margin:20px 0;font-size:12px;color:#555;line-height:1.5;">
+      <strong>Vos données personnelles :</strong> elles sont utilisées uniquement dans le cadre du suivi de votre formation (envoi de documents, rappels, évaluations), conformément au RGPD. Vous pourrez indiquer vos préférences de contact (email / SMS) lors du questionnaire de positionnement qui vous sera transmis prochainement. Pour exercer vos droits d'accès, de rectification ou d'opposition, contactez
+      <a href="mailto:olivier@exsenco.fr" style="color:#25245e;">olivier@exsenco.fr</a>.
+    </div>`
+      : "";
+    const blocRgpdTxt = estPremierContact
+      ? " Vos données sont utilisées uniquement pour le suivi de votre formation, conformément au RGPD ; vos préférences de contact (email/SMS) vous seront demandées via le questionnaire de positionnement à venir."
+      : "";
+
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
@@ -47,6 +65,7 @@ serve(async (req) => {
         Accéder à mon espace →
       </a>
     </div>
+    ${blocRgpdHtml}
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
     <p style="font-size:13px;color:#777;">Besoin d'aide ?
       <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
@@ -55,7 +74,7 @@ serve(async (req) => {
   </div>
 </body></html>`;
 
-    const txt = `Bonjour ${prenom} ${nom}, ${action} pour "${titre}" est en attente. Lien : ${lien} — Aide : olivier@exsenco.fr`;
+    const txt = `Bonjour ${prenom} ${nom}, ${action} pour "${titre}" est en attente. Lien : ${lien} —${blocRgpdTxt} Aide : olivier@exsenco.fr`;
     const sms = `QalioFlex : Bonjour ${prenom}, ${action} pour "${titre}" est en attente. ${lien}`;
 
     const results: Record<string, boolean> = {};
