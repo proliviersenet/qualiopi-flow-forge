@@ -74,13 +74,13 @@ const Contact = () => {
         <div className="container mx-auto px-4 max-w-2xl">
           <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
           <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Nous contacter</h1>
-          <p className="text-gray-500 mb-8">Une question, un bug, une suggestion ? On répond sous 24h ouvrées.</p>
+          <p className="text-gray-500 mb-8">Une question, un bug, une suggestion ? On répond sous 72h ouvrées (hors week-ends et jours fériés).</p>
 
           {sent ? (
             <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
               <p className="text-3xl mb-3">✅</p>
               <h2 className="text-xl font-bold text-green-800 mb-2">Message envoyé !</h2>
-              <p className="text-green-700 text-sm mb-4">Merci {form.nom || ""}. On vous répond dans les 24h ouvrées.</p>
+              <p className="text-green-700 text-sm mb-4">Merci {form.nom || ""}. On vous répond dans les 72h ouvrées (hors week-ends et jours fériés).</p>
               <button
                 onClick={() => setSent(false)}
                 className="text-sm text-green-600 hover:underline"
@@ -144,7 +144,7 @@ const Contact = () => {
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
                   <p className="text-xs text-gray-400 uppercase font-semibold mb-1">Délai de réponse</p>
-                  <p className="text-sm font-semibold" style={{ color: "#25245e" }}>⏱ 24h ouvrées</p>
+                  <p className="text-sm font-semibold" style={{ color: "#25245e" }}>⏱ 72h ouvrées (hors WE et jours fériés)</p>
                 </div>
               </div>
             </div>
