@@ -12,7 +12,34 @@ const corsHeaders = {
 // Déclenchée une fois par jour par un cron Postgres (pg_cron + pg_net), sur le
 // même principe que relance-eval-froid-auto : le cron ne pouvant pas fournir de
 // JWT utilisateur, l'accès est protégé par un secret partagé (x-cron-secret).
-const DOC_TYPES = [
+//
+// Extension (31/07/2026, audit flow Qualiopi) : ajout de "livret" et
+// "questionnaire_avant" — les deux documents les plus importants du flow
+// (CONTEXT.md, "Flow documentaire Qualiopi complet") en étaient absents alors
+// que le questionnaire de positionnement AVANT est l'étape BLOQUANTE du parcours
+// stagiaire. Ce bloc ne gère que la relance/alerte une fois le document marqué
+// "envoyé" — l'envoi initial (mise à "envoye" de doc_questionnaire_avant /
+// doc_livret) reste à construire dans la future Edge Function
+// declencher-flow-session (roadmap), exactement comme pour evaluation_formateur
+// avant l'arrivée de relance-eval-formateur-auto.
+interface DocType {
+  key: string;
+  docField: string;
+  envoyeLeField: string;
+  relanceFlag: string;
+  alerteFlag: string;
+  tokenField: string;
+  path: string;
+  label: string;
+  // Le livret d'accueil n'a pas (encore) de page de consultation publique par
+  // token, contrairement aux autres documents : il est consultable dans
+  // l'espace client (session > documents). Quand directLink est vrai, le lien
+  // de relance pointe directement vers `path` (sans suffixe /token), comme le
+  // fait déjà la relance manuelle générique (voir envoyer-relance).
+  directLink?: boolean;
+}
+
+const DOC_TYPES: DocType[] = [
   {
     key: "emargement",
     docField: "doc_emargement",
@@ -57,7 +84,40 @@ const DOC_TYPES = [
     path: "evaluation",
     label: "l'évaluation du formateur",
   },
-] as const;
+  {
+    // Étape 1 du flow Qualiopi (CONTEXT.md) — Envoi PDF, non bloquant. Pas de
+    // page publique par token pour l'instant : lien de relance vers l'espace
+    // client (cf. directLink ci-dessus). token_livret est tout de même
+    // conservé dans le schéma (colonne ajoutée par la migration associée)
+    // pour rester cohérent avec les autres types et permettre une future page
+    // de consultation dédiée sans nouvelle migration.
+    key: "livret",
+    docField: "doc_livret",
+    envoyeLeField: "doc_livret_envoye_le",
+    relanceFlag: "doc_livret_relance_j2_envoyee",
+    alerteFlag: "doc_livret_alerte_envoyee",
+    tokenField: "token_livret",
+    path: "espace-client",
+    directLink: true,
+    label: "le livret d'accueil",
+  },
+  {
+    // Étape 2 du flow Qualiopi (CONTEXT.md) — Form QalioFlex, BLOQUANTE (bloque
+    // l'accès à l'émargement tant qu'elle n'est pas "signe", voir
+    // StagiairesList.tsx). doc_questionnaire_avant et token_questionnaire_avant
+    // existaient déjà (utilisés par positionnement-public) ; seules les
+    // colonnes de suivi de relance (envoye_le / relance_j2 / alerte) étaient
+    // manquantes.
+    key: "questionnaire_avant",
+    docField: "doc_questionnaire_avant",
+    envoyeLeField: "doc_questionnaire_avant_envoye_le",
+    relanceFlag: "doc_questionnaire_avant_relance_j2_envoyee",
+    alerteFlag: "doc_questionnaire_avant_alerte_envoyee",
+    tokenField: "token_questionnaire_avant",
+    path: "positionnement",
+    label: "le questionnaire de positionnement avant formation",
+  },
+];
 
 const SEUIL_RELANCE_JOURS = 2;
 const SEUIL_ALERTE_JOURS = 5;
@@ -120,7 +180,12 @@ serve(async (req) => {
         const prenom = (s.prenom as string) ?? "";
         const nom = (s.nom as string) ?? "";
         const token = s[dt.tokenField] as string | null;
-        const lien = token ? `https://qualioflex.fr/${dt.path}/${token}` : null;
+        // Livret : pas de page publique par token → lien direct vers l'espace
+        // client (voir commentaire directLink sur DOC_TYPES). Autres types :
+        // lien token comme avant.
+        const lien = dt.directLink
+          ? `https://qualioflex.fr/${dt.path}`
+          : (token ? `https://qualioflex.fr/${dt.path}/${token}` : null);
 
         const hasEmail = s.consentement_email === true && !!s.email_pro;
         const hasSms = s.consentement_sms === true && !!s.telephone;
