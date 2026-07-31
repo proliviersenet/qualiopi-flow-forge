@@ -313,17 +313,46 @@ const BPF = () => {
     init();
   }, [navigate, authSession, authLoading]);
 
-  const openCreate = () => {
+  const openCreate = async () => {
     setEditingId(null);
-    setForm({
+    const defaultForm = {
       ...emptyForm,
       dirigeant_nom_prenom: user?.name || "",
-    });
+    };
+    setForm(defaultForm);
     setCadreC(emptyCadreC());
     setCadreF1(emptyCadreF1());
     setCadreF3(emptyCadreF3());
     setCadreF4(emptyCadreF4());
     setDialogOpen(true);
+
+    // Correctif audit du 31/07 : auto-alimentation réelle des deux seuls
+    // cadres sans risque réglementaire (nb de sessions et de formations
+    // distinctes réellement dispensées durant l'exercice, calculées depuis
+    // les sessions de l'organisme) — ces deux champs sont explicitement
+    // "suivi interne QalioFlex, hors périmètre officiel du BPF" (cf.
+    // commentaire en tête de fichier). Les cadres officiels du Cerfa
+    // (financiers, typologie des stagiaires...) restent volontairement
+    // saisis à la main : les déduire automatiquement risquerait de produire
+    // une déclaration DREETS inexacte, ce qu'aucune approximation ne
+    // justifie sur un document réglementaire engageant l'organisme.
+    if (organismeId) {
+      const { data: sessionsExercice } = await supabase
+        .from("sessions")
+        .select("id, formation_id, formations:formation_id(organisme_id)")
+        .gte("date_debut", defaultForm.date_debut_exercice)
+        .lte("date_debut", defaultForm.date_fin_exercice);
+      const sessionsOrg = ((sessionsExercice as { id: string; formation_id: string; formations: { organisme_id: string } | null }[]) || [])
+        .filter((s) => s.formations?.organisme_id === organismeId);
+      if (sessionsOrg.length > 0) {
+        const formationIds = new Set(sessionsOrg.map((s) => s.formation_id));
+        setForm((prev) => ({
+          ...prev,
+          nb_sessions: String(sessionsOrg.length),
+          nb_formations: String(formationIds.size),
+        }));
+      }
+    }
   };
 
   const openEdit = (bpf: BPFRecord) => {
@@ -498,7 +527,8 @@ const BPF = () => {
         title="Le module BPF, c'est quoi ?"
         items={[
           "Le Bilan Pédagogique et Financier (BPF) est ta déclaration annuelle obligatoire auprès de la DREETS.",
-          "QalioFlex pré-remplit automatiquement les cadres du Cerfa à partir de tes formations et sessions de l'année.",
+          "QalioFlex pré-remplit automatiquement le nombre de sessions et de formations dispensées sur l'exercice (suivi interne).",
+          "Les cadres officiels du Cerfa (finances, typologie des stagiaires...) restent à saisir toi-même : eux seul garantissent l'exactitude de ta déclaration DREETS.",
           "Vérifie chaque cadre, complète ce qui manque, puis télétransmets-le sur monactiviteformation.emploi.gouv.fr.",
         ]}
       />

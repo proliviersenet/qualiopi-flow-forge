@@ -35,6 +35,7 @@ const Formations = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [organismeId, setOrganismeId] = useState<string | null>(null);
+  const [dateAuditSurveillance, setDateAuditSurveillance] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -48,11 +49,26 @@ const Formations = () => {
         setOrganismeId(profile.organisme_id);
         const { data } = await supabase.from("formations").select("*").eq("organisme_id", profile.organisme_id).order("created_at", { ascending: false });
         setFormations(data || []);
+
+        // Point non bloquant #60 : archivage automatique 18 mois après le
+        // dernier audit de surveillance (cf. Profil > Mon organisme).
+        const { data: org } = await supabase
+          .from("organismes")
+          .select("date_dernier_audit_surveillance")
+          .eq("id", profile.organisme_id)
+          .single();
+        setDateAuditSurveillance((org as { date_dernier_audit_surveillance: string | null } | null)?.date_dernier_audit_surveillance ?? null);
       }
       setLoading(false);
     };
     init();
   }, [navigate, authSession, authLoading]);
+
+  // Prochaine bascule d'archivage automatique = date du dernier audit + 18 mois.
+  const limiteArchivage = dateAuditSurveillance
+    ? new Date(new Date(dateAuditSurveillance).setMonth(new Date(dateAuditSurveillance).getMonth() + 18))
+    : null;
+  const archivageDejaDeclenche = limiteArchivage ? new Date() >= limiteArchivage : false;
 
   const filtrees = formations.filter(f =>
     f.titre?.toLowerCase().includes(search.toLowerCase()) ||
@@ -128,6 +144,20 @@ const Formations = () => {
               className="max-w-md"
             />
           </div>
+
+          {!loading && limiteArchivage && (
+            <div
+              className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
+                archivageDejaDeclenche
+                  ? "bg-orange-50 border-orange-200 text-orange-800"
+                  : "bg-blue-50 border-blue-200 text-blue-800"
+              }`}
+            >
+              {archivageDejaDeclenche
+                ? `📦 Archivage automatique actif : les formations publiées non mises à jour depuis ton dernier audit de surveillance (${new Date(dateAuditSurveillance as string).toLocaleDateString("fr-FR")}) sont archivées automatiquement.`
+                : `ℹ️ Prochaine bascule d'archivage automatique le ${limiteArchivage.toLocaleDateString("fr-FR")} (18 mois après ton dernier audit de surveillance) : les formations non mises à jour depuis seront archivées.`}
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-16 text-gray-400">Chargement...</div>

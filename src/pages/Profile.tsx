@@ -36,6 +36,7 @@ const Profile = () => {
     telephone: "",
     email_contact: "",
     logo_url: "",
+    date_dernier_audit_surveillance: "",
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
@@ -90,6 +91,7 @@ const Profile = () => {
             telephone: o.telephone || "",
             email_contact: o.email_contact || "",
             logo_url: o.logo_url || "",
+            date_dernier_audit_surveillance: o.date_dernier_audit_surveillance || "",
           });
           if (o.logo_url) setLogoPreview(o.logo_url);
         }
@@ -179,6 +181,7 @@ const Profile = () => {
         site_web: orgForm.site_web,
         telephone: orgForm.telephone,
         email_contact: orgForm.email_contact,
+        date_dernier_audit_surveillance: orgForm.date_dernier_audit_surveillance || null,
       })
       .eq("id", organismeId);
 
@@ -336,6 +339,25 @@ const Profile = () => {
                       onChange={handleOrgChange}
                       placeholder="02 47 00 00 00"
                     />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Date du dernier audit de surveillance Qualiopi</Label>
+                    <Input
+                      type="date"
+                      name="date_dernier_audit_surveillance"
+                      value={orgForm.date_dernier_audit_surveillance}
+                      onChange={handleOrgChange}
+                    />
+                    <p className="text-xs text-gray-400">
+                      {orgForm.date_dernier_audit_surveillance
+                        ? `Les formations publiées non mises à jour depuis cette date seront archivées automatiquement à partir du ${new Date(
+                            new Date(orgForm.date_dernier_audit_surveillance).setMonth(
+                              new Date(orgForm.date_dernier_audit_surveillance).getMonth() + 18
+                            )
+                          ).toLocaleDateString("fr-FR")} (18 mois après l'audit).`
+                        : "Sert de référence pour l'archivage automatique de tes formations (18 mois après cette date, celles non mises à jour depuis sont archivées)."}
+                    </p>
                   </div>
 
                   {/* Logo */}

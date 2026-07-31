@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import StagiairesList from "@/components/StagiairesList";
 import ClientHeader from "@/components/ClientHeader";
 import Footer from "@/components/Footer";
+import HelpPopup from "@/components/HelpPopup";
 import * as XLSX from "xlsx";
 
 interface Session {
@@ -625,6 +626,15 @@ const EspaceClient = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <ClientHeader active="formations" email={user?.email} onLogout={handleLogout} />
+      <HelpPopup
+        hintKey="espace_client_intro"
+        title="Bienvenue dans ton espace client"
+        items={[
+          "Retrouve ici tes sessions de formation et la liste de tes stagiaires pour chacune.",
+          "Importe la liste de tes stagiaires (fichier Excel) pour déclencher automatiquement l'envoi du livret d'accueil et du questionnaire de positionnement.",
+          "Un onglet 'Profil' te permet de mettre à jour tes informations et celles de ton entreprise à tout moment.",
+        ]}
+      />
 
       <main className="flex-grow container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">

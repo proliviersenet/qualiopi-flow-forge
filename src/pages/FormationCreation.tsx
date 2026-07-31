@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -175,6 +176,15 @@ const FormationCreation = () => {
   return (
     <div className="flex flex-col min-h-screen">
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+      <HelpPopup
+        hintKey="formation_creation_intro"
+        title="Crée ta formation étape par étape"
+        items={[
+          "Renseigne les informations générales, puis les détails pédagogiques (objectifs, prérequis, modalités) sur les étapes suivantes.",
+          "Tu peux enregistrer en brouillon à tout moment pour reprendre plus tard, ou publier directement une fois complète.",
+          "Une fois publiée, tu pourras y rattacher des sessions et affecter des stagiaires.",
+        ]}
+      />
 
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4">

@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HelpPopup from "@/components/HelpPopup";
 import StagiairesList from "@/components/StagiairesList";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,7 +45,7 @@ interface Session {
   lieu: string | null;
   lien_visio: string | null;
   statut: string;
-  formation?: { titre: string; duree: string };
+  formation?: { titre: string; duree: string; document_mode?: string };
 }
 
 const statutColor = (s: string) => {
@@ -75,6 +76,13 @@ const ClientDetail = () => {
   // en un clic. docsSession[sessionId][type] = contenu_html.
   const [docsSession, setDocsSession] = useState<Record<string, Record<string, string>>>({});
   const [generatingDoc, setGeneratingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
+  // Point non bloquant #62 : quand la formation est en mode "import" (choix fait
+  // par le formateur à la création — cf. FormationCreation.tsx, document_mode),
+  // le devis et la convention ne sont pas générés par QalioFlex mais importés
+  // tels quels (documents déjà existants côté formateur). docsSessionFichiers
+  // stocke l'URL du fichier importé, en parallèle de docsSession (HTML généré).
+  const [docsSessionFichiers, setDocsSessionFichiers] = useState<Record<string, Record<string, string>>>({});
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
   // Chantier 5 : la convention ne peut être générée qu'une fois que le client a
   // transmis la liste des stagiaires (elle se préremplit avec leurs noms) — même
   // logique que côté EspaceClient.tsx pour débloquer l'import de stagiaires.
@@ -106,7 +114,7 @@ const ClientDetail = () => {
   const fetchSessions = async (clientId: string) => {
     const { data } = await supabase
       .from("sessions")
-      .select("*, formation:formation_id(titre, duree)")
+      .select("*, formation:formation_id(titre, duree, document_mode)")
       .eq("client_id", clientId)
       .order("date_debut", { ascending: false });
     const sessionsData = (data as Session[]) || [];
@@ -117,18 +125,25 @@ const ClientDetail = () => {
       const sessionIds = sessionsData.map(s => s.id);
       const { data: docsData } = await supabase
         .from("documents_formation")
-        .select("id, session_id, type, contenu_html")
+        .select("id, session_id, type, contenu_html, fichier_url")
         .in("session_id", sessionIds)
         .in("type", [...DOCS_SESSION_CONFIG.map(c => c.type), "convention"]);
       if (docsData) {
         const map: Record<string, Record<string, string>> = {};
-        const rows = docsData as { id: string; session_id: string; type: string; contenu_html: string | null }[];
+        const mapFichiers: Record<string, Record<string, string>> = {};
+        const rows = docsData as { id: string; session_id: string; type: string; contenu_html: string | null; fichier_url: string | null }[];
         rows.forEach(d => {
-          if (!d.contenu_html) return;
-          if (!map[d.session_id]) map[d.session_id] = {};
-          map[d.session_id][d.type] = d.contenu_html;
+          if (d.contenu_html) {
+            if (!map[d.session_id]) map[d.session_id] = {};
+            map[d.session_id][d.type] = d.contenu_html;
+          }
+          if (d.fichier_url) {
+            if (!mapFichiers[d.session_id]) mapFichiers[d.session_id] = {};
+            mapFichiers[d.session_id][d.type] = d.fichier_url;
+          }
         });
         setDocsSession(map);
+        setDocsSessionFichiers(mapFichiers);
 
         // Chantier 5 : statut de signature DocuSign de la/des convention(s) déjà générée(s).
         const conventionDocs = rows.filter(d => d.type === "convention");
@@ -188,10 +203,63 @@ const ClientDetail = () => {
   };
 
   const voirDocumentSession = (sessionId: string, type: string) => {
+    const fichierUrl = docsSessionFichiers[sessionId]?.[type];
+    if (fichierUrl) { window.open(fichierUrl, "_blank"); return; }
     const html = docsSession[sessionId]?.[type];
     if (!html) return;
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  // Point non bloquant #62 : import manuel d'un devis/convention déjà existant
+  // côté formateur (formation en document_mode "import"), à la place de la
+  // génération automatique. Même bucket que le logo (Profile.tsx), un dossier
+  // dédié par session pour ne pas mélanger avec les logos d'organisme.
+  const uploaderDocumentSession = async (sessionId: string, formationId: string, type: string, file: File) => {
+    const cle = `${sessionId}:${type}`;
+    setUploadingDoc(cle);
+    try {
+      const ext = file.name.split(".").pop() || "pdf";
+      const path = `documents-importes/${organismeId}/${sessionId}/${type}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("documents-qualiopi")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw new Error(upErr.message);
+
+      const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
+      const fichierUrl = urlData?.publicUrl || "";
+
+      const { data: existing } = await supabase
+        .from("documents_formation")
+        .select("id")
+        .eq("session_id", sessionId)
+        .eq("type", type)
+        .maybeSingle();
+
+      const payload = {
+        formation_id: formationId,
+        session_id: sessionId,
+        type,
+        nom_fichier: file.name,
+        genere_par: "import",
+        fichier_url: fichierUrl,
+        contenu_html: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: saveErr } = existing
+        ? await supabase.from("documents_formation").update(payload).eq("id", existing.id)
+        : await supabase.from("documents_formation").insert(payload);
+      if (saveErr) throw new Error(saveErr.message);
+
+      setDocsSessionFichiers(prev => ({ ...prev, [sessionId]: { ...(prev[sessionId] || {}), [type]: fichierUrl } }));
+      toast({ title: "✅ Document importé", description: "Visible par le client, comme un document généré." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      toast({ title: "Erreur import", description: msg, variant: "destructive" });
+    } finally {
+      setUploadingDoc(null);
+    }
   };
 
   // Chantier 5 : charge html2pdf.js à la volée depuis un CDN (aucune génération de
@@ -422,6 +490,15 @@ const ClientDetail = () => {
   return (
     <div className="flex flex-col min-h-screen">
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
+      <HelpPopup
+        hintKey="client_detail_intro"
+        title="Gère ce client au même endroit"
+        items={[
+          "Retrouve ici les infos du client, ses sessions de formation et la liste de ses stagiaires.",
+          "Importe la liste des stagiaires (Excel) pour déclencher automatiquement l'envoi du livret d'accueil et du questionnaire de positionnement.",
+          "Suis en un coup d'œil l'avancement des documents (émargements, questionnaires, évaluations) pour chaque stagiaire.",
+        ]}
+      />
 
       <main className="flex-grow bg-gray-50 py-8">
         <div className="container mx-auto px-4 max-w-4xl">
@@ -504,7 +581,16 @@ const ClientDetail = () => {
                           {DOCS_SESSION_CONFIG.map(({ type, label, fn }) => {
                             const cle = `${session.id}:${type}`;
                             const enCours = generatingDoc === cle;
+                            const enImport = uploadingDoc === cle;
                             const html = docsSession[session.id]?.[type];
+                            const fichierUrl = docsSessionFichiers[session.id]?.[type];
+                            const dispo = !!html || !!fichierUrl;
+                            // Point non bloquant #62 : pour le devis, si le formateur a choisi
+                            // "import" à la création de la formation (document_mode), il a déjà
+                            // ce document — on lui propose de l'importer plutôt que de le
+                            // générer automatiquement. Livret/émargement restent toujours
+                            // générés par QalioFlex (pas de sens à les avoir "déjà" avant coup).
+                            const modeImport = type === "devis" && session.formation?.document_mode === "import";
                             return (
                               <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <div>
@@ -512,18 +598,44 @@ const ClientDetail = () => {
                                   <p className="text-xs text-gray-400">
                                     {enCours
                                       ? "Génération en cours..."
+                                      : enImport
+                                      ? "Import en cours..."
+                                      : modeImport
+                                      ? (fichierUrl ? "Importé — visible par le client" : "Formation en mode \"import\" : dépose ton document existant")
                                       : html
                                       ? "Généré par QalioFlex — visible par le client"
                                       : "À générer avant le début de la session"}
                                   </p>
                                 </div>
                                 <div className="flex gap-2 items-center">
-                                  {enCours && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-                                  <Button size="sm" variant="outline" disabled={enCours}
-                                    onClick={() => genererDocumentSession(session.id, type, fn)}>
-                                    {enCours ? "Génération..." : html ? "Regénérer" : "Générer"}
-                                  </Button>
-                                  {html && (
+                                  {(enCours || enImport) && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                                  {modeImport ? (
+                                    <>
+                                      <input
+                                        type="file"
+                                        accept=".pdf,.doc,.docx"
+                                        id={`upload-${cle}`}
+                                        className="hidden"
+                                        disabled={enImport}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) uploaderDocumentSession(session.id, session.formation_id, type, file);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      <label htmlFor={`upload-${cle}`}>
+                                        <Button size="sm" variant="outline" disabled={enImport} asChild>
+                                          <span>{fichierUrl ? "Remplacer" : "📎 Importer"}</span>
+                                        </Button>
+                                      </label>
+                                    </>
+                                  ) : (
+                                    <Button size="sm" variant="outline" disabled={enCours}
+                                      onClick={() => genererDocumentSession(session.id, type, fn)}>
+                                      {enCours ? "Génération..." : html ? "Regénérer" : "Générer"}
+                                    </Button>
+                                  )}
+                                  {dispo && (
                                     <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirDocumentSession(session.id, type)}>
                                       Voir
                                     </Button>
@@ -542,9 +654,17 @@ const ClientDetail = () => {
                             const hasStag = uploadedSessions.has(session.id);
                             const cle = `${session.id}:convention`;
                             const enCours = generatingDoc === cle;
+                            const enImport = uploadingDoc === cle;
                             const html = docsSession[session.id]?.convention;
+                            const fichierUrl = docsSessionFichiers[session.id]?.convention;
                             const statut = conventionSignatures[session.id];
                             const titreFormation = (session.formation as Record<string, string>)?.titre || "";
+                            // Point non bloquant #62 : si la formation est en document_mode
+                            // "import", le formateur a déjà sa convention (signée ou non hors
+                            // QalioFlex) — on lui propose de l'importer directement plutôt que
+                            // de la faire générer puis signer via DocuSign, ce qui n'a pas de
+                            // sens s'il gère déjà cette étape lui-même.
+                            const modeImport = session.formation?.document_mode === "import";
                             return (
                               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <div>
@@ -554,31 +674,57 @@ const ClientDetail = () => {
                                       ? "🔒 Disponible une fois les stagiaires transmis par le client"
                                       : enCours
                                       ? "Génération en cours..."
+                                      : enImport
+                                      ? "Import en cours..."
                                       : sendingSignature === session.id
                                       ? "Envoi pour signature en cours..."
                                       : statut
                                       ? conventionStatutLabel(statut)
+                                      : modeImport
+                                      ? (fichierUrl ? "Importée — visible par le client" : "Formation en mode \"import\" : dépose ta convention existante")
                                       : html
                                       ? "Générée — accessible au client, pas encore envoyée pour signature"
                                       : "À générer une fois les stagiaires transmis"}
                                   </p>
                                 </div>
                                 <div className="flex gap-2 items-center">
-                                  {(enCours || sendingSignature === session.id) && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-                                  <Button
-                                    size="sm" variant="outline"
-                                    disabled={!hasStag || enCours}
-                                    title={!hasStag ? "Le client doit d'abord transmettre la liste des stagiaires" : undefined}
-                                    onClick={() => genererDocumentSession(session.id, "convention", "generer-convention")}
-                                  >
-                                    {!hasStag ? "🔒 En attente" : enCours ? "Génération..." : html ? "Régénérer" : "Générer"}
-                                  </Button>
-                                  {html && (
+                                  {(enCours || enImport || sendingSignature === session.id) && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                                  {modeImport ? (
+                                    <>
+                                      <input
+                                        type="file"
+                                        accept=".pdf,.doc,.docx"
+                                        id={`upload-${cle}`}
+                                        className="hidden"
+                                        disabled={!hasStag || enImport}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) uploaderDocumentSession(session.id, session.formation_id, "convention", file);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      <label htmlFor={!hasStag ? undefined : `upload-${cle}`}>
+                                        <Button size="sm" variant="outline" disabled={!hasStag || enImport} asChild={hasStag}>
+                                          {hasStag ? <span>{fichierUrl ? "Remplacer" : "📎 Importer"}</span> : <span>🔒 En attente</span>}
+                                        </Button>
+                                      </label>
+                                    </>
+                                  ) : (
+                                    <Button
+                                      size="sm" variant="outline"
+                                      disabled={!hasStag || enCours}
+                                      title={!hasStag ? "Le client doit d'abord transmettre la liste des stagiaires" : undefined}
+                                      onClick={() => genererDocumentSession(session.id, "convention", "generer-convention")}
+                                    >
+                                      {!hasStag ? "🔒 En attente" : enCours ? "Génération..." : html ? "Régénérer" : "Générer"}
+                                    </Button>
+                                  )}
+                                  {(html || fichierUrl) && (
                                     <Button size="sm" style={{ background: "#25245e", color: "#fff" }} onClick={() => voirDocumentSession(session.id, "convention")}>
                                       Voir
                                     </Button>
                                   )}
-                                  {html && !statut && (
+                                  {!modeImport && html && !statut && (
                                     <Button
                                       size="sm" style={{ background: "#f2901e", color: "#fff" }}
                                       disabled={sendingSignature === session.id}
