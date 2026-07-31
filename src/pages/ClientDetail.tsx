@@ -354,26 +354,47 @@ const ClientDetail = () => {
     }
 
     setSaving(true);
-    const { error } = await supabase.from("sessions").insert({
-      formation_id: selectedFormation,
-      client_id: id,
-      date_debut: dateDebut || null,
-      date_fin: dateFin || null,
-      lieu: lieu || null,
-      lien_visio: lienVisio || null,
-      statut: "planifiee",
-    });
+    const { data: newSession, error } = await supabase
+      .from("sessions")
+      .insert({
+        formation_id: selectedFormation,
+        client_id: id,
+        date_debut: dateDebut || null,
+        date_fin: dateFin || null,
+        lieu: lieu || null,
+        lien_visio: lienVisio || null,
+        statut: "planifiee",
+      })
+      .select("id")
+      .single();
 
     setSaving(false);
 
-    if (error) {
-      toast({ title: "Erreur", description: error.message, variant: "destructive" }); return;
+    if (error || !newSession) {
+      toast({ title: "Erreur", description: error?.message, variant: "destructive" }); return;
     }
 
     toast({ title: "✅ Formation affectée", description: "La session a été créée. Le client peut maintenant importer ses stagiaires." });
     setDialogOpen(false);
     setSelectedFormation(""); setDateDebut(""); setDateFin(""); setLieu(""); setLienVisio("");
     await fetchSessions(id!);
+
+    // Correctif bug audit du 31/07 : prévenir le client par email qu'une session
+    // vient de lui être affectée — jusqu'ici il devait tomber par hasard sur
+    // /espace-client pour le découvrir. On ne bloque pas l'écran (la session est
+    // déjà créée avec succès), mais on avertit le formateur si l'envoi échoue
+    // (ex : email de contact manquant) car sinon le client ne serait jamais notifié.
+    const { data: notifData, error: notifError } = await supabase.functions.invoke("notifier-affectation-session", {
+      body: { session_id: newSession.id },
+    });
+    if (notifError || notifData?.error) {
+      console.error("Erreur notification email affectation session:", notifError || notifData?.error);
+      toast({
+        title: "⚠️ Session créée, mais email non envoyé",
+        description: "Le client n'a pas été notifié automatiquement. Vérifiez son adresse email de contact.",
+        variant: "destructive",
+      });
+    }
   };
 
   const supprimerSession = async (sessionId: string) => {

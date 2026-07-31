@@ -298,7 +298,7 @@ const EspaceClient = () => {
 
       await supabase.from("stagiaires").delete().eq("session_id", sessionId);
 
-      const { error: insertError } = await supabase.from("stagiaires").insert(
+      const { data: insertedRows, error: insertError } = await supabase.from("stagiaires").insert(
         stagiaires.map(s => ({
           session_id: sessionId,
           client_id: clientId,
@@ -307,15 +307,67 @@ const EspaceClient = () => {
           email_pro: s.email,
           telephone: s.telephone,
         }))
-      );
+      ).select("id");
 
       if (insertError) throw insertError;
 
       setUploadedSessions(prev => new Set([...prev, sessionId]));
       toast({
         title: `✅ ${stagiaires.length} stagiaire(s) importé(s)`,
-        description: "Le flow documentaire Qualiopi va être déclenché automatiquement.",
+        description: "Envoi du livret d'accueil et du questionnaire de positionnement en cours...",
       });
+
+      // Déclenche réellement l'envoi (livret d'accueil + questionnaire de
+      // positionnement avant formation) pour chaque nouveau stagiaire, via la
+      // même Edge Function que les relances manuelles (envoyer-relance),
+      // orchestrée par declencher-flow-session. Un échec d'envoi pour un
+      // stagiaire ne bloque jamais les autres ni l'import déjà réalisé — on
+      // informe seulement l'utilisateur du résultat réel obtenu (pas de
+      // message optimiste par défaut).
+      const stagiaireIds = (insertedRows ?? []).map((r) => (r as { id: string }).id);
+      try {
+        const { data: flowData, error: flowError } = await supabase.functions.invoke(
+          "declencher-flow-session",
+          { body: { session_id: sessionId, stagiaire_ids: stagiaireIds } }
+        );
+
+        if (flowError || (flowData as Record<string, unknown> | null)?.error) {
+          const errMsg = (flowError as { message?: string } | null)?.message
+            || (flowData as Record<string, unknown> | null)?.error
+            || "Erreur inconnue";
+          throw new Error(String(errMsg));
+        }
+
+        const resultats = ((flowData as Record<string, unknown> | null)?.resultats ?? []) as { success: boolean }[];
+        const nbOk = resultats.filter((r) => r.success).length;
+        const nbTotal = resultats.length;
+
+        if (nbTotal === 0) {
+          toast({
+            title: "⚠️ Aucun envoi effectué",
+            description: "Aucun stagiaire ne dispose d'un email ou d'un téléphone pour recevoir le livret et le questionnaire.",
+            variant: "destructive",
+          });
+        } else if (nbOk < nbTotal) {
+          toast({
+            title: "⚠️ Flow documentaire partiellement envoyé",
+            description: `Livret et questionnaire envoyés pour ${nbOk}/${nbTotal} envoi(s). Vérifiez les coordonnées des stagiaires concernés ou relancez-les manuellement depuis la fiche formateur.`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "📩 Flow documentaire déclenché",
+            description: `Livret d'accueil et questionnaire de positionnement envoyés (${nbOk}/${nbTotal}).`,
+          });
+        }
+      } catch (flowErr) {
+        const flowMsg = flowErr instanceof Error ? flowErr.message : "Erreur inconnue";
+        toast({
+          title: "⚠️ Flow documentaire non déclenché",
+          description: `Les stagiaires ont bien été importés, mais l'envoi automatique du livret et du questionnaire a échoué (${flowMsg}). Relancez-les manuellement depuis la fiche formateur.`,
+          variant: "destructive",
+        });
+      }
 
     } catch (err) {
       const msg = err instanceof Error
@@ -341,6 +393,24 @@ const EspaceClient = () => {
   const emargementComplet = (sessionId: string) => {
     const e = emargementParSession[sessionId];
     return !!e && e.total > 0 && e.signes === e.total;
+  };
+
+  // Le support pédagogique est désormais stocké dans le bucket privé
+  // "documents-qualiopi-support" (migration 20260731090500) — "value" pour la
+  // clé "support" est un CHEMIN Storage, pas une URL cliquable. On génère une
+  // URL signée à la demande (5 min) pour l'ouvrir, exactement comme côté
+  // formateur (FormationDetail.tsx). Ce mécanisme reste distinct du verrou
+  // "emargementComplet" ci-dessus, qui concerne l'affichage côté client
+  // entreprise et n'a pas été retouché.
+  const ouvrirSupportPrive = async (path: string) => {
+    const { data, error } = await supabase.storage
+      .from("documents-qualiopi-support")
+      .createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) {
+      toast({ title: "Erreur", description: "Impossible d'ouvrir le support pour le moment.", variant: "destructive" });
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const sessionsEnCours = sessions.filter((s) => s.statut === "planifiee" || s.statut === "en_cours");
@@ -438,6 +508,17 @@ const EspaceClient = () => {
                               <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left" title={key === "convention" && conventionStatut ? conventionStatutLabel(conventionStatut) : undefined}>
                                 <span>📎</span>
                                 <span>{label}{conventionBadge}</span>
+                                <span className="ml-auto">↗</span>
+                              </button>
+                            );
+                          }
+                          // Support : "value" est un chemin Storage (bucket privé), pas une
+                          // URL cliquable — on passe par une URL signée générée à la demande.
+                          if (value && key === "support") {
+                            return (
+                              <button key={key} onClick={() => ouvrirSupportPrive(value)} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left">
+                                <span>📎</span>
+                                <span>{label}</span>
                                 <span className="ml-auto">↗</span>
                               </button>
                             );

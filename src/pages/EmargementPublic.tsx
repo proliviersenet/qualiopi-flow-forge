@@ -102,6 +102,12 @@ const EmargementPublic = () => {
           <p className="text-4xl mb-3">✅</p>
           <h1 className="text-lg font-bold mb-1" style={{ color: "#25245e" }}>Merci {data.prenom} !</h1>
           <p className="text-gray-500 text-sm">Votre émargement a bien été enregistré.</p>
+          {/* Correctif audit juillet 2026 : le support pédagogique se débloque
+              automatiquement dès la signature — même token, vérifié côté serveur
+              par l'Edge Function support-public (bucket Storage privé). */}
+          <a href={`/support/${token}`} className="inline-block mt-4">
+            <Button variant="outline" size="sm">📚 Accéder au support pédagogique</Button>
+          </a>
         </CardContent></Card>
       </div>
     );

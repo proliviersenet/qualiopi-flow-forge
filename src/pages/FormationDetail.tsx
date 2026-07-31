@@ -12,6 +12,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { EVAL_TYPES } from "@/lib/documentTypes";
 
+// Correctif audit juillet 2026 : le support pédagogique est stocké dans un bucket
+// Storage PRIVÉ dédié (le bucket "documents-qualiopi" reste public pour le
+// programme/logos, comportement inchangé) — voir migration
+// 20260731090500_bucket_prive_support_pedagogique.sql.
+const SUPPORT_BUCKET = "documents-qualiopi-support";
+
 interface Formation {
   id: string;
   titre: string;
@@ -71,6 +77,15 @@ const FormationDetail = () => {
   const [evalSaving, setEvalSaving] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
   const [evalSaved, setEvalSaved] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
 
+  // Le support pédagogique est stocké dans un bucket privé dédié
+  // (SUPPORT_BUCKET) — aucune URL publique n'est générée pour lui.
+  // documents_formation.url contient alors le CHEMIN Storage (pas un lien
+  // cliquable) ; la consultation passe par une URL signée à courte durée de vie,
+  // générée à la demande (voirSupport ci-dessous côté formateur, ou par l'Edge
+  // Function support-public côté stagiaire, qui vérifie d'abord que SON
+  // émargement est signé). Le programme, lui, reste inchangé dans l'ancien
+  // bucket public "documents-qualiopi" — aucune règle de verrouillage ne le
+  // concerne.
   const uploadDocument = async (file: File, type: "support" | "programme") => {
     if (!id) return;
 
@@ -86,8 +101,9 @@ const FormationDetail = () => {
 
     setUploading(type);
     const path = `formations/${id}/${type}/${type}-${Date.now()}.pdf`;
+    const bucket = type === "support" ? SUPPORT_BUCKET : "documents-qualiopi";
     const { error: upErr } = await supabase.storage
-      .from("documents-qualiopi")
+      .from(bucket)
       .upload(path, file, { contentType: "application/pdf", cacheControl: "3600" });
 
     if (upErr) {
@@ -95,8 +111,11 @@ const FormationDetail = () => {
       setUploading(null); return;
     }
 
-    const { data: urlData } = supabase.storage.from("documents-qualiopi").getPublicUrl(path);
-    const url = urlData?.publicUrl || "";
+    // Support : on stocke le CHEMIN (bucket privé, pas d'URL publique possible).
+    // Programme : comportement inchangé, on stocke l'URL publique.
+    const url = type === "support"
+      ? path
+      : (supabase.storage.from(bucket).getPublicUrl(path).data?.publicUrl || "");
 
     // IMPORTANT : pas de .upsert(onConflict:"formation_id,type") — depuis l'ajout de
     // session_id à documents_formation, l'index unique sur (formation_id, type) est
@@ -134,6 +153,20 @@ const FormationDetail = () => {
     setDocuments(prev => ({ ...prev, [type]: url }));
     setUploading(null);
     toast({ title: `✅ ${type === "support" ? "Support" : "Programme"} uploadé` });
+  };
+
+  // Génère une URL signée temporaire (5 min) pour consulter le support depuis
+  // l'espace formateur — le bucket dédié est privé, plus de lien direct stocké.
+  const voirSupport = async () => {
+    if (!documents.support) return;
+    const { data, error } = await supabase.storage
+      .from(SUPPORT_BUCKET)
+      .createSignedUrl(documents.support, 300);
+    if (error || !data?.signedUrl) {
+      toast({ title: "Erreur", description: "Impossible d'ouvrir le support pour le moment.", variant: "destructive" });
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const lancerGenerationTrame = async () => {
@@ -578,7 +611,7 @@ const FormationDetail = () => {
                         onClick={() => supportRef.current?.click()}>
                         {uploading === "support" ? "Upload..." : documents.support ? "Remplacer" : "Uploader"}
                       </Button>
-                      {documents.support && <a href={documents.support} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline">Voir</Button></a>}
+                      {documents.support && <Button size="sm" variant="outline" onClick={voirSupport}>Voir</Button>}
                     </div>
                   </div>
 
