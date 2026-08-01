@@ -46,6 +46,9 @@ const Settings = () => {
   useEffect(() => {
     if (authLoading) return;
     if (!authSession) { navigate("/login"); return; }
+    // Point non bloquant (audit test grandeur réelle 01/08) : redirige un
+    // compte client vers son espace au lieu de laisser voir l'UI formateur.
+    if (authSession.user.user_metadata?.role === "client") { navigate("/espace-client"); return; }
 
     const init = async () => {
       const u = authSession.user;

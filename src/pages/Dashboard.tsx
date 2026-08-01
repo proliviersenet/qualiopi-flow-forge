@@ -40,6 +40,12 @@ const Dashboard = () => {
   useEffect(() => {
     if (authLoading) return;
     if (!authSession) { navigate('/login'); return; }
+    // Point non bloquant (audit test grandeur réelle 01/08) : un compte client
+    // (role=client) pouvait naviguer directement sur cette page réservée au
+    // formateur — pas de fuite de données (RLS scope déjà par organisme_id),
+    // mais l'interface formateur restait accessible. On redirige vers son
+    // propre espace, comme déjà fait sur EspaceClient/VeilleQualiopi/etc.
+    if (authSession.user.user_metadata?.role === "client") { navigate('/espace-client'); return; }
 
     const init = async () => {
       const u = authSession.user;
