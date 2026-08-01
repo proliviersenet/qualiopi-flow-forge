@@ -445,3 +445,48 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 1. Construire un écran de suivi des conversations escaladées côté formateur (actuellement consultable seulement en base/SQL, RLS déjà prête)
 2. Enrichir la base de connaissance au fil de l'eau selon les vraies questions posées par les utilisateurs
 3. Reprendre la roadmap §8 : DocuSign Go-Live prod, module notation formateurs, pré-audit (page réelle), pages footer, Stripe
+
+## Session 8 — 31 juillet au 1er août 2026 (Audit complet des 25 étapes du flow)
+
+### Contexte
+Consigne d'Olivier : *"on corrige tout, les points bloquant, les points non bloquants, je veux que tout soit propre et fonctionnel. dans la liste établie sur les étapes, je veux que tout soit au vert."* Un audit préalable avait identifié 5 points bloquants et 9 points non bloquants sur les 25 étapes du flow (onboarding → création formation → invitation client → flow Qualiopi auto → fin de formation → BPF/archivage/veille). Cette session traite l'intégralité des 14 points.
+
+### ✅ 5 correctifs bloquants
+- **Déclenchement auto du flow Qualiopi après upload stagiaires** : nouvelle Edge Function `declencher-flow-session`, appelée automatiquement après l'import de la liste de stagiaires (au lieu d'un déclenchement manuel oublié)
+- **Email au client quand une session lui est affectée** : nouvelle Edge Function `notifier-affectation-session`
+- **Email au formateur quand son client crée son compte** : notification ajoutée au flux de création de compte client
+- **Extension des relances J+2/J+5 au livret et au questionnaire avant** (jusque-là seuls émargement/évaluations étaient relancés)
+- **Verrou serveur du support pédagogique** : le support n'est plus débloqué que côté serveur après signature vérifiée de l'émargement (nouvelle fonction publique `support-public` + route dédiée), plus de dépendance à un état client
+- **Alerte bloquante J-2 avant formation** si livret/questionnaire avant formation toujours pas complété : nouvelle Edge Function `alerte-avant-formation` (cron quotidien)
+
+### ✅ 9 points non bloquants
+- **#56 BPF auto-rempli** : `BPF.tsx` pré-remplit désormais `nb_sessions`/`nb_formations` depuis les vraies données de sessions au lieu de champs vides à saisir à la main
+- **#57 FAQ Aide.tsx** : correction de l'entrée FAQ qui affirmait à tort que la notation des formateurs n'existait pas (le module existe depuis la Session 6)
+- **#58 Opt-in RGPD dès le premier email** : le tout premier email envoyé à un stagiaire (motif `livret`, juste après import) mentionne désormais explicitement l'usage des données et l'endroit où ses préférences de contact seront demandées, au lieu d'attendre le questionnaire de positionnement
+- **#59 Guidage chatbot Qualios étendu** : ajout de bulles d'aide contextuelles (`HelpPopup`) sur les pages Création formation, Détail client et Espace client
+- **#60 Archivage auto 18 mois post-audit de surveillance** : nouveau champ `organismes.date_dernier_audit_surveillance`, nouvelle Edge Function `archiver-formations-surveillance` (cron mensuel) qui archive les formations publiées non mises à jour depuis le dernier audit, une fois 18 mois écoulés ; bannière de statut ajoutée sur `Formations.tsx`
+- **#62 Upload manuel convention/devis existants** : nouveau champ `documents_formation.fichier_url` ; un formateur dont la formation est en `document_mode = "import"` peut désormais importer son propre PDF/Word au lieu de forcer une génération automatique qui écraserait son document
+- **#63 Nettoyage du code mort** : suppression des Edge Functions `relances-auto` (traitait une table `relances` que plus rien n'alimente depuis la bascule vers les envois en temps réel) et `sirene-proxy` (redondante avec les appels directs déjà en place vers l'API recherche-entreprises.api.gouv.fr dans `Register.tsx`/`Clients.tsx`) ; désactivation du cron horaire qui appelait `relances-auto`
+
+### Déploiement — tout est en production
+- **GitHub** : tous les correctifs poussés sur `main` (commits `37ca376` → `766f761`), y compris la suppression effective des deux fichiers morts du repo
+- **Supabase Edge Functions** : `declencher-flow-session`, `notifier-affectation-session`, `alerte-avant-formation`, `support-public` déployées ; `archiver-formations-surveillance` déployée (JWT OFF, cron-only via `x-cron-secret`) ; `envoyer-relance` redéployé avec l'opt-in RGPD (JWT resté ON, vérifié avant et après redéploiement) ; `relances-auto` et `sirene-proxy` supprimées du dashboard Supabase
+- **Vérifications locales avant chaque push** : `npx eslint` (propre), `npx tsc --noEmit` (mêmes erreurs pré-existantes que sur la base d'origine, liées au stub `types.ts` non typé — non bloquant, déjà accepté en session précédente), `npm run build` (propre)
+
+### ⚠️ Migrations SQL à exécuter par Olivier (Supabase Studio → SQL Editor)
+Aucun accès direct à la base depuis le sandbox — à faire manuellement, dans l'ordre :
+1. `20260731090500_bucket_prive_support_pedagogique.sql`
+2. `20260731093000_relance_documents_livret_questionnaire_avant.sql`
+3. `20260731093100_cron_alerte_avant_formation.sql`
+4. `20260731170000_archivage_18mois_audit_surveillance.sql`
+5. `20260731170100_cron_archiver_formations_surveillance.sql`
+6. `20260731170200_documents_formation_fichier_url.sql`
+7. `20260731170300_desactivation_cron_relances_auto_mort.sql` (vérifier d'abord le nom exact du job avec `select jobid, jobname, schedule from cron.job order by jobid;`)
+
+Les 3 premières datent de la partie "correctifs bloquants" de cette même session (avant une coupure de session) et n'ont pas été confirmées comme exécutées — à vérifier en premier, sinon les fonctions correspondantes (verrou support pédagogique, relance livret/questionnaire, alerte J-2) tourneront sans effet en base.
+
+### 🔜 Prochaines priorités
+1. Olivier : exécuter les 7 migrations SQL ci-dessus dans l'éditeur SQL Supabase Studio
+2. Confirmer avec Olivier que les 25 étapes du flow sont bien "au vert" après exécution des migrations (test bout-en-bout recommandé sur un cycle stagiaire complet)
+3. Finaliser le Go-Live DocuSign production (voir Session 6)
+4. Reprendre la roadmap §8 : module notation formateurs, pré-audit (page réelle), pages footer, Stripe
