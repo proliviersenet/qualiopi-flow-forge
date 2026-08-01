@@ -519,7 +519,13 @@ const StagiairesList = ({
   };
 
   if (loading) return <p className="text-xs text-gray-400">Chargement des stagiaires...</p>;
-  if (stagiaires.length === 0) return null;
+  // Point non bloquant (audit test grandeur réelle 01/08) : avec 0 stagiaire, ce
+  // composant se masquait entièrement — y compris le bouton "+ Ajouter un
+  // stagiaire". Sur une session neuve (formateur comme client, canRelance=true
+  // dans les deux seuls usages actuels), il devenait donc impossible d'ajouter
+  // le tout premier stagiaire depuis cette page. On garde le masquage complet
+  // uniquement pour un éventuel affichage lecture seule (canRelance=false).
+  if (stagiaires.length === 0 && !canRelance) return null;
 
   return (
     <div>
