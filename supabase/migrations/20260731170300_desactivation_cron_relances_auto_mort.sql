@@ -1,0 +1,21 @@
+-- Correctif audit du 31/07 (point non bloquant #63, code mort) : le cron
+-- "relances-qualiopi-hourly" appelle toutes les heures l'Edge Function
+-- relances-auto, qui traite la table `relances`. Or plus rien n'écrit dans
+-- cette table depuis que le flow a été refondu autour d'envois en temps réel
+-- (envoyer-relance, déclenché directement par déclencher-flow-session /
+-- StagiairesList.tsx) plutôt que d'une file d'attente planifiée — confirmé
+-- par Dashboard.tsx (cf. commentaire "relancesEnAttente", déjà remis à 0 en
+-- dur car "la table relances ne reflète donc rien de réel"). Ce cron tourne
+-- donc à vide toutes les heures depuis la bascule vers le nouveau flow.
+--
+-- L'Edge Function relances-auto (code mort, table `relances`/`participations`/
+-- `beneficiaires` de l'ancien schéma) est supprimée du repo dans le même
+-- correctif ; on désactive ici le job qui l'appelait. À exécuter manuellement
+-- dans le SQL Editor (comme les autres migrations DDL de cette session) ;
+-- pas d'accès direct à pg_cron depuis ce sandbox.
+--
+-- Si "relances-qualiopi-hourly" n'est pas le nom exact du job (à vérifier
+-- avec `select jobid, jobname, schedule from cron.job order by jobid;` avant
+-- exécution), adapter le nom ci-dessous en conséquence.
+
+select cron.unschedule('relances-qualiopi-hourly');
