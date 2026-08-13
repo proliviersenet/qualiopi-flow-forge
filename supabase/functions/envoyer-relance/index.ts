@@ -12,7 +12,7 @@ serve(async (req) => {
     const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
     if (!BREVO_API_KEY) throw new Error("BREVO_API_KEY manquant");
 
-    const { prenom, nom, email, telephone, formation_titre, motif, canal } = await req.json();
+    const { prenom, nom, email, telephone, formation_titre, motif, canal, lien: lienOverride } = await req.json();
 
     const motifAction: Record<string, string> = {
       convention: "signer votre convention de formation",
@@ -28,7 +28,15 @@ serve(async (req) => {
 
     const action = motifAction[motif] ?? motif;
     const titre = formation_titre ?? "votre formation";
-    const lien = "https://qualioflex.fr/espace-client";
+    // Correctif audit du 01/08 (test grandeur réelle) : pour un stagiaire (qui n'a
+    // pas de compte QalioFlex), le lien générique vers /espace-client ne mène nulle
+    // part d'utilisable — seul le lien direct par token (/positionnement/:token,
+    // /emargement/:token, etc., même construction que relance-documents-auto) lui
+    // permet d'agir. Les appelants concernés (declencher-flow-session,
+    // positionnement-public) passent maintenant ce lien explicitement ; à défaut on
+    // garde /espace-client par défaut (toujours correct pour les motifs côté client,
+    // ex. "convention").
+    const lien = (typeof lienOverride === "string" && lienOverride) || "https://qualioflex.fr/espace-client";
 
     // Correctif audit du 31/07 : l'opt-in RGPD (préférences de contact email/SMS)
     // n'était recueilli que dans le questionnaire de positionnement — trop tardif,
