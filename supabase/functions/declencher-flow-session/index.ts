@@ -71,7 +71,7 @@ serve(async (req) => {
     // n'appartiendrait pas à session_id).
     const { data: stagiairesData, error: stagErr } = await supabase
       .from("stagiaires")
-      .select("id, nom, prenom, email_pro, telephone, doc_questionnaire_avant")
+      .select("id, nom, prenom, email_pro, telephone, doc_questionnaire_avant, token_questionnaire_avant")
       .eq("session_id", session_id)
       .in("id", stagiaire_ids);
 
@@ -104,13 +104,24 @@ serve(async (req) => {
         // avant a un statut de progression (doc_questionnaire_avant) — on évite
         // de le renvoyer s'il a déjà été transmis ou complété (ex. nouvel appel
         // sur les mêmes stagiaires).
+        // Correctif audit du 01/08 (test grandeur réelle) : token_questionnaire_avant
+        // et le suivi doc_questionnaire_avant/doc_livret (+ leurs *_envoye_le) n'étaient
+        // jamais renseignés par ce point d'entrée — seul l'email partait réellement,
+        // avec un lien générique /espace-client inutilisable par un stagiaire (pas de
+        // compte). Conséquence en cascade : la relance J+2/l'alerte J+5
+        // (relance-documents-auto) ne se déclenchaient jamais non plus, faute de date
+        // d'envoi. On génère donc ici le token (mêmes colonnes que positionnement-public
+        // /relance-documents-auto) et on met à jour le statut après un envoi réussi.
+        let token: string | null = null;
         if (motif === "questionnaire_avant") {
           const statutActuel = s.doc_questionnaire_avant as string | null;
           if (statutActuel === "envoye" || statutActuel === "signe") {
             resultats.push({ stagiaire_id: s.id, motif, success: true, skipped: true, reason: "déjà envoyé" });
             continue;
           }
+          token = (s.token_questionnaire_avant as string | null) || crypto.randomUUID();
         }
+        const lien = motif === "questionnaire_avant" ? `https://qualioflex.fr/positionnement/${token}` : undefined;
 
         try {
           const { data, error } = await supabase.functions.invoke("envoyer-relance", {
@@ -124,6 +135,7 @@ serve(async (req) => {
               canal: "les_deux",
               envoye_par: "system_import_stagiaires",
               stagiaire_id: s.id,
+              ...(lien ? { lien } : {}),
             },
           });
 
@@ -132,6 +144,21 @@ serve(async (req) => {
               || (data as Record<string, unknown> | null)?.error
               || "Erreur inconnue";
             throw new Error(String(errMsg));
+          }
+
+          // Suivi de statut, uniquement une fois l'envoi réellement confirmé — un échec
+          // de mise à jour ici ne doit pas faire échouer le résultat déjà obtenu (email
+          // parti), mais est tracé pour investigation.
+          const now = new Date().toISOString();
+          const updates: Record<string, unknown> =
+            motif === "questionnaire_avant"
+              ? { doc_questionnaire_avant: "envoye", doc_questionnaire_avant_envoye_le: now, token_questionnaire_avant: token }
+              : motif === "livret"
+              ? { doc_livret: "envoye", doc_livret_envoye_le: now }
+              : {};
+          if (Object.keys(updates).length > 0) {
+            const { error: updErr } = await supabase.from("stagiaires").update(updates).eq("id", s.id);
+            if (updErr) console.error(`declencher-flow-session: échec MAJ statut (${motif}, stagiaire ${s.id}):`, updErr.message);
           }
 
           resultats.push({
