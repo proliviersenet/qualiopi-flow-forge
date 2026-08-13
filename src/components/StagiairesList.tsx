@@ -57,6 +57,8 @@ interface Stagiaire {
   doc_attestation_envoye_le?: string | null;
   doc_questionnaire_avant?: string | null;
   doc_questionnaire_apres?: string | null;
+  token_questionnaire_avant?: string | null;
+  token_questionnaire_apres?: string | null;
   reponses_questionnaire_avant?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   reponses_questionnaire_apres?: { competences?: Record<string, number>; objectifs?: Record<string, number> } | null;
   doc_evaluation_chaud?: string | null;
@@ -134,6 +136,32 @@ const motifs = [
   { value: "attestation", label: "Attestation de fin de formation" },
   { value: `evaluation_${EVAL_TYPES[2].key}`, label: EVAL_TYPES[2].label },
 ];
+
+// Chantier 3 (audit du 13/08, suite du correctif du 01/08 sur declencher-flow-session
+// et positionnement-public) : la relance MANUELLE (bouton "📨 Relancer" ci-dessous,
+// handleRelance) appelait envoyer-relance sans jamais fournir de `lien` — pour un
+// motif nécessitant une action du stagiaire (qui n'a pas de compte QalioFlex), le
+// lien générique /espace-client renvoyé par défaut par envoyer-relance ne mène nulle
+// part d'utilisable. On couvre ici les motifs qui ont déjà une page publique par
+// token (mêmes routes que /positionnement, /emargement, /evaluation utilisées par
+// declencher-flow-session, positionnement-public et genererLienEvaluation
+// ci-dessus). Le token est réutilisé s'il existe déjà (jamais régénéré à chaque
+// clic, sinon un lien déjà envoyé deviendrait invalide) — même logique que
+// genererLienEvaluation.
+// "livret" et "attestation" restent volontairement HORS de cette table : ce sont
+// des documents consultés dans l'espace client (livret) ou générés en PDF sans page
+// de consultation publique par token (attestation) — cf. relance-documents-auto
+// (directLink) — donc pas de lien à token possible pour eux avec l'architecture
+// actuelle ; corriger ça est un chantier séparé (créer ces pages publiques), pas
+// traité ici.
+const MOTIF_TOKEN_CONFIG: Record<string, { tokenField: keyof Stagiaire; path: string }> = {
+  questionnaire_avant: { tokenField: "token_questionnaire_avant", path: "positionnement" },
+  questionnaire_apres: { tokenField: "token_questionnaire_apres", path: "positionnement" },
+  emargement: { tokenField: "token_emargement", path: "emargement" },
+  evaluation_chaud: { tokenField: "token_evaluation_chaud", path: "evaluation" },
+  evaluation_formateur: { tokenField: "token_evaluation_formateur", path: "evaluation" },
+  evaluation_froid: { tokenField: "token_evaluation_froid", path: "evaluation" },
+};
 
 const StagiairesList = ({
   sessionId,
@@ -479,6 +507,31 @@ const StagiairesList = ({
 
     setRelancing(stagiaire.id + motif);
     try {
+      // Chantier 3 (audit du 13/08) : cf. commentaire sur MOTIF_TOKEN_CONFIG —
+      // génère/réutilise le token public et construit le lien direct pour les
+      // motifs qui ont une page de consultation par token, avant d'appeler
+      // envoyer-relance (sinon celle-ci retombe sur /espace-client, inutilisable
+      // par un stagiaire sans compte).
+      let lien: string | undefined;
+      const tokenConfig = MOTIF_TOKEN_CONFIG[motif];
+      if (tokenConfig) {
+        let token = stagiaire[tokenConfig.tokenField] as string | null | undefined;
+        if (!token) {
+          token = crypto.randomUUID();
+          const { error: tokenErr } = await supabase
+            .from("stagiaires")
+            .update({ [tokenConfig.tokenField]: token })
+            .eq("id", stagiaire.id);
+          if (tokenErr) {
+            toast({ title: "Erreur", description: tokenErr.message, variant: "destructive" });
+            setRelancing(null);
+            return;
+          }
+          setStagiaires(prev => prev.map(st => st.id === stagiaire.id ? { ...st, [tokenConfig.tokenField]: token } as Stagiaire : st));
+        }
+        lien = `${window.location.origin}/${tokenConfig.path}/${token}`;
+      }
+
       const { data, error } = await supabase.functions.invoke("envoyer-relance", {
         body: {
           prenom: stagiaire.prenom,
@@ -490,6 +543,7 @@ const StagiairesList = ({
           canal,
           envoye_par,
           stagiaire_id: stagiaire.id,
+          ...(lien ? { lien } : {}),
         },
       });
 
