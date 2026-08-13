@@ -30,7 +30,7 @@ serve(async (req) => {
     // journaliser un nouveau consentement que si le choix change réellement.
     const { data: stagAvant } = await supabase
       .from("stagiaires")
-      .select("id, prenom, nom, session_id, doc_questionnaire_avant, reponses_questionnaire_avant, consentement_email, consentement_sms")
+      .select("id, prenom, nom, session_id, doc_questionnaire_avant, reponses_questionnaire_avant, consentement_email, consentement_sms, email_pro, telephone, token_emargement")
       .eq("token_questionnaire_avant", token)
       .maybeSingle();
 
@@ -111,6 +111,44 @@ serve(async (req) => {
         // un échec de journalisation ne doit pas faire échouer la soumission du
         // questionnaire, mais on le trace pour investigation.
         if (logErr) console.error("positionnement-public: échec journalisation consentement:", logErr.message);
+      }
+
+      // Correctif audit du 01/08 (test grandeur réelle) : une fois le questionnaire
+      // AVANT signé, le stagiaire est débloqué pour l'émargement (cf. StagiairesList.tsx
+      // et le verrou serveur côté support pédagogique), mais rien ne générait jusqu'ici
+      // le token_emargement ni ne prévenait le stagiaire que cette étape suivante était
+      // prête — aucun mécanisme automatique existant ne le faisait (déclencher-flow-session
+      // ne gère que livret + questionnaire avant). Non bloquant : un échec ici ne doit
+      // jamais invalider la soumission déjà enregistrée ci-dessus.
+      if (type === "avant") {
+        try {
+          const tokenEmargement = (s.token_emargement as string | null) || crypto.randomUUID();
+          const nowEmarg = new Date().toISOString();
+          const { error: updEmargErr } = await supabase
+            .from("stagiaires")
+            .update({ token_emargement: tokenEmargement, doc_emargement: "envoye", doc_emargement_envoye_le: nowEmarg })
+            .eq("id", s.id);
+          if (updEmargErr) throw new Error(updEmargErr.message);
+
+          const email = s.email_pro as string | null;
+          const telephone = s.telephone as string | null;
+          if (email || telephone) {
+            const { error: relanceErr } = await supabase.functions.invoke("envoyer-relance", {
+              body: {
+                prenom: s.prenom, nom: s.nom, email, telephone,
+                formation_titre: (formationInfo?.titre as string) || "votre formation",
+                motif: "emargement",
+                canal: "les_deux",
+                envoye_par: "system_positionnement_avant",
+                stagiaire_id: s.id,
+                lien: `https://qualioflex.fr/emargement/${tokenEmargement}`,
+              },
+            });
+            if (relanceErr) console.error("positionnement-public: échec notification émargement:", relanceErr.message);
+          }
+        } catch (notifErr) {
+          console.error("positionnement-public: échec déblocage émargement (non bloquant):", notifErr instanceof Error ? notifErr.message : notifErr);
+        }
       }
 
       return new Response(
