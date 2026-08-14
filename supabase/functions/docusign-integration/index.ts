@@ -21,6 +21,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create as createJWT, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 const DOCUSIGN_BASE_URL = Deno.env.get("DOCUSIGN_BASE_URL") ?? "https://demo.docusign.net";
 const DOCUSIGN_AUTH_URL = Deno.env.get("DOCUSIGN_AUTH_URL") ?? "https://account-d.docusign.com";
 const INTEGRATION_KEY = Deno.env.get("DOCUSIGN_INTEGRATION_KEY")!;
@@ -173,13 +178,17 @@ async function envoyerPourSignature(params: {
 // 3. Point d'entree HTTP de la fonction
 // ----------------------------------------------------------------------------
 serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const { document_id, pdf_base64, nom_document, signataires } = await req.json();
 
     if (!document_id || !pdf_base64 || !signataires?.length) {
       return new Response(
         JSON.stringify({ error: "Parametres manquants : document_id, pdf_base64, signataires" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -206,13 +215,13 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ success: true, envelope_id: envelopeId }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("Erreur docusign-integration:", err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Erreur inconnue" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
