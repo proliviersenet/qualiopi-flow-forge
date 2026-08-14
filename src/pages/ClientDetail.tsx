@@ -299,18 +299,68 @@ const ClientDetail = () => {
       container.innerHTML = gen.contenu_html;
       document.body.appendChild(container);
 
-      type Html2PdfWorker = { outputPdf: (type: string) => Promise<Blob> };
+      // Bug DocuSign (page blanche côté signataire) : html2canvas transforme tout
+      // le document en image, donc le PDF final ne contient aucun texte réel — les
+      // ancres /signature_formateur/ et /signature_client/ existent bien dans le
+      // HTML source mais disparaissent une fois rastérisées, et DocuSign ne peut
+      // jamais les localiser. On mesure ici la position exacte des zones de
+      // signature dans le DOM (avant rastérisation) pour pouvoir y superposer du
+      // texte réel, invisible, juste après génération du PDF — le rendu visuel ne
+      // change pas, mais DocuSign peut enfin retrouver les ancres.
+      const signaturesEl = container.querySelector<HTMLElement>(".signatures");
+      const zoneFormateurEl = container.querySelector<HTMLElement>("#signature-zone-formateur");
+      const zoneClientEl = container.querySelector<HTMLElement>("#signature-zone-client");
+
+      let sigCoords: { formateur: { x: number; y: number }; client: { x: number; y: number } } | null = null;
+      if (signaturesEl && zoneFormateurEl && zoneClientEl) {
+        // La div .signatures démarre systématiquement en haut d'une nouvelle page
+        // PDF (page-break-before: always côté generer-convention), donc sa position
+        // dans le DOM correspond exactement au coin haut-gauche de la zone utile de
+        // la dernière page. Conversion px -> mm : le conteneur fait 800px de large
+        // pour une largeur utile de page A4 de 190mm (210mm - 2x10mm de marge).
+        const baseRect = signaturesEl.getBoundingClientRect();
+        const PX_TO_MM = 190 / 800;
+        const MARGIN_MM = 10;
+        const toCoords = (el: HTMLElement) => {
+          const r = el.getBoundingClientRect();
+          return {
+            x: MARGIN_MM + (r.left - baseRect.left) * PX_TO_MM,
+            y: MARGIN_MM + (r.top - baseRect.top + r.height / 2) * PX_TO_MM,
+          };
+        };
+        sigCoords = { formateur: toCoords(zoneFormateurEl), client: toCoords(zoneClientEl) };
+      }
+
+      type JsPdfInstance = {
+        internal: { getNumberOfPages: () => number };
+        setPage: (page: number) => void;
+        text: (text: string, x: number, y: number, opts?: Record<string, unknown>) => void;
+        output: (type: string) => Blob;
+      };
+      type Html2PdfWorker = {
+        toPdf: () => Html2PdfWorker;
+        get: (key: string) => Promise<JsPdfInstance>;
+      };
       type Html2Pdf = () => { set: (opts: Record<string, unknown>) => { from: (el: HTMLElement) => Html2PdfWorker } };
       const html2pdf = (window as unknown as { html2pdf: Html2Pdf }).html2pdf;
 
       let pdfBlob: Blob;
       try {
-        pdfBlob = await html2pdf().set({
+        const pdf = await html2pdf().set({
           margin: 10,
           filename: "convention.pdf",
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        }).from(container).outputPdf("blob");
+        }).from(container).toPdf().get("pdf");
+
+        if (sigCoords) {
+          const totalPages = pdf.internal.getNumberOfPages();
+          pdf.setPage(totalPages);
+          pdf.text("/signature_formateur/", sigCoords.formateur.x, sigCoords.formateur.y, { renderingMode: "invisible" });
+          pdf.text("/signature_client/", sigCoords.client.x, sigCoords.client.y, { renderingMode: "invisible" });
+        }
+
+        pdfBlob = pdf.output("blob");
       } finally {
         document.body.removeChild(container);
       }
