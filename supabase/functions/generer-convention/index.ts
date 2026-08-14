@@ -103,7 +103,7 @@ serve(async (req) => {
   .bloc-partie { flex: 1; background: #f8f8fc; border-radius: 6px; padding: 12px 16px; font-size: 9.5pt; }
   .bloc-partie strong { color: #25245e; }
   table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin-top: 8px; }
-  .signatures { display: flex; justify-content: space-between; margin-top: 48px; gap: 24px; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 48px; gap: 24px; page-break-before: always; }
   .signature-bloc { flex: 1; text-align: center; }
   .signature-zone { border: 1px dashed #bbb; border-radius: 6px; height: 90px; margin-top: 10px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 9pt; }
   .footer-mention { font-size: 8pt; color: #999; margin-top: 30px; text-align: center; }
@@ -174,11 +174,11 @@ serve(async (req) => {
   <div class="signatures">
     <div class="signature-bloc">
       <p>Fait pour l'organisme de formation,<br/>${esc(org.raison_sociale) || ""}</p>
-      <div class="signature-zone">/signature_formateur/</div>
+      <div class="signature-zone" id="signature-zone-formateur">/signature_formateur/</div>
     </div>
     <div class="signature-bloc">
       <p>Fait pour le client,<br/>${esc(client.raison_sociale) || ""}</p>
-      <div class="signature-zone">/signature_client/</div>
+      <div class="signature-zone" id="signature-zone-client">/signature_client/</div>
     </div>
   </div>
 
