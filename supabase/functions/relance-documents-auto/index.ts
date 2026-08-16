@@ -37,6 +37,14 @@ interface DocType {
   // de relance pointe directement vers `path` (sans suffixe /token), comme le
   // fait déjà la relance manuelle générique (voir envoyer-relance).
   directLink?: boolean;
+  // Bug signalé par Olivier (16/08/2026) : le livret d'accueil est un PDF à
+  // télécharger/consulter, pas un formulaire à remplir — le texte générique
+  // "il vous reste à compléter" était donc trompeur pour ce type de document.
+  // verbe/participe permettent de personnaliser le message par type ; par
+  // défaut (undefined) on garde "compléter"/"complété" pour tous les types
+  // qui restent de vrais formulaires (émargement, questionnaires, évaluations).
+  verbe?: string;
+  participe?: string;
 }
 
 const DOC_TYPES: DocType[] = [
@@ -100,6 +108,8 @@ const DOC_TYPES: DocType[] = [
     path: "espace-client",
     directLink: true,
     label: "le livret d'accueil",
+    verbe: "télécharger",
+    participe: "téléchargé",
   },
   {
     // Étape 2 du flow Qualiopi (CONTEXT.md) — Form QalioFlex, BLOQUANTE (bloque
@@ -186,6 +196,8 @@ serve(async (req) => {
         const lien = dt.directLink
           ? `https://qualioflex.fr/${dt.path}`
           : (token ? `https://qualioflex.fr/${dt.path}/${token}` : null);
+        const verbe = dt.verbe ?? "compléter";
+        const participe = dt.participe ?? "complété";
 
         const hasEmail = s.consentement_email === true && !!s.email_pro;
         const hasSms = s.consentement_sms === true && !!s.telephone;
@@ -204,7 +216,7 @@ serve(async (req) => {
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
     <p>Bonjour <strong>${prenom} ${nom}</strong>,</p>
-    <p>Un petit rappel : il vous reste à compléter <strong>${dt.label}</strong> pour la formation <strong>"${titre}"</strong>.</p>
+    <p>Un petit rappel : il vous reste à ${verbe} <strong>${dt.label}</strong> pour la formation <strong>"${titre}"</strong>.</p>
     <div style="text-align:center;margin:30px 0;">
       <a href="${lien}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;">
         Accéder au lien →
@@ -240,7 +252,7 @@ serve(async (req) => {
               body: JSON.stringify({
                 sender: "QalioFlex",
                 recipient: phoneIntl,
-                content: `QalioFlex : Bonjour ${prenom}, rappel pour compléter ${dt.label} : ${lien}`,
+                content: `QalioFlex : Bonjour ${prenom}, rappel pour ${verbe} ${dt.label} : ${lien}`,
                 type: "transactional",
                 unicodeEnabled: false,
               }),
@@ -276,7 +288,7 @@ serve(async (req) => {
     <h1 style="color:#fff;margin:0;font-size:18px;">⚠️ QalioFlex — Document manquant</h1>
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
-    <p><strong>${prenom} ${nom}</strong> n'a toujours pas complété <strong>${dt.label}</strong> pour la formation <strong>"${titre}"</strong>, ${joursEcoules} jours après l'envoi du lien.</p>
+    <p><strong>${prenom} ${nom}</strong> n'a toujours pas ${participe} <strong>${dt.label}</strong> pour la formation <strong>"${titre}"</strong>, ${joursEcoules} jours après l'envoi du lien.</p>
     <p>Merci de relancer directement le stagiaire si besoin.</p>
     <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO</p>
   </div>
