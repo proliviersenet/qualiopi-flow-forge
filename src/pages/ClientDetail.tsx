@@ -262,17 +262,34 @@ const ClientDetail = () => {
     }
   };
 
-  // Chantier 5 : charge html2pdf.js à la volée depuis un CDN (aucune génération de
-  // PDF n'existait dans l'app) — évite d'ajouter une dépendance npm juste pour ce
-  // point d'entrée ponctuel.
-  const chargerHtml2pdf = () =>
+  // Bug "page blanche" (16/08/2026) : html2pdf.js (v0.10.1 comme v0.14.0, testé) a
+  // un bug interne qui produit un canvas de hauteur 0 quand on lui passe un
+  // conteneur positionné hors écran (position:fixed; left:-9999px — la technique
+  // standard pour rastériser du HTML sans l'afficher à l'écran). Résultat : le PDF
+  // envoyé à DocuSign était "valide" (pas d'erreur, 1 page) mais totalement blanc.
+  // Vérifié par test direct : html2canvas seul (chargé isolément, hors du bundle
+  // html2pdf.js) produit un canvas correct dans les mêmes conditions. On charge donc
+  // html2canvas + jsPDF séparément et on orchestre nous-mêmes le rendu + la
+  // pagination, sans passer par html2pdf.js.
+  const chargerLibsPdf = () =>
     new Promise<void>((resolve, reject) => {
-      if ((window as unknown as { html2pdf?: unknown }).html2pdf) { resolve(); return; }
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Impossible de charger l'outil de génération PDF."));
-      document.head.appendChild(script);
+      const w = window as unknown as { html2canvas?: unknown; jspdf?: unknown };
+      const chargerScript = (src: string) =>
+        new Promise<void>((res, rej) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => res();
+          script.onerror = () => rej(new Error("Impossible de charger l'outil de génération PDF."));
+          document.head.appendChild(script);
+        });
+      const promesses: Promise<void>[] = [];
+      if (!w.html2canvas) {
+        promesses.push(chargerScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"));
+      }
+      if (!w.jspdf) {
+        promesses.push(chargerScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"));
+      }
+      Promise.all(promesses).then(() => resolve()).catch(reject);
     });
 
   // Chantier 5 : convertit la convention (HTML) en PDF côté client, puis l'envoie
@@ -289,7 +306,7 @@ const ClientDetail = () => {
 
       setDocsSession(prev => ({ ...prev, [sessionId]: { ...(prev[sessionId] || {}), convention: gen.contenu_html } }));
 
-      await chargerHtml2pdf();
+      await chargerLibsPdf();
 
       const container = document.createElement("div");
       container.style.position = "fixed";
@@ -311,16 +328,20 @@ const ClientDetail = () => {
       const zoneFormateurEl = container.querySelector<HTMLElement>("#signature-zone-formateur");
       const zoneClientEl = container.querySelector<HTMLElement>("#signature-zone-client");
 
+      const PX_TO_MM = 190 / 800;
+      const MARGIN_MM = 10;
+      let signaturesTopPx: number | null = null;
       let sigCoords: { formateur: { x: number; y: number }; client: { x: number; y: number } } | null = null;
       if (signaturesEl && zoneFormateurEl && zoneClientEl) {
-        // La div .signatures démarre systématiquement en haut d'une nouvelle page
-        // PDF (page-break-before: always côté generer-convention), donc sa position
-        // dans le DOM correspond exactement au coin haut-gauche de la zone utile de
-        // la dernière page. Conversion px -> mm : le conteneur fait 800px de large
-        // pour une largeur utile de page A4 de 190mm (210mm - 2x10mm de marge).
+        // La div .signatures doit systématiquement démarrer en haut d'une nouvelle
+        // page PDF : on force ce saut de page nous-mêmes (voir découpage du canvas
+        // plus bas) puisque html2canvas ignore la CSS page-break-before. Sa position
+        // dans le DOM correspond alors exactement au coin haut-gauche de la zone
+        // utile de la dernière page. Conversion px -> mm : le conteneur fait 800px
+        // de large pour une largeur utile de page A4 de 190mm (210mm - 2x10mm de marge).
+        const containerRect = container.getBoundingClientRect();
         const baseRect = signaturesEl.getBoundingClientRect();
-        const PX_TO_MM = 190 / 800;
-        const MARGIN_MM = 10;
+        signaturesTopPx = baseRect.top - containerRect.top;
         const toCoords = (el: HTMLElement) => {
           const r = el.getBoundingClientRect();
           return {
@@ -334,24 +355,54 @@ const ClientDetail = () => {
       type JsPdfInstance = {
         internal: { getNumberOfPages: () => number };
         setPage: (page: number) => void;
+        addPage: () => void;
+        addImage: (data: string, format: string, x: number, y: number, w: number, h: number) => void;
         text: (text: string, x: number, y: number, opts?: Record<string, unknown>) => void;
         output: (type: string) => Blob;
       };
-      type Html2PdfWorker = {
-        toPdf: () => Html2PdfWorker;
-        get: (key: string) => Promise<JsPdfInstance>;
-      };
-      type Html2Pdf = () => { set: (opts: Record<string, unknown>) => { from: (el: HTMLElement) => Html2PdfWorker } };
-      const html2pdf = (window as unknown as { html2pdf: Html2Pdf }).html2pdf;
 
       let pdfBlob: Blob;
       try {
-        const pdf = await html2pdf().set({
-          margin: 10,
-          filename: "convention.pdf",
-          html2canvas: { scale: 2, useCORS: true },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        }).from(container).toPdf().get("pdf");
+        const html2canvas = (window as unknown as { html2canvas: (el: HTMLElement, opts?: Record<string, unknown>) => Promise<HTMLCanvasElement> }).html2canvas;
+        const { jsPDF } = (window as unknown as { jspdf: { jsPDF: new (opts: Record<string, unknown>) => JsPdfInstance } }).jspdf;
+
+        const scale = 2;
+        const canvas = await html2canvas(container, { scale, useCORS: true });
+
+        const contentWidthMM = 190;
+        const pageHeightMM = 277; // 297 (A4) - 2x10mm de marge
+        const pxToMmCanvas = contentWidthMM / canvas.width;
+        const pageHeightCanvasPx = (pageHeightMM / pxToMmCanvas);
+
+        // Construit la liste des points de coupure du canvas (en px canvas) :
+        // découpage automatique toutes les "pageHeightCanvasPx", avec un saut de
+        // page forcé exactement au début de la zone de signatures.
+        const signaturesTopCanvasPx = signaturesTopPx !== null ? signaturesTopPx * scale : null;
+        const breaks = [0];
+        let y = 0;
+        const limite = signaturesTopCanvasPx !== null ? signaturesTopCanvasPx : canvas.height;
+        while (y + pageHeightCanvasPx < limite) { y += pageHeightCanvasPx; breaks.push(Math.round(y)); }
+        if (signaturesTopCanvasPx !== null && signaturesTopCanvasPx > breaks[breaks.length - 1]) {
+          breaks.push(Math.round(signaturesTopCanvasPx));
+          y = signaturesTopCanvasPx;
+          while (y + pageHeightCanvasPx < canvas.height) { y += pageHeightCanvasPx; breaks.push(Math.round(y)); }
+        }
+        breaks.push(canvas.height);
+        const pageBreaks = breaks.filter((b, i) => i === 0 || b > breaks[i - 1]);
+
+        const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+        for (let i = 0; i < pageBreaks.length - 1; i++) {
+          const sy = pageBreaks[i];
+          const sh = pageBreaks[i + 1] - pageBreaks[i];
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = sh;
+          const ctx = sliceCanvas.getContext("2d");
+          ctx?.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+          const imgData = sliceCanvas.toDataURL("image/jpeg", 0.92);
+          if (i > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", MARGIN_MM, MARGIN_MM, contentWidthMM, sh * pxToMmCanvas);
+        }
 
         if (sigCoords) {
           const totalPages = pdf.internal.getNumberOfPages();
