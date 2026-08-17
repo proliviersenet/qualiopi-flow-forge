@@ -134,6 +134,11 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                   )}
                   {role !== "client" && (
                     <DropdownMenuItem asChild>
+                      <Link to="/pre-audit">Pré-audit Qualiopi</Link>
+                    </DropdownMenuItem>
+                  )}
+                  {role !== "client" && (
+                    <DropdownMenuItem asChild>
                       <Link to="/qualiopi-statut">Statut réglementaire</Link>
                     </DropdownMenuItem>
                   )}
