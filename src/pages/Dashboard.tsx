@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import DashboardCard from '@/components/DashboardCard';
@@ -13,6 +14,53 @@ import {
 } from "recharts";
 
 const COLORS = ['#4CAF50', '#8BC34A', '#FFC107', '#FF9800', '#F44336'];
+
+// Badge d'alerte "Actions requises" cliquable — ouvre la liste précise des
+// dossiers concernés, chacun lié vers la fiche client où traiter le problème.
+// Corrige le point remonté par Olivier le 17/08 : les alertes n'atterrissaient
+// nulle part auparavant.
+const AlerteDetailPopover = ({
+  icone,
+  texte,
+  items,
+}: {
+  icone: string;
+  texte: string;
+  items: { clientId: string | null; label: string }[];
+}) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <button type="button" className="underline decoration-dotted hover:text-amber-900 transition-colors">
+        {icone} {texte}
+      </button>
+    </PopoverTrigger>
+    <PopoverContent className="w-80 max-h-72 overflow-y-auto">
+      <p className="text-xs font-medium text-gray-500 mb-2">Cliquez pour aller directement corriger :</p>
+      <div className="space-y-1">
+        {items.length === 0 && <p className="text-xs text-gray-400">Détail indisponible.</p>}
+        {items.map((item, i) => (
+          item.clientId ? (
+            <Link
+              key={i}
+              to={`/clients/${item.clientId}`}
+              className="block text-sm text-exsenco-blue hover:underline py-1 px-2 -mx-2 rounded hover:bg-gray-50"
+            >
+              {item.label}
+            </Link>
+          ) : (
+            <Link
+              key={i}
+              to="/clients"
+              className="block text-sm text-exsenco-blue hover:underline py-1 px-2 -mx-2 rounded hover:bg-gray-50"
+            >
+              {item.label} <span className="text-gray-400">(voir Clients)</span>
+            </Link>
+          )
+        ))}
+      </div>
+    </PopoverContent>
+  </Popover>
+);
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -47,6 +95,8 @@ const Dashboard = () => {
     nbAvisFormateur: 0,
   });
   const [sessionsRecentes, setSessionsRecentes] = useState<Record<string, unknown>[]>([]);
+  const [documentsEnAttenteDetail, setDocumentsEnAttenteDetail] = useState<{ clientId: string | null; label: string }[]>([]);
+  const [questionnairesEnAttenteDetail, setQuestionnairesEnAttenteDetail] = useState<{ clientId: string | null; label: string }[]>([]);
   const [satisfactionData, setSatisfactionData] = useState<{ name: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,9 +144,11 @@ const Dashboard = () => {
         // plusieurs sur la plateforme.
         const { data: formationsOrg } = await supabase
           .from('formations')
-          .select('id')
+          .select('id, titre')
           .eq('organisme_id', profile.organisme_id);
         const formationIds = (formationsOrg || []).map((f: { id: string }) => f.id);
+        const formationTitreMap: Record<string, string> = {};
+        (formationsOrg || []).forEach((f: { id: string; titre?: string }) => { formationTitreMap[f.id] = f.titre || 'Formation'; });
 
         // Stats sessions — scopées aux formations de l'organisme.
         const { data: sessions } = formationIds.length > 0
@@ -117,11 +169,18 @@ const Dashboard = () => {
           : { count: 0 };
 
         // Toutes les sessions de l'organisme (tous statuts) — périmètre pour les
-        // documents/signatures ci-dessous.
+        // documents/signatures ci-dessous. client_id/formation_id récupérés en plus
+        // pour pouvoir faire pointer les alertes "Actions requises" directement vers
+        // la fiche client concernée (point non bloquant remonté par Olivier : les
+        // alertes n'atterrissaient nulle part).
         const { data: allSessionsOrg } = formationIds.length > 0
-          ? await supabase.from('sessions').select('id').in('formation_id', formationIds)
-          : { data: [] as { id: string }[] };
+          ? await supabase.from('sessions').select('id, client_id, formation_id').in('formation_id', formationIds)
+          : { data: [] as { id: string; client_id: string | null; formation_id: string | null }[] };
         const sessionIds = (allSessionsOrg || []).map((s: { id: string }) => s.id);
+        const sessionInfoMap: Record<string, { clientId: string | null; formationId: string | null }> = {};
+        (allSessionsOrg || []).forEach((s: { id: string; client_id: string | null; formation_id: string | null }) => {
+          sessionInfoMap[s.id] = { clientId: s.client_id, formationId: s.formation_id };
+        });
 
         // Stats bénéficiaires — la table "beneficiaires" est un reliquat d'un ancien
         // schéma, plus alimentée par le reste de l'app (confirmé : aucun autre écran
@@ -130,18 +189,25 @@ const Dashboard = () => {
         // sur stagiaires, donc on passe par la liste des clients de l'organisme).
         const { data: clientsOrg } = await supabase
           .from('clients')
-          .select('id')
+          .select('id, raison_sociale')
           .eq('organisme_id', profile.organisme_id);
         const clientIds = (clientsOrg || []).map((c: { id: string }) => c.id);
+        const clientNomMap: Record<string, string> = {};
+        (clientsOrg || []).forEach((c: { id: string; raison_sociale?: string }) => { clientNomMap[c.id] = c.raison_sociale || 'Client'; });
 
         const { count: nbBenef, data: stagiairesOrg } = clientIds.length > 0
           ? await supabase
               .from('stagiaires')
-              .select('doc_questionnaire_avant, reponses_evaluation_chaud, reponses_evaluation_formateur', { count: 'exact' })
+              .select('id, nom, prenom, client_id, session_id, doc_questionnaire_avant, reponses_evaluation_chaud, reponses_evaluation_formateur', { count: 'exact' })
               .in('client_id', clientIds)
           : {
               count: 0,
               data: [] as {
+                id: string;
+                nom?: string;
+                prenom?: string;
+                client_id?: string | null;
+                session_id?: string | null;
                 doc_questionnaire_avant?: string | null;
                 reponses_evaluation_chaud?: { notes?: Record<string, number> } | null;
                 reponses_evaluation_formateur?: { notes?: Record<string, number> } | null;
@@ -154,22 +220,44 @@ const Dashboard = () => {
         // n'était filtrée par aucun organisme et remontait les signatures de toute la
         // plateforme, pas seulement celles de l'organisme connecté.
         let nbDocs = 0;
+        // Détail par client des documents en attente (point non bloquant du 17/08 :
+        // l'alerte "Actions requises" ne menait nulle part — chaque entrée pointe
+        // maintenant vers la fiche du client concerné).
+        const documentsEnAttenteDetail: { clientId: string | null; label: string }[] = [];
         if (formationIds.length > 0 || sessionIds.length > 0) {
           const orParts: string[] = [];
           if (formationIds.length > 0) orParts.push(`formation_id.in.(${formationIds.join(',')})`);
           if (sessionIds.length > 0) orParts.push(`session_id.in.(${sessionIds.join(',')})`);
           const { data: docsOrg } = await supabase
             .from('documents_formation')
-            .select('id')
+            .select('id, type, session_id, formation_id')
             .or(orParts.join(','));
-          const docIds = (docsOrg || []).map((d: { id: string }) => d.id);
+          const docsById: Record<string, { type?: string; session_id?: string | null; formation_id?: string | null }> = {};
+          (docsOrg || []).forEach((d: { id: string; type?: string; session_id?: string | null; formation_id?: string | null }) => {
+            docsById[d.id] = d;
+          });
+          const docIds = Object.keys(docsById);
           if (docIds.length > 0) {
-            const { count } = await supabase
+            const { data: sigsEnAttente, count } = await supabase
               .from('signatures')
-              .select('*', { count: 'exact', head: true })
+              .select('document_id', { count: 'exact' })
               .eq('statut', 'en_attente')
               .in('document_id', docIds);
             nbDocs = count || 0;
+            (sigsEnAttente || []).forEach((sig: { document_id: string }) => {
+              const doc = docsById[sig.document_id];
+              if (!doc) return;
+              const sessionInfo = doc.session_id ? sessionInfoMap[doc.session_id] : undefined;
+              const clientId = sessionInfo?.clientId || null;
+              const formationId = sessionInfo?.formationId || doc.formation_id || null;
+              const typeLabel = doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document';
+              const formationTitre = formationId ? formationTitreMap[formationId] : undefined;
+              const clientNom = clientId ? clientNomMap[clientId] : undefined;
+              documentsEnAttenteDetail.push({
+                clientId,
+                label: `${typeLabel}${formationTitre ? ' — ' + formationTitre : ''}${clientNom ? ' (' + clientNom + ')' : ''}`,
+              });
+            });
           }
         }
 
@@ -180,10 +268,17 @@ const Dashboard = () => {
 
         // Questionnaires non complétés — calculé directement sur les vrais stagiaires
         // de l'organisme (doc_questionnaire_avant non signé), au lieu de la table
-        // "enquetes_preformation" qui n'est alimentée par aucun autre écran.
-        const nbQuestionnaires = (stagiairesOrg || []).filter(
+        // "enquetes_preformation" qui n'est alimentée par aucun autre écran. Détail
+        // par stagiaire pour que l'alerte pointe directement vers la bonne fiche
+        // client (même correctif que documentsEnAttenteDetail ci-dessus).
+        const stagiairesQuestionnaireEnAttente = (stagiairesOrg || []).filter(
           (s) => s.doc_questionnaire_avant !== 'signe'
-        ).length;
+        );
+        const nbQuestionnaires = stagiairesQuestionnaireEnAttente.length;
+        const questionnairesEnAttenteDetail = stagiairesQuestionnaireEnAttente.map((s) => ({
+          clientId: s.client_id || null,
+          label: `${s.prenom || ''} ${s.nom || ''}`.trim() + (s.client_id && clientNomMap[s.client_id] ? ` (${clientNomMap[s.client_id]})` : ''),
+        }));
 
         // Indicateurs Qualiopi OK
         const { count: nbIndicateurs } = await supabase
@@ -250,6 +345,8 @@ const Dashboard = () => {
           noteFormateur,
           nbAvisFormateur,
         });
+        setDocumentsEnAttenteDetail(documentsEnAttenteDetail);
+        setQuestionnairesEnAttenteDetail(questionnairesEnAttenteDetail);
 
         setSessionsRecentes((sessions || []) as Record<string, unknown>[]);
 
@@ -337,14 +434,29 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Alertes actions requises */}
+          {/* Alertes actions requises — point non bloquant du 17/08 (Olivier) : ces
+              alertes n'atterrissaient nulle part. Chaque badge ouvre désormais la
+              liste précise des dossiers concernés, chacun lié à la fiche client où
+              corriger réellement le problème. */}
           {!loading && (stats.documentsEnAttente > 0 || stats.relancesEnAttente > 0 || stats.questionnairesEnAttente > 0) && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="font-medium text-amber-800 mb-2">Actions requises</p>
               <div className="flex flex-wrap gap-3 text-sm text-amber-700">
-                {stats.documentsEnAttente > 0 && <span>✍️ {stats.documentsEnAttente} document(s) en attente de signature</span>}
+                {stats.documentsEnAttente > 0 && (
+                  <AlerteDetailPopover
+                    icone="✍️"
+                    texte={`${stats.documentsEnAttente} document(s) en attente de signature`}
+                    items={documentsEnAttenteDetail}
+                  />
+                )}
                 {stats.relancesEnAttente > 0 && <span>📧 {stats.relancesEnAttente} relance(s) à envoyer</span>}
-                {stats.questionnairesEnAttente > 0 && <span>📋 {stats.questionnairesEnAttente} questionnaire(s) non complété(s)</span>}
+                {stats.questionnairesEnAttente > 0 && (
+                  <AlerteDetailPopover
+                    icone="📋"
+                    texte={`${stats.questionnairesEnAttente} questionnaire(s) non complété(s)`}
+                    items={questionnairesEnAttenteDetail}
+                  />
+                )}
               </div>
             </div>
           )}
