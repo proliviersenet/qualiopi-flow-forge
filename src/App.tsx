@@ -31,6 +31,7 @@ import EspaceClientProfil from "./pages/EspaceClientProfil";
 import EspaceClientParametres from "./pages/EspaceClientParametres";
 import Factures from "./pages/Factures";
 import VeilleQualiopi from "./pages/VeilleQualiopi";
+import PreAudit from "./pages/PreAudit";
 import NotationsFormateur from "./pages/NotationsFormateur";
 import ChatbotEscalades from "./pages/ChatbotEscalades";
 import AvisPublic from "./pages/AvisPublic";
@@ -87,6 +88,7 @@ const App = () => (
           <Route path="/espace-client/parametres" element={<EspaceClientParametres />} />
           <Route path="/factures" element={<Factures />} />
           <Route path="/qualiopi-statut" element={<VeilleQualiopi />} />
+          <Route path="/pre-audit" element={<PreAudit />} />
           <Route path="/notations-formateur" element={<NotationsFormateur />} />
           <Route path="/chatbot-escalades" element={<ChatbotEscalades />} />
           <Route path="/avis/:organismeId" element={<AvisPublic />} />
