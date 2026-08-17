@@ -60,9 +60,21 @@ const EspaceClientParametres = () => {
       return;
     }
     setSavingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
-    if (error) {
-      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+    const { data, error } = await supabase.functions.invoke("changer-mot-de-passe", {
+      body: { newPassword: passwordForm.newPassword },
+    });
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur", description: message, variant: "destructive" });
     } else {
       setPasswordForm({ newPassword: "", confirmPassword: "" });
       toast({ title: "Mot de passe mis à jour", description: "Votre mot de passe a bien été modifié." });

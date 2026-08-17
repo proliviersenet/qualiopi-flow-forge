@@ -37,6 +37,7 @@ const Settings = () => {
   const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
   const [deleteStep, setDeleteStep] = useState<DeleteStep>("idle");
   const [deleting, setDeleting] = useState(false);
+  const [payingStripe, setPayingStripe] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -79,9 +80,21 @@ const Settings = () => {
       return;
     }
     setSavingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
-    if (error) {
-      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+    const { data, error } = await supabase.functions.invoke("changer-mot-de-passe", {
+      body: { newPassword: passwordForm.newPassword },
+    });
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur", description: message, variant: "destructive" });
     } else {
       setPasswordForm({ newPassword: "", confirmPassword: "" });
       toast({ title: "Mot de passe mis à jour", description: "Votre mot de passe a bien été modifié." });
@@ -118,6 +131,47 @@ const Settings = () => {
       navigate("/login");
     }, 3000);
   };
+
+  // Paiement Stripe (10 € de frais de récupération de données)
+  const payerAvecStripe = async () => {
+    setPayingStripe(true);
+    const { data, error } = await supabase.functions.invoke("stripe-checkout-recuperation");
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Paiement indisponible", description: message, variant: "destructive" });
+      setPayingStripe(false);
+      return;
+    }
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      setPayingStripe(false);
+    }
+  };
+
+  // Retour depuis Stripe Checkout (succès ou annulation)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paiement = params.get("paiement");
+    if (paiement === "succes") {
+      window.history.replaceState({}, "", "/settings");
+      toast({ title: "Paiement reçu", description: "Merci ! Votre demande de suppression avec récupération de données est enregistrée." });
+      handleDeleteNoRecovery();
+    } else if (paiement === "annule") {
+      window.history.replaceState({}, "", "/settings");
+      toast({ title: "Paiement annulé", description: "Vous pouvez réessayer à tout moment.", variant: "destructive" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
@@ -325,18 +379,28 @@ const Settings = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Étape 3 — Paiement (placeholder Stripe) */}
+      {/* Étape 3 — Paiement (Stripe Checkout, avec virement en repli) */}
       <Dialog open={deleteStep === "payment"} onOpenChange={() => setDeleteStep("idle")}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Paiement — 10 €</DialogTitle>
             <DialogDescription className="pt-2 space-y-3">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-sm text-blue-700 font-medium">Module de paiement en cours d'intégration</p>
-                <p className="text-xs text-blue-500 mt-1">(Stripe — disponible prochainement)</p>
+              <p className="text-sm text-gray-600">
+                Réglez les <strong>10 €</strong> de frais de récupération par carte bancaire (paiement sécurisé Stripe).
+              </p>
+              <Button
+                className="w-full font-bold"
+                style={{ background: "#635bff", color: "#fff" }}
+                onClick={payerAvecStripe}
+                disabled={payingStripe}
+              >
+                {payingStripe ? "Redirection vers Stripe..." : "💳 Payer 10 € par carte"}
+              </Button>
+              <div className="relative py-1 text-center">
+                <span className="text-xs text-gray-400 bg-white px-2">ou par virement</span>
               </div>
               <p className="text-sm text-gray-600">
-                En attendant, envoyez un virement de <strong>10 €</strong> avec la référence <strong>RECUP-{user?.email}</strong> à :
+                Envoyez un virement de <strong>10 €</strong> avec la référence <strong>RECUP-{user?.email}</strong> à :
               </p>
               <div className="bg-gray-50 rounded-lg p-3 text-sm font-mono">
                 <p>EXSENCO</p>
@@ -356,7 +420,7 @@ const Settings = () => {
               onClick={handleDeleteNoRecovery}
               disabled={deleting}
             >
-              {deleting ? "Traitement..." : "J'ai payé — supprimer mon compte"}
+              {deleting ? "Traitement..." : "J'ai payé par virement — supprimer mon compte"}
             </Button>
           </DialogFooter>
         </DialogContent>

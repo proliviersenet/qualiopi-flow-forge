@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
+import { validatePassword } from "@/lib/passwordUtils";
 
 const ResetPassword = () => {
   const { toast } = useToast();
@@ -58,14 +59,29 @@ const ResetPassword = () => {
       toast({ title: "Les mots de passe ne correspondent pas", variant: "destructive" });
       return;
     }
-    if (password.length < 8) {
-      toast({ title: "Mot de passe trop court", description: "8 caractères minimum", variant: "destructive" });
+    const check = validatePassword(password);
+    if (!check.valid) {
+      toast({ title: "Mot de passe insuffisant", description: check.message, variant: "destructive" });
       return;
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke("changer-mot-de-passe", {
+        body: { newPassword: password },
+      });
+      if (error || data?.error) {
+        let message = data?.error || error?.message;
+        const ctx = (error as { context?: Response })?.context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const body = await ctx.clone().json();
+            if (body?.error) message = body.error;
+          } catch {
+            // corps non-JSON, on garde le message par défaut
+          }
+        }
+        throw new Error(message);
+      }
       toast({ title: "Mot de passe mis à jour", description: "Vous pouvez maintenant vous connecter." });
       navigate("/login");
     } catch (error: unknown) {
