@@ -231,7 +231,21 @@ const StagiairesList = ({
 
   // Génération de l'attestation réservée au formateur (comme livret/émargement/devis
   // dans ClientDetail.tsx) — le client ne fait que la consulter une fois disponible.
+  //
+  // Point non bloquant (audit 16/08) : à la différence de l'émargement et de
+  // l'évaluation à chaud (exigences Qualiopi, bloquées côté serveur), la
+  // notation du formateur par le stagiaire n'est PAS une obligation légale —
+  // l'attestation est un document dont la délivrance ne doit pas être
+  // conditionnée à une évaluation optionnelle (risque de la rendre perçue
+  // comme "monnayée" contre un avis). On se contente donc d'un avertissement
+  // ici, pas d'un verrou serveur comme pour les deux autres.
   const genererAttestation = async (stagiaire: Stagiaire) => {
+    if (stagiaire.doc_evaluation_formateur !== "signe") {
+      const continuer = window.confirm(
+        "Ce stagiaire n'a pas encore noté le formateur. Il est recommandé d'attendre sa réponse avant de délivrer l'attestation. Générer quand même ?"
+      );
+      if (!continuer) return;
+    }
     setGeneratingAttestation(stagiaire.id);
     const { data, error } = await supabase.functions.invoke("generer-attestation", {
       body: { stagiaire_id: stagiaire.id },
@@ -550,7 +564,7 @@ const StagiairesList = ({
       console.log("Réponse relance:", JSON.stringify(data), JSON.stringify(error));
 
       if (error || data?.error) {
-        let errMsg = error?.message || data?.error || "Erreur inconnue";
+        const errMsg = error?.message || data?.error || "Erreur inconnue";
         throw new Error(errMsg);
       }
 
@@ -830,13 +844,18 @@ const StagiairesList = ({
                       </button>
                     ) : envoye_par === "formateur" ? (
                       peutGenererAttestation(s) ? (
-                        <Button
-                          size="sm" variant="outline" className="h-6 text-xs px-2"
-                          disabled={generatingAttestation === s.id}
-                          onClick={() => genererAttestation(s)}
-                        >
-                          {generatingAttestation === s.id ? "..." : "🎓 Générer"}
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm" variant="outline" className="h-6 text-xs px-2"
+                            disabled={generatingAttestation === s.id}
+                            onClick={() => genererAttestation(s)}
+                          >
+                            {generatingAttestation === s.id ? "..." : "🎓 Générer"}
+                          </Button>
+                          {s.doc_evaluation_formateur !== "signe" && (
+                            <span title="Le stagiaire n'a pas encore noté le formateur (non bloquant)." className="text-amber-500 text-xs">⚠️</span>
+                          )}
+                        </div>
                       ) : (
                         <Badge
                           className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-400"
