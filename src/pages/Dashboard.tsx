@@ -546,7 +546,15 @@ const Dashboard = () => {
                   <div className="text-sm font-medium">{Math.round((stats.indicateursOk / 32) * 100)}%</div>
                 </div>
                 {stats.indicateursOk === 0 && (
-                  <p className="text-sm text-gray-500 mt-4">La checklist se complète automatiquement au fur et à mesure de votre activité.</p>
+                  <p className="text-sm text-gray-500 mt-4">
+                    Cette checklist se remplit à chaque pré-audit.{" "}
+                    <Link to="/pre-audit" className="text-exsenco-blue hover:underline font-medium">Lancer votre premier pré-audit &rarr;</Link>
+                  </p>
+                )}
+                {stats.indicateursOk > 0 && (
+                  <p className="text-sm text-gray-500 mt-4">
+                    <Link to="/pre-audit" className="text-exsenco-blue hover:underline font-medium">Voir le détail et relancer un pré-audit &rarr;</Link>
+                  </p>
                 )}
               </Card>
             </TabsContent>

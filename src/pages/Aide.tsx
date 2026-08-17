@@ -12,7 +12,7 @@ const faqs = [
   { q: "Comment changer mon mot de passe ?", r: "Menu avatar → 'Paramètres' → section 'Sécurité'. Le nouveau mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial." },
   { q: "Mon BPF ne se crée pas — que faire ?", r: "Vérifiez que votre compte est bien rattaché à un organisme (page Profil → section 'Mon organisme'). Si la section n'apparaît pas, contactez le support." },
   { q: "Puis-je supprimer une formation publiée ?", r: "Oui — depuis la liste des formations, ouvrez la formation puis cliquez sur 'Supprimer'. Attention : cette action est irréversible." },
-  { q: "Quand auront lieu les prochaines fonctionnalités ?", r: "La roadmap inclut : pré-audit Qualiopi, intégration Stripe pour la facturation. Les mises à jour sont déployées automatiquement. (Le module de notation des formateurs est déjà disponible : menu 'Notations'.)" },
+  { q: "Quand auront lieu les prochaines fonctionnalités ?", r: "La roadmap inclut l'intégration Stripe pour la facturation. Les mises à jour sont déployées automatiquement. (Le module de notation des formateurs et le pré-audit Qualiopi sont déjà disponibles : menus 'Notations' et 'Pré-audit Qualiopi'.)" },
 ];
 
 const Aide = () => {
