@@ -33,7 +33,7 @@ const Dashboard = () => {
     questionnairesEnAttente: number;
     indicateursOk: number;
     noteFormateur: number | null;
-    nbNotesFormateur: number;
+    nbAvisFormateur: number;
   }>({
     formations: 0,
     sessions: 0,
@@ -44,7 +44,7 @@ const Dashboard = () => {
     questionnairesEnAttente: 0,
     indicateursOk: 0,
     noteFormateur: null,
-    nbNotesFormateur: 0,
+    nbAvisFormateur: 0,
   });
   const [sessionsRecentes, setSessionsRecentes] = useState<Record<string, unknown>[]>([]);
   const [satisfactionData, setSatisfactionData] = useState<{ name: string; value: number }[]>([]);
@@ -208,13 +208,20 @@ const Dashboard = () => {
         // Note formateur (point non bloquant #E2 de l'audit du 16/08 : absente du
         // Dashboard principal jusqu'ici, visible uniquement sur /notations-formateur).
         // Même logique de calcul que NotationsFormateur.tsx : notes 0-4 par question,
-        // toutes questions/répondants confondus, moyenne convertie sur 5. Les avis
-        // stagiaires (reponses_evaluation_formateur) et clients
-        // (evaluations_formateur_clients.reponses) sont agrégés ensemble.
+        // toutes questions confondues, moyenne convertie sur 5. Les avis stagiaires
+        // (reponses_evaluation_formateur) et clients (evaluations_formateur_clients.
+        // reponses) sont agrégés ensemble. Important : "nombre d'avis" compte les
+        // RÉPONDANTS (une entrée par stagiaire/client ayant répondu), pas les notes
+        // individuelles — sinon un seul répondant ayant noté sur plusieurs questions
+        // gonflerait artificiellement le compteur (ex: 1 répondant × 6 questions
+        // affichait à tort "6 avis"), en écart avec le "1" affiché sur
+        // /notations-formateur pour les mêmes données.
         const notesFormateur: number[] = [];
+        let nbAvisFormateur = 0;
         (stagiairesOrg || []).forEach((s) => {
           const reponses = s.reponses_evaluation_formateur?.notes || {};
-          Object.values(reponses).forEach((v) => { if (typeof v === 'number') notesFormateur.push(v); });
+          const valeurs = Object.values(reponses).filter((v) => typeof v === 'number');
+          if (valeurs.length > 0) { notesFormateur.push(...valeurs); nbAvisFormateur++; }
         });
         if (sessionIds.length > 0) {
           const { data: evalsClients } = await supabase
@@ -223,7 +230,8 @@ const Dashboard = () => {
             .in('session_id', sessionIds);
           (evalsClients || []).forEach((e: { reponses?: { notes?: Record<string, number> } | null }) => {
             const reponses = e.reponses?.notes || {};
-            Object.values(reponses).forEach((v) => { if (typeof v === 'number') notesFormateur.push(v); });
+            const valeurs = Object.values(reponses).filter((v) => typeof v === 'number');
+            if (valeurs.length > 0) { notesFormateur.push(...valeurs); nbAvisFormateur++; }
           });
         }
         const noteFormateur = notesFormateur.length > 0
@@ -240,7 +248,7 @@ const Dashboard = () => {
           questionnairesEnAttente: nbQuestionnaires || 0,
           indicateursOk: nbIndicateurs || 0,
           noteFormateur,
-          nbNotesFormateur: notesFormateur.length,
+          nbAvisFormateur,
         });
 
         setSessionsRecentes((sessions || []) as Record<string, unknown>[]);
@@ -306,7 +314,7 @@ const Dashboard = () => {
       value: loading ? "..." : stats.noteFormateur !== null ? `${stats.noteFormateur.toFixed(1)}/5` : "—",
       icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 21.04a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>,
       trend: "neutral" as const,
-      trendValue: stats.nbNotesFormateur > 0 ? `${stats.nbNotesFormateur} avis` : "Aucun avis",
+      trendValue: stats.nbAvisFormateur > 0 ? `${stats.nbAvisFormateur} avis` : "Aucun avis",
       to: "/notations-formateur",
     },
   ];
