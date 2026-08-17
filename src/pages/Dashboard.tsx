@@ -23,7 +23,18 @@ const Dashboard = () => {
   };
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [organisme, setOrganisme] = useState<Record<string, unknown> | null>(null);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<{
+    formations: number;
+    sessions: number;
+    beneficiaires: number;
+    tauxSatisfaction: number;
+    documentsEnAttente: number;
+    relancesEnAttente: number;
+    questionnairesEnAttente: number;
+    indicateursOk: number;
+    noteFormateur: number | null;
+    nbNotesFormateur: number;
+  }>({
     formations: 0,
     sessions: 0,
     beneficiaires: 0,
@@ -32,6 +43,8 @@ const Dashboard = () => {
     relancesEnAttente: 0,
     questionnairesEnAttente: 0,
     indicateursOk: 0,
+    noteFormateur: null,
+    nbNotesFormateur: 0,
   });
   const [sessionsRecentes, setSessionsRecentes] = useState<Record<string, unknown>[]>([]);
   const [satisfactionData, setSatisfactionData] = useState<{ name: string; value: number }[]>([]);
@@ -124,9 +137,16 @@ const Dashboard = () => {
         const { count: nbBenef, data: stagiairesOrg } = clientIds.length > 0
           ? await supabase
               .from('stagiaires')
-              .select('doc_questionnaire_avant, reponses_evaluation_chaud', { count: 'exact' })
+              .select('doc_questionnaire_avant, reponses_evaluation_chaud, reponses_evaluation_formateur', { count: 'exact' })
               .in('client_id', clientIds)
-          : { count: 0, data: [] as { doc_questionnaire_avant?: string | null; reponses_evaluation_chaud?: { notes?: Record<string, number> } | null }[] };
+          : {
+              count: 0,
+              data: [] as {
+                doc_questionnaire_avant?: string | null;
+                reponses_evaluation_chaud?: { notes?: Record<string, number> } | null;
+                reponses_evaluation_formateur?: { notes?: Record<string, number> } | null;
+              }[],
+            };
 
         // Documents en attente de signature — scopés à l'organisme via les formations/
         // sessions ci-dessus (les signatures pointent sur documents_formation, rattaché
@@ -185,6 +205,31 @@ const Dashboard = () => {
           ? Math.round((notes.reduce((a: number, b: number) => a + b, 0) / notes.length / 4) * 100)
           : 0;
 
+        // Note formateur (point non bloquant #E2 de l'audit du 16/08 : absente du
+        // Dashboard principal jusqu'ici, visible uniquement sur /notations-formateur).
+        // Même logique de calcul que NotationsFormateur.tsx : notes 0-4 par question,
+        // toutes questions/répondants confondus, moyenne convertie sur 5. Les avis
+        // stagiaires (reponses_evaluation_formateur) et clients
+        // (evaluations_formateur_clients.reponses) sont agrégés ensemble.
+        const notesFormateur: number[] = [];
+        (stagiairesOrg || []).forEach((s) => {
+          const reponses = s.reponses_evaluation_formateur?.notes || {};
+          Object.values(reponses).forEach((v) => { if (typeof v === 'number') notesFormateur.push(v); });
+        });
+        if (sessionIds.length > 0) {
+          const { data: evalsClients } = await supabase
+            .from('evaluations_formateur_clients')
+            .select('reponses')
+            .in('session_id', sessionIds);
+          (evalsClients || []).forEach((e: { reponses?: { notes?: Record<string, number> } | null }) => {
+            const reponses = e.reponses?.notes || {};
+            Object.values(reponses).forEach((v) => { if (typeof v === 'number') notesFormateur.push(v); });
+          });
+        }
+        const noteFormateur = notesFormateur.length > 0
+          ? Math.round((notesFormateur.reduce((a, b) => a + b, 0) / notesFormateur.length / 4) * 5 * 10) / 10
+          : null;
+
         setStats({
           formations: nbFormations || 0,
           sessions: nbSessions || 0,
@@ -194,6 +239,8 @@ const Dashboard = () => {
           relancesEnAttente: nbRelances || 0,
           questionnairesEnAttente: nbQuestionnaires || 0,
           indicateursOk: nbIndicateurs || 0,
+          noteFormateur,
+          nbNotesFormateur: notesFormateur.length,
         });
 
         setSessionsRecentes((sessions || []) as Record<string, unknown>[]);
@@ -226,29 +273,41 @@ const Dashboard = () => {
       title: "Formations publiées",
       value: loading ? "..." : String(stats.formations),
       icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>,
-      trend: "up" as "up",
-      trendValue: "Actives"
+      trend: "up" as const,
+      trendValue: "Actives",
+      to: "/formations",
     },
     {
       title: "Bénéficiaires",
       value: loading ? "..." : String(stats.beneficiaires),
       icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>,
-      trend: "up" as "up",
-      trendValue: "Total inscrits"
+      trend: "up" as const,
+      trendValue: "Total inscrits",
+      to: "/clients",
     },
     {
       title: "Sessions terminées",
       value: loading ? "..." : String(stats.sessions),
       icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-      trend: "neutral" as "neutral",
-      trendValue: "Clôturées"
+      trend: "neutral" as const,
+      trendValue: "Clôturées",
+      detail: "Nombre de sessions passées au statut \"terminée\", tous formats confondus. Le détail par session (dates, stagiaires, documents) se consulte dans la fiche de chaque formation, via l'onglet \"Clients\" du client concerné.",
     },
     {
       title: "Taux de satisfaction",
       value: loading ? "..." : stats.tauxSatisfaction > 0 ? `${stats.tauxSatisfaction}%` : "—",
       icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" /></svg>,
-      trend: "up" as "up",
-      trendValue: "Évaluations reçues"
+      trend: "up" as const,
+      trendValue: "Évaluations reçues",
+      detail: "Calculé à partir des réponses à l'évaluation \"à chaud\" remplie par les stagiaires en fin de session (échelle de 0 à 4 par question), moyenne de toutes les réponses reçues, converties en pourcentage. Se met à jour automatiquement à chaque nouvelle évaluation.",
+    },
+    {
+      title: "Note formateur",
+      value: loading ? "..." : stats.noteFormateur !== null ? `${stats.noteFormateur.toFixed(1)}/5` : "—",
+      icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 21.04a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>,
+      trend: "neutral" as const,
+      trendValue: stats.nbNotesFormateur > 0 ? `${stats.nbNotesFormateur} avis` : "Aucun avis",
+      to: "/notations-formateur",
     },
   ];
 
@@ -283,9 +342,18 @@ const Dashboard = () => {
           )}
 
           {/* Cartes stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
             {statsData.map((stat, index) => (
-              <DashboardCard key={index} title={stat.title} value={stat.value} icon={stat.icon} trend={stat.trend} trendValue={stat.trendValue} />
+              <DashboardCard
+                key={index}
+                title={stat.title}
+                value={stat.value}
+                icon={stat.icon}
+                trend={stat.trend}
+                trendValue={stat.trendValue}
+                to={stat.to}
+                detail={stat.detail}
+              />
             ))}
           </div>
 
