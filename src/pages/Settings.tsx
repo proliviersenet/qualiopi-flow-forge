@@ -113,24 +113,39 @@ const Settings = () => {
     }
   };
 
-  // Suppression sans récupération — marque le compte comme "à supprimer"
-  const handleDeleteNoRecovery = async () => {
+  // Demande de suppression de compte : rend le compte immédiatement inaccessible
+  // (le formateur ne peut plus se reconnecter) mais NE supprime PAS les données —
+  // celles-ci restent récupérables manuellement par Olivier pendant 30 jours.
+  const demanderSuppression = async (avecRecuperation: boolean, modePaiement: "stripe" | "virement" | null) => {
     setDeleting(true);
-    const { error } = await supabase.auth.updateUser({
-      data: { deletion_requested: true, deletion_requested_at: new Date().toISOString() },
+    const { data, error } = await supabase.functions.invoke("demander-suppression-compte", {
+      body: { avec_recuperation: avecRecuperation, mode_paiement: modePaiement },
     });
     setDeleting(false);
-    if (error) {
-      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+    if (error || data?.error) {
+      let message = data?.error || error?.message;
+      const ctx = (error as { context?: Response })?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) message = body.error;
+        } catch {
+          // corps non-JSON, on garde le message par défaut
+        }
+      }
+      toast({ title: "Erreur", description: message, variant: "destructive" });
       return;
     }
     setDeleteStep("done");
-    // Déconnexion après 3s
+    // Déconnexion après 3s — le compte est de toute façon déjà bloqué côté serveur
     setTimeout(async () => {
       await supabase.auth.signOut();
       navigate("/login");
     }, 3000);
   };
+
+  // Conservé pour compatibilité : suppression sans récupération de données
+  const handleDeleteNoRecovery = () => demanderSuppression(false, null);
 
   // Paiement Stripe (10 € de frais de récupération de données)
   const payerAvecStripe = async () => {
@@ -165,7 +180,7 @@ const Settings = () => {
     if (paiement === "succes") {
       window.history.replaceState({}, "", "/settings");
       toast({ title: "Paiement reçu", description: "Merci ! Votre demande de suppression avec récupération de données est enregistrée." });
-      handleDeleteNoRecovery();
+      demanderSuppression(true, "stripe");
     } else if (paiement === "annule") {
       window.history.replaceState({}, "", "/settings");
       toast({ title: "Paiement annulé", description: "Vous pouvez réessayer à tout moment.", variant: "destructive" });
@@ -285,7 +300,7 @@ const Settings = () => {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500 mb-4">
-                La suppression de votre compte est irréversible. Toutes vos données (formations, sessions, clients, stagiaires, BPF...) seront définitivement perdues.
+                La suppression de votre compte rend votre accès immédiatement inaccessible. Vos données (formations, sessions, clients, stagiaires, BPF...) sont conservées 30 jours puis définitivement perdues.
               </p>
               <Button
                 variant="outline"
@@ -309,7 +324,7 @@ const Settings = () => {
           <DialogHeader>
             <DialogTitle className="text-red-600">Supprimer votre compte ?</DialogTitle>
             <DialogDescription className="pt-2 space-y-2">
-              <p>Vous êtes sur le point de supprimer définitivement votre espace QalioFlex.</p>
+              <p>Votre espace QalioFlex sera <strong>immédiatement rendu inaccessible</strong> : vous ne pourrez plus vous reconnecter.</p>
               <p className="font-medium text-gray-700">Données concernées :</p>
               <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
                 <li>Formations et programmes</li>
@@ -318,25 +333,25 @@ const Settings = () => {
                 <li>BPF et documents Qualiopi</li>
                 <li>Évaluations et questionnaires</li>
               </ul>
-              <p className="text-sm text-gray-500 pt-2">Voulez-vous récupérer vos données avant de partir ?</p>
+              <p className="text-sm text-gray-500 pt-2">Vos données sont conservées 30 jours (annulation possible via le support durant ce délai), puis définitivement supprimées. Voulez-vous récupérer vos données avant de partir ?</p>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteStep("idle")}>
-              Annuler
+          <DialogFooter className="flex flex-col gap-2 pt-2 sm:flex-col">
+            <Button
+              className="w-full bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => setDeleteStep("recovery")}
+            >
+              Continuer sans récupération
             </Button>
             <Button
               variant="outline"
-              className="border-orange-300 text-orange-600 hover:bg-orange-50"
+              className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
               onClick={() => setDeleteStep("recovery")}
             >
               Oui, je veux récupérer mes données
             </Button>
-            <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => setDeleteStep("recovery")}
-            >
-              Continuer sans récupération
+            <Button variant="outline" className="w-full" onClick={() => setDeleteStep("idle")}>
+              Annuler
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -356,24 +371,24 @@ const Settings = () => {
               <p className="text-sm text-gray-500">Souhaitez-vous payer 10 € pour récupérer l'intégralité de vos données ?</p>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteStep("idle")}>
-              Annuler
+          <DialogFooter className="flex flex-col gap-2 pt-2 sm:flex-col">
+            <Button
+              style={{ background: "#f2901e", color: "#fff" }}
+              className="w-full font-bold"
+              onClick={() => setDeleteStep("payment")}
+            >
+              Payer 10 € et récupérer
             </Button>
             <Button
               variant="outline"
-              className="border-red-300 text-red-600 hover:bg-red-50"
+              className="w-full border-red-300 text-red-600 hover:bg-red-50"
               onClick={handleDeleteNoRecovery}
               disabled={deleting}
             >
               {deleting ? "Traitement..." : "Supprimer sans récupérer"}
             </Button>
-            <Button
-              style={{ background: "#f2901e", color: "#fff" }}
-              className="font-bold"
-              onClick={() => setDeleteStep("payment")}
-            >
-              Payer 10 € et récupérer
+            <Button variant="outline" className="w-full" onClick={() => setDeleteStep("idle")}>
+              Annuler
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -411,16 +426,16 @@ const Settings = () => {
               </p>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteStep("idle")}>
-              Annuler
-            </Button>
+          <DialogFooter className="flex flex-col gap-2 pt-2 sm:flex-col">
             <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={handleDeleteNoRecovery}
+              className="w-full bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => demanderSuppression(true, "virement")}
               disabled={deleting}
             >
               {deleting ? "Traitement..." : "J'ai payé par virement — supprimer mon compte"}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setDeleteStep("idle")}>
+              Annuler
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -432,8 +447,9 @@ const Settings = () => {
           <DialogHeader>
             <DialogTitle>Demande enregistrée</DialogTitle>
             <DialogDescription className="pt-2 space-y-2">
-              <p>Votre demande de suppression a bien été prise en compte.</p>
-              <p className="text-sm text-gray-500">Votre compte sera supprimé dans les <strong>48h ouvrées</strong>. Vous allez être déconnecté dans quelques secondes.</p>
+              <p>Votre demande de suppression a bien été prise en compte. Votre compte est <strong>immédiatement inaccessible</strong> — vous ne pourrez plus vous reconnecter.</p>
+              <p className="text-sm text-gray-500">Vos données sont conservées <strong>30 jours</strong>. Si vous changez d'avis durant ce délai, contactez le support pour annuler la suppression. Passé ce délai, il ne sera plus possible d'y accéder ni de les récupérer.</p>
+              <p className="text-sm text-gray-400">Vous allez être déconnecté dans quelques secondes.</p>
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
