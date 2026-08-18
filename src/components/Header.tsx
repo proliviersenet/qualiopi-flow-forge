@@ -142,6 +142,11 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                       <Link to="/qualiopi-statut">Statut réglementaire</Link>
                     </DropdownMenuItem>
                   )}
+                  {authUser?.email?.toLowerCase() === "olivier@exsenco.fr" && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/suppressions">Suppressions en attente</Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogoutClick}>
                     Se déconnecter
