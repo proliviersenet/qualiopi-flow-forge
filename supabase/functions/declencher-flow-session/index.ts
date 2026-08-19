@@ -71,7 +71,7 @@ serve(async (req) => {
     // n'appartiendrait pas à session_id).
     const { data: stagiairesData, error: stagErr } = await supabase
       .from("stagiaires")
-      .select("id, nom, prenom, email_pro, telephone, doc_questionnaire_avant, token_questionnaire_avant")
+      .select("id, nom, prenom, email_pro, telephone, doc_questionnaire_avant, token_questionnaire_avant, token_livret")
       .eq("session_id", session_id)
       .in("id", stagiaire_ids);
 
@@ -112,6 +112,13 @@ serve(async (req) => {
         // (relance-documents-auto) ne se déclenchaient jamais non plus, faute de date
         // d'envoi. On génère donc ici le token (mêmes colonnes que positionnement-public
         // /relance-documents-auto) et on met à jour le statut après un envoi réussi.
+        //
+        // Correctif chantier "consultation directe livret/attestation" (19/08/2026) :
+        // même bug pour le livret, resté non corrigé jusqu'ici (le lien de relance
+        // J+2 pointait bien vers /livret/:token une fois relance-documents-auto
+        // corrigé, mais le tout premier envoi ici n'avait ni token ni lien, donc
+        // retombait sur /espace-client). On applique désormais le même traitement
+        // que questionnaire_avant.
         let token: string | null = null;
         if (motif === "questionnaire_avant") {
           const statutActuel = s.doc_questionnaire_avant as string | null;
@@ -120,8 +127,13 @@ serve(async (req) => {
             continue;
           }
           token = (s.token_questionnaire_avant as string | null) || crypto.randomUUID();
+        } else if (motif === "livret") {
+          token = (s.token_livret as string | null) || crypto.randomUUID();
         }
-        const lien = motif === "questionnaire_avant" ? `https://qualioflex.fr/positionnement/${token}` : undefined;
+        const lien =
+          motif === "questionnaire_avant" ? `https://qualioflex.fr/positionnement/${token}`
+          : motif === "livret" ? `https://qualioflex.fr/livret/${token}`
+          : undefined;
 
         try {
           const { data, error } = await supabase.functions.invoke("envoyer-relance", {
@@ -154,7 +166,7 @@ serve(async (req) => {
             motif === "questionnaire_avant"
               ? { doc_questionnaire_avant: "envoye", doc_questionnaire_avant_envoye_le: now, token_questionnaire_avant: token }
               : motif === "livret"
-              ? { doc_livret: "envoye", doc_livret_envoye_le: now }
+              ? { doc_livret: "envoye", doc_livret_envoye_le: now, token_livret: token }
               : {};
           if (Object.keys(updates).length > 0) {
             const { error: updErr } = await supabase.from("stagiaires").update(updates).eq("id", s.id);
