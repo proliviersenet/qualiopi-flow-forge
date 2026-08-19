@@ -55,6 +55,10 @@ interface Stagiaire {
   token_emargement?: string | null;
   doc_attestation?: string | null;
   doc_attestation_envoye_le?: string | null;
+  token_attestation?: string | null;
+  doc_livret?: string | null;
+  doc_livret_envoye_le?: string | null;
+  token_livret?: string | null;
   doc_questionnaire_avant?: string | null;
   doc_questionnaire_apres?: string | null;
   token_questionnaire_avant?: string | null;
@@ -148,19 +152,22 @@ const motifs = [
 // ci-dessus). Le token est réutilisé s'il existe déjà (jamais régénéré à chaque
 // clic, sinon un lien déjà envoyé deviendrait invalide) — même logique que
 // genererLienEvaluation.
-// "livret" et "attestation" restent volontairement HORS de cette table : ce sont
-// des documents consultés dans l'espace client (livret) ou générés en PDF sans page
-// de consultation publique par token (attestation) — cf. relance-documents-auto
-// (directLink) — donc pas de lien à token possible pour eux avec l'architecture
-// actuelle ; corriger ça est un chantier séparé (créer ces pages publiques), pas
-// traité ici.
+// "livret" et "attestation" ont désormais elles aussi leur page de consultation
+// publique par token (chantier "consultation directe livret/attestation",
+// 19/08/2026) : /livret/:token et /attestation/:token, mêmes Edge Functions
+// livret-public / attestation-public. Le token de l'attestation n'existe que si
+// elle a déjà été générée au moins une fois (genererAttestation ci-dessous) —
+// si absent, on affiche un message d'erreur au formateur plutôt que d'envoyer un
+// lien qui pointerait vers une attestation inexistante (voir handleRelance).
 const MOTIF_TOKEN_CONFIG: Record<string, { tokenField: keyof Stagiaire; path: string }> = {
+  livret: { tokenField: "token_livret", path: "livret" },
   questionnaire_avant: { tokenField: "token_questionnaire_avant", path: "positionnement" },
   questionnaire_apres: { tokenField: "token_questionnaire_apres", path: "positionnement" },
   emargement: { tokenField: "token_emargement", path: "emargement" },
   evaluation_chaud: { tokenField: "token_evaluation_chaud", path: "evaluation" },
   evaluation_formateur: { tokenField: "token_evaluation_formateur", path: "evaluation" },
   evaluation_froid: { tokenField: "token_evaluation_froid", path: "evaluation" },
+  attestation: { tokenField: "token_attestation", path: "attestation" },
 };
 
 const StagiairesList = ({
@@ -514,6 +521,20 @@ const StagiairesList = ({
       toast({
         title: "Envoi bloqué",
         description: `${stagiaire.prenom} ${stagiaire.nom} a refusé d'être contacté(e) sur ce canal (consentement RGPD).`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Garde-fou spécifique à l'attestation : contrairement aux autres motifs à
+    // token, l'attestation n'existe que si elle a déjà été générée au moins une
+    // fois (bouton "Générer l'attestation" ci-dessous) — sans ça, générer un
+    // token_attestation enverrait un lien pointant vers une attestation
+    // inexistante (cf. commentaire sur MOTIF_TOKEN_CONFIG).
+    if (motif === "attestation" && stagiaire.doc_attestation !== "envoye") {
+      toast({
+        title: "Attestation non générée",
+        description: `Générez d'abord l'attestation de ${stagiaire.prenom} ${stagiaire.nom} avant de la relancer.`,
         variant: "destructive",
       });
       return;
