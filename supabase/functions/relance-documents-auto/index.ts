@@ -31,11 +31,12 @@ interface DocType {
   tokenField: string;
   path: string;
   label: string;
-  // Le livret d'accueil n'a pas (encore) de page de consultation publique par
-  // token, contrairement aux autres documents : il est consultable dans
-  // l'espace client (session > documents). Quand directLink est vrai, le lien
-  // de relance pointe directement vers `path` (sans suffixe /token), comme le
-  // fait déjà la relance manuelle générique (voir envoyer-relance).
+  // Quand directLink est vrai, le lien de relance pointe directement vers
+  // `path` (sans suffixe /token) plutôt que vers une page de consultation
+  // par token — utile pour un document sans page publique dédiée. Plus
+  // aucun DOC_TYPES ci-dessous ne l'utilise depuis que le livret a sa propre
+  // page /livret/:token (chantier "consultation directe livret/attestation",
+  // 19/08/2026), mais le mécanisme reste disponible si besoin plus tard.
   directLink?: boolean;
   // Bug signalé par Olivier (16/08/2026) : le livret d'accueil est un PDF à
   // télécharger/consulter, pas un formulaire à remplir — le texte générique
@@ -93,20 +94,18 @@ const DOC_TYPES: DocType[] = [
     label: "l'évaluation du formateur",
   },
   {
-    // Étape 1 du flow Qualiopi (CONTEXT.md) — Envoi PDF, non bloquant. Pas de
-    // page publique par token pour l'instant : lien de relance vers l'espace
-    // client (cf. directLink ci-dessus). token_livret est tout de même
-    // conservé dans le schéma (colonne ajoutée par la migration associée)
-    // pour rester cohérent avec les autres types et permettre une future page
-    // de consultation dédiée sans nouvelle migration.
+    // Étape 1 du flow Qualiopi (CONTEXT.md) — Envoi PDF/HTML, non bloquant.
+    // Page de consultation publique dédiée depuis le chantier "consultation
+    // directe livret/attestation" (19/08/2026) : /livret/:token, sur le même
+    // principe que les autres documents (plus de directLink vers
+    // /espace-client, qui nécessitait un compte que le stagiaire n'a pas).
     key: "livret",
     docField: "doc_livret",
     envoyeLeField: "doc_livret_envoye_le",
     relanceFlag: "doc_livret_relance_j2_envoyee",
     alerteFlag: "doc_livret_alerte_envoyee",
     tokenField: "token_livret",
-    path: "espace-client",
-    directLink: true,
+    path: "livret",
     label: "le livret d'accueil",
     verbe: "télécharger",
     participe: "téléchargé",
