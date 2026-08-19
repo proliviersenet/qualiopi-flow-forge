@@ -39,6 +39,7 @@ serve(async (req) => {
       .from("stagiaires")
       .select(`
         id, nom, prenom, session_id, doc_emargement, doc_evaluation_chaud, reponses_questionnaire_apres,
+        email_pro, consentement_email, token_attestation,
         session:session_id (
           id, formation_id, date_debut, date_fin, lieu,
           formation:formation_id ( titre, duree, organismes ( raison_sociale, nda, siret, adresse, telephone, email_contact, logo_url ) )
@@ -186,14 +187,73 @@ serve(async (req) => {
       throw new Error("Échec de la sauvegarde de l'attestation : " + saveErr.message);
     }
 
+    // Chantier "consultation directe livret/attestation" (19/08/2026) : jusqu'ici
+    // l'attestation générée n'était jamais transmise au stagiaire (ni email, ni
+    // lien) — seul le formateur/client pouvait la consulter depuis l'espace client
+    // (bouton "Voir"). On génère ici (ou réutilise) le token_attestation du
+    // stagiaire, même principe que token_emargement/token_evaluation_*, et on
+    // envoie un email avec le lien direct /attestation/:token dès que la
+    // génération réussit.
+    const tokenAttestation = (st.token_attestation as string | null) || crypto.randomUUID();
+
     // Marque le statut du stagiaire comme "envoyé" (document disponible), pour que
     // la colonne Attestation du tableau formateur/client reflète l'état réel au
-    // lieu de rester bloquée sur "En attente" indéfiniment.
+    // lieu de rester bloquée sur "En attente" indéfiniment. Persiste aussi le
+    // token pour la page de consultation publique.
     const { error: updErr } = await supabase
       .from("stagiaires")
-      .update({ doc_attestation: "envoye" })
+      .update({ doc_attestation: "envoye", token_attestation: tokenAttestation })
       .eq("id", stagiaire_id);
     if (updErr) console.error("generer-attestation: erreur mise à jour statut:", updErr.message);
+
+    // Envoi de l'email au stagiaire — non bloquant : un échec Brevo (clé absente,
+    // API en erreur, pas de consentement email...) ne doit jamais faire échouer
+    // la génération de l'attestation elle-même (déjà sauvegardée avec succès
+    // ci-dessus), juste être tracé pour investigation.
+    try {
+      const hasEmail = st.consentement_email === true && !!st.email_pro;
+      const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
+      if (hasEmail && BREVO_API_KEY) {
+        const lien = `https://qualioflex.fr/attestation/${tokenAttestation}`;
+        const emailHtml = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
+    <a href="https://qualioflex.fr" style="text-decoration:none;">
+      <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+      <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
+    </a>
+  </div>
+  <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
+    <p>Bonjour <strong>${esc(st.prenom as string)} ${esc(st.nom as string)}</strong>,</p>
+    <p>Votre attestation de fin de formation <strong>"${esc(formation?.titre as string)}"</strong> est disponible.</p>
+    <div style="text-align:center;margin:30px 0;">
+      <a href="${lien}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;">
+        Consulter mon attestation →
+      </a>
+    </div>
+    <p style="font-size:13px;color:#777;">Besoin d'aide ?
+      <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
+    </p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
+  </div>
+</body></html>`;
+        const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+            to: [{ email: st.email_pro, name: `${st.prenom} ${st.nom}` }],
+            subject: `[QalioFlex] Votre attestation de fin de formation est disponible`,
+            htmlContent: emailHtml,
+          }),
+        });
+        if (!r.ok) console.error("generer-attestation: échec envoi email:", r.status, await r.text());
+      } else if (!hasEmail) {
+        console.log("generer-attestation: pas d'email envoyé (consentement absent ou email manquant) pour", stagiaire_id);
+      }
+    } catch (mailErr) {
+      console.error("generer-attestation: erreur envoi email:", mailErr instanceof Error ? mailErr.message : String(mailErr));
+    }
 
     return new Response(
       JSON.stringify({ success: true, contenu_html: html }),
