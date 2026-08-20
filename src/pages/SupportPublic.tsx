@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionsError";
 
 interface SupportData {
   signed_url: string;
@@ -30,7 +31,7 @@ const SupportPublic = () => {
       body: { token },
     });
     if (err || res?.error) {
-      setError(res?.error || err?.message || "Lien invalide.");
+      setError(res?.error || (err ? await extractFunctionErrorMessage(err, "Lien invalide.") : "Lien invalide."));
       setData(null);
       setLoading(false);
       return;

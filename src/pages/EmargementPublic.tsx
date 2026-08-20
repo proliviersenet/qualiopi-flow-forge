@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionsError";
 
 interface EmargementData {
   prenom: string;
@@ -44,7 +45,7 @@ const EmargementPublic = () => {
         body: { token, action: "get" },
       });
       if (err || res?.error) {
-        setError(res?.error || err?.message || "Lien invalide.");
+        setError(res?.error || (err ? await extractFunctionErrorMessage(err, "Lien invalide.") : "Lien invalide."));
         setLoading(false);
         return;
       }
@@ -72,7 +73,7 @@ const EmargementPublic = () => {
     });
     setSubmitting(false);
     if (err || res?.error) {
-      setError(res?.error || err?.message || "Erreur lors de l'envoi.");
+      setError(res?.error || (err ? await extractFunctionErrorMessage(err, "Erreur lors de l'envoi.") : "Erreur lors de l'envoi."));
       return;
     }
     setSubmitted(true);
