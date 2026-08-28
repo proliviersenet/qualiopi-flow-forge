@@ -50,6 +50,11 @@ import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
 import ChatbotWidget from "./components/ChatbotWidget";
 import OnboardingChecklist from "./components/OnboardingChecklist";
+import ErrorBoundary from "./components/ErrorBoundary";
+import GlobalErrorLogger from "./components/GlobalErrorLogger";
+import SignalerBugButton from "./components/SignalerBugButton";
+import SuperAdmin from "./pages/SuperAdmin";
+import SuperAdminExplorer from "./pages/SuperAdminExplorer";
 import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
@@ -62,6 +67,9 @@ const App = () => (
       <Sonner />
       <ChatbotWidget />
       <OnboardingChecklist />
+      <GlobalErrorLogger />
+      <SignalerBugButton />
+      <ErrorBoundary>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -93,6 +101,8 @@ const App = () => (
           <Route path="/factures" element={<Factures />} />
           <Route path="/qualiopi-statut" element={<VeilleQualiopi />} />
           <Route path="/admin/suppressions" element={<AdminSuppressions />} />
+          <Route path="/superadmin" element={<SuperAdmin />} />
+          <Route path="/superadmin/explorer" element={<SuperAdminExplorer />} />
           <Route path="/pre-audit" element={<PreAudit />} />
           <Route path="/notations-formateur" element={<NotationsFormateur />} />
           <Route path="/chatbot-escalades" element={<ChatbotEscalades />} />
@@ -112,6 +122,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+      </ErrorBoundary>
     </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
