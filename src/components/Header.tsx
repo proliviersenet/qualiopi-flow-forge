@@ -143,9 +143,14 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                     </DropdownMenuItem>
                   )}
                   {authUser?.email?.toLowerCase() === "olivier@exsenco.fr" && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin/suppressions">Suppressions en attente</Link>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link to="/superadmin">🛠️ Superadmin</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/suppressions">Suppressions en attente</Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogoutClick}>
