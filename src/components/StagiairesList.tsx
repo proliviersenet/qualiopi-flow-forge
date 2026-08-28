@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,8 +84,12 @@ interface Stagiaire {
   consentement_sms_date?: string | null;
 }
 
+// Point remonté par Olivier le 20/08 : un document manquant/non complété (badge
+// "En attente") se fondait dans le reste de l'UI en gris, pas assez visible. Passé
+// en rouge pour que ce qui bloque saute aux yeux — distinct du gris neutre gardé
+// pour les statuts non applicables/inconnus (ex: valeur imprévue ci-dessous).
 const docStatus = (val: string | null | undefined) => {
-  if (!val) return { label: "En attente", color: "bg-gray-100 text-gray-400" };
+  if (!val) return { label: "En attente", color: "bg-red-50 text-red-700 border border-red-200" };
   if (val === "envoye") return { label: "Envoyé", color: "bg-blue-100 text-blue-600" };
   if (val === "signe") return { label: "Signé ✓", color: "bg-green-100 text-green-700" };
   if (val === "erreur") return { label: "Erreur ⚠️", color: "bg-red-100 text-red-600" };
@@ -198,6 +203,15 @@ const StagiairesList = ({
   const [attestations, setAttestations] = useState<Record<string, string>>({});
   const [generatingAttestation, setGeneratingAttestation] = useState<string | null>(null);
 
+  // Correctif du 20/08 (Olivier) : les alertes "Actions requises" du Dashboard ne
+  // menaient qu'à la fiche client, pas jusqu'au stagiaire concerné — il fallait
+  // ensuite chercher la bonne ligne à la main. Le lien pointe maintenant vers
+  // /clients/:id?stagiaire=<id>, lu ici directement (StagiairesList partage l'URL
+  // de la page qui l'héberge) pour scroller jusqu'à la ligne et la surligner.
+  const [searchParams] = useSearchParams();
+  const highlightStagiaireId = searchParams.get("stagiaire");
+  const [highlighted, setHighlighted] = useState(false);
+
   useEffect(() => {
     const fetch = async () => {
       const { data } = await supabase
@@ -227,6 +241,14 @@ const StagiairesList = ({
     };
     fetch();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!highlightStagiaireId || stagiaires.length === 0) return;
+    if (!stagiaires.some(s => s.id === highlightStagiaireId)) return;
+    const row = document.getElementById(`stagiaire-row-${highlightStagiaireId}`);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlighted(true);
+  }, [highlightStagiaireId, stagiaires]);
 
   // Chantier 5 : blocage — l'attestation de fin de formation ne peut être générée
   // que si l'émargement ET l'évaluation à chaud sont tous les deux signés par le
@@ -803,7 +825,15 @@ const StagiairesList = ({
 
               return (
                 <>
-                <tr key={s.id} className={`border-b border-gray-50 ${allSigned ? "bg-green-50" : ""}`}>
+                <tr
+                  key={s.id}
+                  id={`stagiaire-row-${s.id}`}
+                  className={`border-b border-gray-50 ${
+                    highlighted && highlightStagiaireId === s.id
+                      ? "bg-amber-100 ring-1 ring-inset ring-amber-400"
+                      : allSigned ? "bg-green-50" : ""
+                  }`}
+                >
                   <td className="py-2 pr-3 font-medium text-gray-800">{s.nom}</td>
                   <td className="py-2 pr-3 text-gray-700">{s.prenom}</td>
                   <td className="py-2 pr-3 text-gray-500">{s.email_pro || "—"}</td>
@@ -825,18 +855,40 @@ const StagiairesList = ({
                     </div>
                   </td>
                   <td className="py-2 pr-2">
-                    <button
-                      className="disabled:cursor-default"
-                      disabled={s.doc_questionnaire_avant !== "signe"}
-                      onClick={() => voirReponses(s, "avant")}
-                      title={s.doc_questionnaire_avant === "signe" ? "Voir les réponses" : undefined}
-                    >
-                      <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color} ${s.doc_questionnaire_avant === "signe" ? "cursor-pointer hover:opacity-75" : ""}`}>{questAvant.label}</Badge>
-                    </button>
+                    {s.doc_questionnaire_avant === "signe" ? (
+                      <button onClick={() => voirReponses(s, "avant")} title="Voir les réponses">
+                        <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color} cursor-pointer hover:opacity-75`}>{questAvant.label}</Badge>
+                      </button>
+                    ) : canRelance ? (
+                      // Correctif du 20/08 : le badge "En attente" était inerte —
+                      // il faut relancer via le menu "📨 Relancer" à part. Cliquer
+                      // directement sur le badge relance maintenant ce questionnaire.
+                      <button
+                        className="disabled:cursor-default disabled:opacity-60"
+                        disabled={relancing !== null}
+                        onClick={() => handleRelance(s, "questionnaire_avant")}
+                        title="Cliquer pour relancer le stagiaire sur ce questionnaire"
+                      >
+                        <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color} cursor-pointer hover:opacity-75`}>{questAvant.label}</Badge>
+                      </button>
+                    ) : (
+                      <Badge className={`text-xs px-1.5 py-0.5 ${questAvant.color}`}>{questAvant.label}</Badge>
+                    )}
                   </td>
                   <td className="py-2 pr-2">
                     <div className="flex items-center gap-1">
-                      <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
+                      {s.doc_emargement !== "signe" && canRelance && s.doc_questionnaire_avant === "signe" ? (
+                        <button
+                          className="disabled:cursor-default disabled:opacity-60"
+                          disabled={relancing !== null}
+                          onClick={() => handleRelance(s, "emargement")}
+                          title="Cliquer pour relancer le stagiaire sur l'émargement"
+                        >
+                          <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color} cursor-pointer hover:opacity-75`}>{emargement.label}</Badge>
+                        </button>
+                      ) : (
+                        <Badge className={`text-xs px-1.5 py-0.5 ${emargement.color}`}>{emargement.label}</Badge>
+                      )}
                       {!s.doc_emargement && s.doc_questionnaire_avant !== "signe" && (
                         <span title="Bloqué : le questionnaire avant formation doit être complété par le stagiaire avant de pouvoir lui envoyer l'émargement." className="text-gray-400 text-xs">🔒</span>
                       )}
@@ -849,14 +901,22 @@ const StagiairesList = ({
                     </div>
                   </td>
                   <td className="py-2 pr-2">
-                    <button
-                      className="disabled:cursor-default"
-                      disabled={s.doc_questionnaire_apres !== "signe"}
-                      onClick={() => voirReponses(s, "apres")}
-                      title={s.doc_questionnaire_apres === "signe" ? "Voir les réponses" : undefined}
-                    >
-                      <Badge className={`text-xs px-1.5 py-0.5 ${questApres.color} ${s.doc_questionnaire_apres === "signe" ? "cursor-pointer hover:opacity-75" : ""}`}>{questApres.label}</Badge>
-                    </button>
+                    {s.doc_questionnaire_apres === "signe" ? (
+                      <button onClick={() => voirReponses(s, "apres")} title="Voir les réponses">
+                        <Badge className={`text-xs px-1.5 py-0.5 ${questApres.color} cursor-pointer hover:opacity-75`}>{questApres.label}</Badge>
+                      </button>
+                    ) : canRelance ? (
+                      <button
+                        className="disabled:cursor-default disabled:opacity-60"
+                        disabled={relancing !== null}
+                        onClick={() => handleRelance(s, "questionnaire_apres")}
+                        title="Cliquer pour relancer le stagiaire sur ce questionnaire"
+                      >
+                        <Badge className={`text-xs px-1.5 py-0.5 ${questApres.color} cursor-pointer hover:opacity-75`}>{questApres.label}</Badge>
+                      </button>
+                    ) : (
+                      <Badge className={`text-xs px-1.5 py-0.5 ${questApres.color}`}>{questApres.label}</Badge>
+                    )}
                   </td>
                   <td className="py-2 pr-2">
                     {attestations[s.id] ? (
@@ -906,7 +966,7 @@ const StagiairesList = ({
                         return (
                           <span key={et.key} className="flex items-center gap-0.5">
                             <button onClick={() => genererLienEvaluation(s, et.key)} title={`${et.label} — ${status ? "copier à nouveau le lien" : "générer et copier le lien"}`}>
-                              <Badge className={`text-xs px-1 py-0.5 ${status ? st.color : "bg-gray-100 text-gray-400"} cursor-pointer hover:opacity-75`}>{et.icon}{status ? "" : "+"}</Badge>
+                              <Badge className={`text-xs px-1 py-0.5 ${st.color} cursor-pointer hover:opacity-75`}>{et.icon}{status ? "" : "+"}</Badge>
                             </button>
                             {retard !== null && (
                               <span title={`${et.label} envoyée il y a ${retard} jour${retard > 1 ? "s" : ""}, toujours non complétée`} className="text-orange-500 text-xs">⚠️{retard}j</span>
