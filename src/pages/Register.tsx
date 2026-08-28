@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,14 @@ import { validatePassword } from "@/lib/passwordUtils";
 const Register = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  // Chantier "sous-traitance" (28/08) : lien /register?st=<token> envoyé quand un
+  // formateur invite un sous-traitant qui n'a pas encore de compte QalioFlex — on
+  // affiche le contexte de l'invitation et, une fois le compte formateur créé, on
+  // rattache automatiquement la session sous-traitée (voir handleSubmit).
+  const [searchParams] = useSearchParams();
+  const stToken = searchParams.get("st");
+  const [invitationSoustraitance, setInvitationSoustraitance] = useState<{ formation_titre: string; organisme_demandeur_nom: string; email_invite: string } | null>(null);
+  const [invitationInvalide, setInvitationInvalide] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [siretLoading, setSiretLoading] = useState(false);
   const [siretTrouve, setSiretTrouve] = useState(false);
@@ -33,6 +41,17 @@ const Register = () => {
     role: "formateur_certifie",
     nda: "",
   });
+
+  useEffect(() => {
+    if (!stToken) return;
+    const verifier = async () => {
+      const { data, error } = await supabase.functions.invoke("verifier-invitation-soustraitance", { body: { token: stToken } });
+      if (error || !data?.valid) { setInvitationInvalide(true); return; }
+      setInvitationSoustraitance({ formation_titre: data.formation_titre, organisme_demandeur_nom: data.organisme_demandeur_nom, email_invite: data.email_invite });
+      setFormData(prev => ({ ...prev, email: data.email_invite }));
+    };
+    verifier();
+  }, [stToken]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -149,7 +168,22 @@ const Register = () => {
         onboarding_complete: true,
       });
 
-      toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — ${formData.raisonSociale}` });
+      // Chantier "sous-traitance" : rattachement de la session sous-traitée si
+      // l'inscription vient d'une invitation. Non bloquant — le compte est déjà créé
+      // à ce stade, un échec ici ne doit pas empêcher l'accès au dashboard.
+      if (stToken) {
+        const { data: liaison, error: liaisonError } = await supabase.functions.invoke("lier-soustraitance", { body: { token: stToken } });
+        if (liaisonError || liaison?.error) {
+          toast({
+            title: "Espace créé, mais...",
+            description: "La session sous-traitée n'a pas pu être rattachée automatiquement. Contactez le formateur qui vous a invité.",
+          });
+        } else {
+          toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — la session vous a été rattachée.` });
+        }
+      } else {
+        toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — ${formData.raisonSociale}` });
+      }
       navigate("/dashboard");
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Une erreur est survenue";
@@ -179,6 +213,17 @@ const Register = () => {
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">
+
+                {invitationSoustraitance && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm text-purple-800">
+                    🤝 <strong>{invitationSoustraitance.organisme_demandeur_nom}</strong> vous invite à co-animer la formation <strong>{invitationSoustraitance.formation_titre}</strong> en sous-traitance. Créez votre espace formateur ci-dessous pour y accéder — la session vous sera automatiquement rattachée.
+                  </div>
+                )}
+                {invitationInvalide && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                    ⚠️ Ce lien d'invitation à la sous-traitance n'est plus valide (expiré ou déjà utilisé). Vous pouvez tout de même créer votre espace formateur ci-dessous, mais contactez le formateur qui vous a invité pour qu'il vous confie de nouveau la session.
+                  </div>
+                )}
 
                 {/* ÉTAPE 1 — SIRET */}
                 <div className="space-y-2">
@@ -244,7 +289,7 @@ const Register = () => {
                           Email professionnel *
                         </span>
                       </Label>
-                      <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required />
+                      <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required disabled={!!invitationSoustraitance} className={invitationSoustraitance ? "bg-gray-100 text-gray-500" : undefined} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="telephone">Téléphone</Label>

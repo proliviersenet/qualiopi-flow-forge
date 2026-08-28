@@ -21,6 +21,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import HelpPopup from "@/components/HelpPopup";
 import StagiairesList from "@/components/StagiairesList";
+import SoustraiterSessionDialog from "@/components/SoustraiterSessionDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -50,6 +51,14 @@ interface Session {
   lien_visio: string | null;
   statut: string;
   formation?: { titre: string; duree: string; document_mode?: string };
+}
+
+interface SousTraitance {
+  id: string;
+  statut: "invite" | "actif";
+  email_invite: string | null;
+  organisme_sous_traitant_id: string | null;
+  nom_affiche: string;
 }
 
 const statutColor = (s: string) => {
@@ -103,6 +112,13 @@ const ClientDetail = () => {
   const [uploadedSessions, setUploadedSessions] = useState<Set<string>>(new Set());
   const [conventionSignatures, setConventionSignatures] = useState<Record<string, string>>({});
   const [sendingSignature, setSendingSignature] = useState<string | null>(null);
+  // Chantier "sous-traitance" (28/08) : sessions_sous_traitance en cours (invitée ou
+  // active) par session, pour afficher le badge "Sous-traité à ..." et proposer de
+  // retirer le sous-traitant. soustraiterSessionId ouvre la modal d'assignation.
+  const [soustraitances, setSoustraitances] = useState<Record<string, SousTraitance>>({});
+  const [soustraiterSessionId, setSoustraiterSessionId] = useState<string | null>(null);
+  const [confirmRetraitSession, setConfirmRetraitSession] = useState<Session | null>(null);
+  const [retraitEnCours, setRetraitEnCours] = useState(false);
 
   const DOCS_SESSION_CONFIG = [
     { type: "livret", label: "📘 Livret d'accueil", fn: "generer-livret" },
@@ -184,7 +200,54 @@ const ClientDetail = () => {
       if (stagData) {
         setUploadedSessions(new Set((stagData as { session_id: string }[]).map(s => s.session_id)));
       }
+
+      await fetchSoustraitances(sessionIds);
     }
+  };
+
+  // Chantier "sous-traitance" (28/08) : sessions déjà sous-traitées (invitation en
+  // attente ou sous-traitant actif) parmi les sessions du client — pour le badge et
+  // le bouton "Retirer". nom_affiche vient de l'organisme sous-traitant une fois actif,
+  // ou de l'email invité tant que l'invitation n'a pas été acceptée.
+  const fetchSoustraitances = async (sessionIds: string[]) => {
+    const { data } = await supabase
+      .from("sessions_sous_traitance")
+      .select("id, session_id, statut, email_invite, organisme_sous_traitant_id")
+      .in("session_id", sessionIds)
+      .in("statut", ["invite", "actif"]);
+    const rows = (data as { id: string; session_id: string; statut: "invite" | "actif"; email_invite: string | null; organisme_sous_traitant_id: string | null }[]) || [];
+    if (rows.length === 0) { setSoustraitances({}); return; }
+
+    const orgIds = rows.map(r => r.organisme_sous_traitant_id).filter(Boolean) as string[];
+    const nomParOrg: Record<string, string> = {};
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase.from("organismes").select("id, raison_sociale").in("id", orgIds);
+      (orgs as { id: string; raison_sociale: string }[] || []).forEach(o => { nomParOrg[o.id] = o.raison_sociale; });
+    }
+
+    const map: Record<string, SousTraitance> = {};
+    rows.forEach(r => {
+      map[r.session_id] = {
+        id: r.id,
+        statut: r.statut,
+        email_invite: r.email_invite,
+        organisme_sous_traitant_id: r.organisme_sous_traitant_id,
+        nom_affiche: r.organisme_sous_traitant_id ? (nomParOrg[r.organisme_sous_traitant_id] || "Formateur") : (r.email_invite || "—"),
+      };
+    });
+    setSoustraitances(map);
+  };
+
+  const retirerSoustraitant = async (sessionId: string) => {
+    const row = soustraitances[sessionId];
+    if (!row) return;
+    setRetraitEnCours(true);
+    const { error } = await supabase.from("sessions_sous_traitance").update({ statut: "retire" }).eq("id", row.id);
+    setRetraitEnCours(false);
+    if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Sous-traitant retiré" });
+    setConfirmRetraitSession(null);
+    setSoustraitances(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
   };
 
   const genererDocumentSession = async (sessionId: string, type: string, fn: string) => {
@@ -706,6 +769,12 @@ const ClientDetail = () => {
                           <Badge className={statutColor(session.statut)}>
                             {session.statut === "planifiee" ? "Planifiée" : session.statut === "en_cours" ? "En cours" : session.statut === "terminee" ? "Terminée" : "Annulée"}
                           </Badge>
+                          {soustraitances[session.id]?.statut === "actif" && (
+                            <Badge className="bg-purple-100 text-purple-700">🤝 Sous-traité à {soustraitances[session.id].nom_affiche}</Badge>
+                          )}
+                          {soustraitances[session.id]?.statut === "invite" && (
+                            <Badge className="bg-amber-100 text-amber-700">✉️ Invitation sous-traitance envoyée à {soustraitances[session.id].nom_affiche}</Badge>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-4 text-sm text-gray-500">
                           {session.date_debut && <span>📅 Début : {new Date(session.date_debut).toLocaleDateString("fr-FR")}</span>}
@@ -885,14 +954,35 @@ const ClientDetail = () => {
                           />
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-red-200 text-red-500 hover:bg-red-50 sm:ml-4 flex-shrink-0"
-                        onClick={() => setConfirmDeleteSession(session)}
-                      >
-                        Supprimer
-                      </Button>
+                      <div className="flex sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
+                        {soustraitances[session.id] ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-purple-200 text-purple-600 hover:bg-purple-50"
+                            onClick={() => setConfirmRetraitSession(session)}
+                          >
+                            Retirer le sous-traitant
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-purple-200 text-purple-600 hover:bg-purple-50"
+                            onClick={() => setSoustraiterSessionId(session.id)}
+                          >
+                            🤝 Sous-traiter
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-200 text-red-500 hover:bg-red-50"
+                          onClick={() => setConfirmDeleteSession(session)}
+                        >
+                          Supprimer
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -933,6 +1023,43 @@ const ClientDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Confirmation retrait sous-traitant */}
+      <AlertDialog open={!!confirmRetraitSession} onOpenChange={(open) => !open && setConfirmRetraitSession(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retirer le sous-traitant de cette session ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmRetraitSession && (
+                <>
+                  {soustraitances[confirmRetraitSession.id]?.nom_affiche} perdra l'accès à la session{" "}
+                  <strong>{confirmRetraitSession.formation?.titre || "Formation"}</strong>. Vous pourrez ré-assigner un sous-traitant ensuite.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={retraitEnCours}
+              onClick={() => confirmRetraitSession && retirerSoustraitant(confirmRetraitSession.id)}
+            >
+              {retraitEnCours ? "..." : "Oui, retirer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal sous-traiter une session */}
+      {soustraiterSessionId && (
+        <SoustraiterSessionDialog
+          sessionId={soustraiterSessionId}
+          formationTitre={sessions.find(s => s.id === soustraiterSessionId)?.formation?.titre || "cette formation"}
+          onClose={() => setSoustraiterSessionId(null)}
+          onAssigned={() => fetchSoustraitances(sessions.map(s => s.id))}
+        />
+      )}
 
       {/* Dialog affecter formation */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

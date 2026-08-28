@@ -347,11 +347,28 @@ const BPF = () => {
         .lte("date_debut", defaultForm.date_fin_exercice);
       const sessionsOrg = ((sessionsExercice as { id: string; formation_id: string; formations: { organisme_id: string } | null }[]) || [])
         .filter((s) => s.formations?.organisme_id === organismeId);
-      if (sessionsOrg.length > 0) {
-        const formationIds = new Set(sessionsOrg.map((s) => s.formation_id));
+
+      // Chantier "sous-traitance" (28/08) : les sessions confiées par un AUTRE
+      // organisme, où je suis le formateur sous-traitant actif, comptent aussi dans
+      // mon suivi interne — je les anime réellement, elles doivent apparaître dans
+      // mon propre BPF/audit Qualiopi au même titre que mes propres sessions.
+      const { data: sousTraitees } = await supabase
+        .from("sessions_sous_traitance")
+        .select("session_id, session:session_id(id, formation_id, date_debut)")
+        .eq("organisme_sous_traitant_id", organismeId)
+        .eq("statut", "actif");
+      const sessionsSousTraitees = ((sousTraitees as { session_id: string; session: { id: string; formation_id: string; date_debut: string | null } | null }[]) || [])
+        .map((s) => s.session)
+        .filter((s): s is { id: string; formation_id: string; date_debut: string | null } =>
+          !!s && !!s.date_debut && s.date_debut >= defaultForm.date_debut_exercice && s.date_debut <= defaultForm.date_fin_exercice
+        );
+
+      const toutesLesSessions = [...sessionsOrg, ...sessionsSousTraitees];
+      if (toutesLesSessions.length > 0) {
+        const formationIds = new Set(toutesLesSessions.map((s) => s.formation_id));
         setForm((prev) => ({
           ...prev,
-          nb_sessions: String(sessionsOrg.length),
+          nb_sessions: String(toutesLesSessions.length),
           nb_formations: String(formationIds.size),
         }));
       }

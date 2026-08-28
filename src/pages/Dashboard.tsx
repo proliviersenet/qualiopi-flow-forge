@@ -109,6 +109,13 @@ const Dashboard = () => {
   const [documentsEnAttenteDetail, setDocumentsEnAttenteDetail] = useState<{ clientId: string | null; sessionId: string | null; label: string }[]>([]);
   const [questionnairesEnAttenteDetail, setQuestionnairesEnAttenteDetail] = useState<{ clientId: string | null; stagiaireId: string | null; label: string }[]>([]);
   const [satisfactionData, setSatisfactionData] = useState<{ name: string; value: number }[]>([]);
+  // Chantier "sous-traitance" (28/08) : sessions confiées par un AUTRE organisme, où
+  // je suis le formateur sous-traitant actif — distinct des stats ci-dessus (qui ne
+  // portent que sur mes propres formations/clients), affiché à part pour ne pas les
+  // fausser.
+  const [sessionsSousTraitance, setSessionsSousTraitance] = useState<{
+    session_id: string; formation_titre: string; organisme_demandeur_nom: string; date_debut: string | null;
+  }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -381,6 +388,28 @@ const Dashboard = () => {
           ].filter(d => d.value > 0));
         }
       }
+
+      // Chantier "sous-traitance" (28/08) : sessions où je suis sous-traitant actif,
+      // indépendamment de l'organisme_id de mon propre profil (elles appartiennent à
+      // l'organisme qui a sous-traité, pas au mien).
+      const { data: sousTraitances } = await supabase
+        .from("sessions_sous_traitance")
+        .select("session_id, organisme_demandeur_id, session:session_id(date_debut, formation:formation_id(titre))")
+        .eq("profile_sous_traitant_id", u.id)
+        .eq("statut", "actif");
+      if (sousTraitances && sousTraitances.length > 0) {
+        const demandeurIds = Array.from(new Set(sousTraitances.map((s: { organisme_demandeur_id: string }) => s.organisme_demandeur_id)));
+        const { data: orgsD } = await supabase.from("organismes").select("id, raison_sociale").in("id", demandeurIds);
+        const nomParOrg: Record<string, string> = {};
+        (orgsD as { id: string; raison_sociale: string }[] || []).forEach(o => { nomParOrg[o.id] = o.raison_sociale; });
+        setSessionsSousTraitance(sousTraitances.map((s: { session_id: string; organisme_demandeur_id: string; session: { date_debut: string | null; formation: { titre: string } | null } | null }) => ({
+          session_id: s.session_id,
+          formation_titre: s.session?.formation?.titre || "Formation",
+          organisme_demandeur_nom: nomParOrg[s.organisme_demandeur_id] || "Un formateur",
+          date_debut: s.session?.date_debut || null,
+        })));
+      }
+
       setLoading(false);
     };
     init();
@@ -470,6 +499,27 @@ const Dashboard = () => {
                     items={questionnairesEnAttenteDetail}
                   />
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Chantier "sous-traitance" (28/08) : sessions confiées par un autre
+              formateur/organisme, où j'anime en tant que sous-traitant — séparé des
+              stats ci-dessous qui ne portent que sur mes propres formations/clients. */}
+          {!loading && sessionsSousTraitance.length > 0 && (
+            <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <p className="font-medium text-purple-800 mb-2">🤝 Sessions en sous-traitance</p>
+              <div className="space-y-1">
+                {sessionsSousTraitance.map((s) => (
+                  <Link
+                    key={s.session_id}
+                    to={`/sessions-sous-traitees/${s.session_id}`}
+                    className="block text-sm text-purple-700 hover:underline py-1 px-2 -mx-2 rounded hover:bg-purple-100"
+                  >
+                    {s.formation_titre} — confiée par {s.organisme_demandeur_nom}
+                    {s.date_debut ? ` (${new Date(s.date_debut).toLocaleDateString("fr-FR")})` : ""}
+                  </Link>
+                ))}
               </div>
             </div>
           )}
