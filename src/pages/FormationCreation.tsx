@@ -37,6 +37,7 @@ const FormationCreation = () => {
     objectifs: "",
     duree: "",
     tarif: "",
+    montant_ht: "",
     modalites: "",
     prerequis: "",
     document_mode: "auto",
@@ -141,6 +142,7 @@ const FormationCreation = () => {
       prerequis: formData.prerequis || null,
       duree: formData.duree || null,
       tarif: formData.tarif || null,
+      montant_ht: formData.montant_ht ? parseFloat(formData.montant_ht) : null,
       document_mode: formData.document_mode,
       statut,
     });
@@ -307,6 +309,21 @@ const FormationCreation = () => {
                           onChange={handleChange}
                           placeholder="ex: 1500 € net de taxes"
                         />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="montant_ht">Montant HT (optionnel, pour le suivi CA)</Label>
+                        <Input
+                          id="montant_ht"
+                          name="montant_ht"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.montant_ht}
+                          onChange={handleChange}
+                          placeholder="ex: 1500"
+                        />
+                        <p className="text-xs text-gray-400">Montant chiffré distinct du champ "Tarif" ci-dessus — sert uniquement au calcul du chiffre d'affaires, jamais affiché au client.</p>
                       </div>
                     </div>
 
