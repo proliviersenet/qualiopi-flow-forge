@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,10 @@ import { Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -63,6 +67,14 @@ const ClientDetail = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { session: authSession, loading: authLoading } = useAuth();
+  // Correctif du 20/08 (Olivier) : l'alerte "documents en attente de signature"
+  // du Dashboard n'atterrissait que sur la fiche client, pas sur la session
+  // concernée — il fallait ensuite la retrouver à l'oeil dans la liste. Le lien
+  // pointe maintenant vers ?session=<id>, utilisé ici pour scroller jusqu'à la
+  // bonne carte et la surligner.
+  const [searchParams] = useSearchParams();
+  const highlightSessionId = searchParams.get("session");
+  const [sessionHighlighted, setSessionHighlighted] = useState(false);
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [client, setClient] = useState<Client | null>(null);
@@ -569,13 +581,29 @@ const ClientDetail = () => {
     }
   };
 
+  // Correctif du 20/08 (Olivier) : la suppression d'une session se faisait en un
+  // clic (confirmation native `confirm()`, trop facile à valider par réflexe/appui
+  // par erreur). Remplacée par une boîte de dialogue explicite (AlertDialog) qui
+  // exige un second clic délibéré sur "Supprimer" — `confirmDeleteSession` porte
+  // la session en attente de confirmation, la suppression réelle ne se déclenche
+  // que depuis le bouton de la boîte de dialogue ci-dessous (cf. rendu).
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<Session | null>(null);
+
   const supprimerSession = async (sessionId: string) => {
-    if (!confirm("Supprimer cette session ? Cette action est irréversible.")) return;
     const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Session supprimée" });
+    setConfirmDeleteSession(null);
     await fetchSessions(id!);
   };
+
+  useEffect(() => {
+    if (!highlightSessionId || sessions.length === 0) return;
+    if (!sessions.some(s => s.id === highlightSessionId)) return;
+    const card = document.getElementById(`session-${highlightSessionId}`);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    setSessionHighlighted(true);
+  }, [highlightSessionId, sessions]);
 
   if (loading) {
     return (
@@ -663,7 +691,11 @@ const ClientDetail = () => {
           ) : (
             <div className="space-y-3">
               {sessions.map(session => (
-                <Card key={session.id}>
+                <Card
+                  key={session.id}
+                  id={`session-${session.id}`}
+                  className={sessionHighlighted && highlightSessionId === session.id ? "ring-2 ring-amber-400 ring-offset-2" : undefined}
+                >
                   <CardContent className="pt-4">
                     <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
                       <div className="flex-1 min-w-0 w-full">
@@ -857,7 +889,7 @@ const ClientDetail = () => {
                         size="sm"
                         variant="outline"
                         className="border-red-200 text-red-500 hover:bg-red-50 sm:ml-4 flex-shrink-0"
-                        onClick={() => supprimerSession(session.id)}
+                        onClick={() => setConfirmDeleteSession(session)}
                       >
                         Supprimer
                       </Button>
@@ -871,6 +903,36 @@ const ClientDetail = () => {
       </main>
 
       <Footer />
+
+      {/* Confirmation suppression session */}
+      <AlertDialog open={!!confirmDeleteSession} onOpenChange={(open) => !open && setConfirmDeleteSession(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette session ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDeleteSession && (
+                <>
+                  Cette action supprimera définitivement la session{" "}
+                  <strong>{confirmDeleteSession.formation?.titre || "Formation"}</strong>
+                  {confirmDeleteSession.date_debut
+                    ? ` du ${new Date(confirmDeleteSession.date_debut).toLocaleDateString("fr-FR")}`
+                    : ""}
+                  , ainsi que tous les documents et stagiaires associés. Cette action est irréversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => confirmDeleteSession && supprimerSession(confirmDeleteSession.id)}
+            >
+              Oui, supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialog affecter formation */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

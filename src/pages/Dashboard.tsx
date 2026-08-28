@@ -26,7 +26,7 @@ const AlerteDetailPopover = ({
 }: {
   icone: string;
   texte: string;
-  items: { clientId: string | null; label: string }[];
+  items: { clientId: string | null; sessionId?: string | null; stagiaireId?: string | null; label: string }[];
 }) => (
   <Popover>
     <PopoverTrigger asChild>
@@ -35,28 +35,39 @@ const AlerteDetailPopover = ({
       </button>
     </PopoverTrigger>
     <PopoverContent className="w-80 max-h-72 overflow-y-auto">
-      <p className="text-xs font-medium text-gray-500 mb-2">Cliquez pour aller directement corriger :</p>
+      <p className="text-xs font-medium text-gray-500 mb-2">Cliquez pour ouvrir la liste des formations du client :</p>
       <div className="space-y-1">
         {items.length === 0 && <p className="text-xs text-gray-400">Détail indisponible.</p>}
-        {items.map((item, i) => (
-          item.clientId ? (
+        {items.map((item, i) => {
+          if (!item.clientId) {
+            return (
+              <Link
+                key={i}
+                to="/clients"
+                className="block text-sm text-exsenco-blue hover:underline py-1 px-2 -mx-2 rounded hover:bg-gray-50"
+              >
+                {item.label} <span className="text-gray-400">(voir Clients)</span>
+              </Link>
+            );
+          }
+          // Le lien mène toujours à la liste des formations du client (jamais
+          // directement au document manquant) — le paramètre ?session=/?stagiaire=
+          // sert uniquement à surligner et scroller jusqu'à la bonne ligne une
+          // fois sur cette liste, pour éviter d'avoir à la chercher à la main.
+          const params = new URLSearchParams();
+          if (item.sessionId) params.set("session", item.sessionId);
+          if (item.stagiaireId) params.set("stagiaire", item.stagiaireId);
+          const query = params.toString();
+          return (
             <Link
               key={i}
-              to={`/clients/${item.clientId}`}
+              to={`/clients/${item.clientId}${query ? `?${query}` : ""}`}
               className="block text-sm text-exsenco-blue hover:underline py-1 px-2 -mx-2 rounded hover:bg-gray-50"
             >
               {item.label}
             </Link>
-          ) : (
-            <Link
-              key={i}
-              to="/clients"
-              className="block text-sm text-exsenco-blue hover:underline py-1 px-2 -mx-2 rounded hover:bg-gray-50"
-            >
-              {item.label} <span className="text-gray-400">(voir Clients)</span>
-            </Link>
-          )
-        ))}
+          );
+        })}
       </div>
     </PopoverContent>
   </Popover>
@@ -95,8 +106,8 @@ const Dashboard = () => {
     nbAvisFormateur: 0,
   });
   const [sessionsRecentes, setSessionsRecentes] = useState<Record<string, unknown>[]>([]);
-  const [documentsEnAttenteDetail, setDocumentsEnAttenteDetail] = useState<{ clientId: string | null; label: string }[]>([]);
-  const [questionnairesEnAttenteDetail, setQuestionnairesEnAttenteDetail] = useState<{ clientId: string | null; label: string }[]>([]);
+  const [documentsEnAttenteDetail, setDocumentsEnAttenteDetail] = useState<{ clientId: string | null; sessionId: string | null; label: string }[]>([]);
+  const [questionnairesEnAttenteDetail, setQuestionnairesEnAttenteDetail] = useState<{ clientId: string | null; stagiaireId: string | null; label: string }[]>([]);
   const [satisfactionData, setSatisfactionData] = useState<{ name: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -223,7 +234,7 @@ const Dashboard = () => {
         // Détail par client des documents en attente (point non bloquant du 17/08 :
         // l'alerte "Actions requises" ne menait nulle part — chaque entrée pointe
         // maintenant vers la fiche du client concerné).
-        const documentsEnAttenteDetail: { clientId: string | null; label: string }[] = [];
+        const documentsEnAttenteDetail: { clientId: string | null; sessionId: string | null; label: string }[] = [];
         if (formationIds.length > 0 || sessionIds.length > 0) {
           const orParts: string[] = [];
           if (formationIds.length > 0) orParts.push(`formation_id.in.(${formationIds.join(',')})`);
@@ -255,6 +266,7 @@ const Dashboard = () => {
               const clientNom = clientId ? clientNomMap[clientId] : undefined;
               documentsEnAttenteDetail.push({
                 clientId,
+                sessionId: doc.session_id || null,
                 label: `${typeLabel}${formationTitre ? ' — ' + formationTitre : ''}${clientNom ? ' (' + clientNom + ')' : ''}`,
               });
             });
@@ -277,6 +289,7 @@ const Dashboard = () => {
         const nbQuestionnaires = stagiairesQuestionnaireEnAttente.length;
         const questionnairesEnAttenteDetail = stagiairesQuestionnaireEnAttente.map((s) => ({
           clientId: s.client_id || null,
+          stagiaireId: s.id || null,
           label: `${s.prenom || ''} ${s.nom || ''}`.trim() + (s.client_id && clientNomMap[s.client_id] ? ` (${clientNomMap[s.client_id]})` : ''),
         }));
 

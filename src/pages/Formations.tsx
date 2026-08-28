@@ -10,6 +10,16 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Formation {
   id: string;
@@ -36,6 +46,7 @@ const Formations = () => {
   const [search, setSearch] = useState("");
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [dateAuditSurveillance, setDateAuditSurveillance] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Formation | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -90,6 +101,7 @@ const Formations = () => {
     const { error } = await supabase.from("formations").delete().eq("id", id);
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
     setFormations(prev => prev.filter(f => f.id !== id));
+    setConfirmDelete(null);
     toast({ title: "Formation supprimée" });
   };
 
@@ -117,7 +129,7 @@ const Formations = () => {
           <Link to={`/formations/${formation.id}/edit`} className="flex-1">
             <Button size="sm" className="w-full" style={{ background: "#25245e", color: "#fff" }}>Modifier</Button>
           </Link>
-          <Button variant="outline" size="sm" className="text-red-600 border-red-200" onClick={() => supprimerFormation(formation.id)}>
+          <Button variant="outline" size="sm" className="text-red-600 border-red-200" onClick={() => setConfirmDelete(formation)}>
             Supprimer
           </Button>
         </div>
@@ -206,6 +218,31 @@ const Formations = () => {
         </div>
       </main>
       <Footer />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette formation ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete && (
+                <>
+                  Cette action supprimera définitivement la formation <strong>{confirmDelete.titre}</strong>.
+                  Cette action est irréversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => confirmDelete && supprimerFormation(confirmDelete.id)}
+            >
+              Oui, supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
