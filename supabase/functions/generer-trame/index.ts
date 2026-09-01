@@ -196,7 +196,7 @@ Retourne UNIQUEMENT le HTML du tableau (pas de markdown, pas de balises html/bod
   </div>
 
   <div class="footer">
-    Trame pédagogique générée par QalioFlex by ExSenCo — ${new Date().toLocaleDateString("fr-FR")}
+    Trame pédagogique générée par QualioFlex by ExSenCo — ${new Date().toLocaleDateString("fr-FR")}
   </div>
 </div>
 </body>
