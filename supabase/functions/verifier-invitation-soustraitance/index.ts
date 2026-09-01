@@ -51,7 +51,7 @@ serve(async (req) => {
         valid: true,
         email_invite: invitation.email_invite,
         formation_titre: formationTitre,
-        organisme_demandeur_nom: organisme?.raison_sociale || "Un formateur QalioFlex",
+        organisme_demandeur_nom: organisme?.raison_sociale || "Un formateur QualioFlex",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
