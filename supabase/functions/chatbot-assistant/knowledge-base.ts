@@ -1,11 +1,11 @@
-// Base de connaissance QalioFlex — rédigée à partir des fonctionnalités réelles de l'application
+// Base de connaissance QualioFlex — rédigée à partir des fonctionnalités réelles de l'application
 // (repo qualiopi-flow-forge). Sert de socle au system prompt du chatbot SAV niveau 1 + on-boarding.
 // À tenir à jour à chaque nouvelle fonctionnalité livrée.
 
 export const KNOWLEDGE_BASE = `
-# QalioFlex — Base de connaissance
+# QualioFlex — Base de connaissance
 
-QalioFlex (by ExSenCo) est une application SaaS qui aide les organismes de formation à gérer leur
+QualioFlex (by ExSenCo) est une application SaaS qui aide les organismes de formation à gérer leur
 conformité Qualiopi et leur activité au quotidien : formations, clients, documents obligatoires,
 signatures électroniques, bilan pédagogique et financier (BPF), préparation d'audit.
 
@@ -72,7 +72,7 @@ d'invitation, /invitation/:token). Il y retrouve :
 
 Les questionnaires de positionnement (/positionnement/:token), évaluations (/evaluation/:token) et
 émargements (/emargement/:token) sont aussi accessibles via des liens publics envoyés directement aux
-stagiaires (pas besoin de compte QalioFlex pour eux).
+stagiaires (pas besoin de compte QualioFlex pour eux).
 
 ## Ce que le chatbot ne doit JAMAIS faire
 

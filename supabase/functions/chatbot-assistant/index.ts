@@ -121,10 +121,10 @@ serve(async (req) => {
     await supabase.from("chatbot_messages").insert({ conversation_id: convId, role: "user", content: message });
 
     const steps = isClient ? ONBOARDING_STEPS_CLIENT : ONBOARDING_STEPS_FORMATEUR;
-    const systemPrompt = `Tu es Qualios, l'assistant IA de QalioFlex : un chatbot de support niveau 1 (SAV) et
-d'accompagnement à la prise en main (on-boarding), intégré directement dans l'application QalioFlex utilisée par des
+    const systemPrompt = `Tu es Qualios, l'assistant IA de QualioFlex : un chatbot de support niveau 1 (SAV) et
+d'accompagnement à la prise en main (on-boarding), intégré directement dans l'application QualioFlex utilisée par des
 organismes de formation professionnelle (formateurs) et leurs clients (entreprises). Ton identité visuelle est un
-petit phénix mignon aux couleurs de QalioFlex (indigo et orange) : tu incarnes un assistant sympathique, rassurant
+petit phénix mignon aux couleurs de QualioFlex (indigo et orange) : tu incarnes un assistant sympathique, rassurant
 et un peu malicieux, jamais froid ni robotique.
 
 ${KNOWLEDGE_BASE}
@@ -147,7 +147,7 @@ ${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 - IMPORTANT : n'utilise JAMAIS de syntaxe markdown (pas d'astérisques **gras**, pas de dièses #titre, pas de
   tirets de liste -). L'interface affiche du texte brut : écris en phrases normales, avec des numéros suivis
   d'un point (1. 2. 3.) si une procédure en plusieurs étapes est vraiment nécessaire.
-- Ne mentionne jamais que tu es "Claude" ou un modèle d'IA générique : tu es "Qualios, l'assistant QalioFlex".
+- Ne mentionne jamais que tu es "Claude" ou un modèle d'IA générique : tu es "Qualios, l'assistant QualioFlex".
 
 ## Escalade vers Olivier (niveau 2)
 Si la question sort de ce que tu sais avec certitude d'après cette base de connaissance, ou concerne :
@@ -202,7 +202,7 @@ sur le fonctionnement de l'app à laquelle la base de connaissance répond déj�
         const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
-    <h1 style="color:#fff;margin:0;font-size:18px;">QalioFlex — Escalade Qualios (chatbot SAV)</h1>
+    <h1 style="color:#fff;margin:0;font-size:18px;">QualioFlex — Escalade Qualios (chatbot SAV)</h1>
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:24px;border-radius:0 0 8px 8px;">
     <p><strong>${qui}</strong></p>
@@ -218,9 +218,9 @@ sur le fonctionnement de l'app à laquelle la base de connaissance répond déj�
             method: "POST",
             headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
             body: JSON.stringify({
-              sender: { name: "QalioFlex — Qualios (chatbot SAV)", email: "olivier@exsenco.fr" },
+              sender: { name: "QualioFlex — Qualios (chatbot SAV)", email: "olivier@exsenco.fr" },
               to: [{ email: "olivier@exsenco.fr", name: "Olivier" }],
-              subject: `[QalioFlex] Escalade Qualios — ${qui}`,
+              subject: `[QualioFlex] Escalade Qualios — ${qui}`,
               htmlContent: html,
             }),
           });
