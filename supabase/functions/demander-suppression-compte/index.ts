@@ -81,9 +81,9 @@ Deno.serve(async (req: Request) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: "QalioFlex <noreply@qualioflex.fr>",
+            from: "QualioFlex <noreply@qualioflex.fr>",
             to: [user.email],
-            subject: "Votre compte QalioFlex a été désactivé",
+            subject: "Votre compte QualioFlex a été désactivé",
             html: `
 <!DOCTYPE html>
 <html lang="fr">
@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
         <tr>
           <td style="background:#25245e;padding:32px 40px;">
             <a href="https://qualioflex.fr" style="text-decoration:none;">
-              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QualioFlex</h1>
               <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
             </a>
           </td>
@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
               Bonjour,
             </p>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
-              Suite à votre demande, votre compte QalioFlex est <strong>immédiatement inaccessible</strong> : vous ne pouvez plus vous y connecter.
+              Suite à votre demande, votre compte QualioFlex est <strong>immédiatement inaccessible</strong> : vous ne pouvez plus vous y connecter.
             </p>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
               Vos données sont conservées <strong>30 jours</strong>. Si vous changez d'avis durant ce délai, contactez-nous et nous pourrons restaurer votre accès.
@@ -129,7 +129,7 @@ Deno.serve(async (req: Request) => {
         <tr>
           <td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;">
             <p style="margin:0;color:#999;font-size:12px;">
-              QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+              QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
               <a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a>
             </p>
           </td>
