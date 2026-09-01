@@ -19,7 +19,7 @@ async function envoyerEmailResend(RESEND_API_KEY: string, to: string, subject: s
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: "QalioFlex <noreply@qualioflex.fr>", to: [to], subject, html }),
+    body: JSON.stringify({ from: "QualioFlex <noreply@qualioflex.fr>", to: [to], subject, html }),
   });
   if (!res.ok) {
     const errBody = await res.text();
@@ -36,7 +36,7 @@ const enteteEmail = (titre: string) => `
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
         <tr><td style="background:#25245e;padding:32px 40px;">
-          <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+          <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QualioFlex</h1>
           <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
         </td></tr>
         <tr><td style="padding:40px;">
@@ -45,7 +45,7 @@ const enteteEmail = (titre: string) => `
 const piedEmail = `
         </td></tr>
         <tr><td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;">
-          <p style="margin:0;color:#999;font-size:12px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+          <p style="margin:0;color:#999;font-size:12px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
           <a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a></p>
         </td></tr>
       </table>
@@ -123,7 +123,7 @@ serve(async (req) => {
       );
     }
 
-    const nomDemandeur = monOrganisme?.raison_sociale || monProfil.nom_complet || "Un formateur QalioFlex";
+    const nomDemandeur = monOrganisme?.raison_sociale || monProfil.nom_complet || "Un formateur QualioFlex";
 
     if (mode === "existing") {
       if (!organisme_sous_traitant_id || !formateur_profile_id) {
@@ -152,7 +152,7 @@ serve(async (req) => {
           `<p style="color:#555;line-height:1.6;">
             <strong>${nomDemandeur}</strong> vous confie l'animation de la session <strong>${formation.titre}</strong>.
           </p>
-          <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QalioFlex (Tableau de bord → Sessions en sous-traitance).</p>
+          <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QualioFlex (Tableau de bord → Sessions en sous-traitance).</p>
           <table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
             <a href="https://qualioflex.fr/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
           </td></tr></table>` + piedEmail
@@ -172,7 +172,7 @@ serve(async (req) => {
         const { data: orgExistant } = await supabase.from("organismes").select("id, raison_sociale, email_contact").eq("owner_user_id", existingUserId).maybeSingle();
         if (!orgExistant) {
           return new Response(
-            JSON.stringify({ error: "Cette adresse est déjà utilisée par un compte QalioFlex non-formateur. Utilisez une autre adresse pour l'inviter comme sous-traitant." }),
+            JSON.stringify({ error: "Cette adresse est déjà utilisée par un compte QualioFlex non-formateur. Utilisez une autre adresse pour l'inviter comme sous-traitant." }),
             { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -197,7 +197,7 @@ serve(async (req) => {
             `${nomDemandeur} vous confie une session en sous-traitance`,
             enteteEmail("Une session vous a été confiée en sous-traitance") +
             `<p style="color:#555;line-height:1.6;"><strong>${nomDemandeur}</strong> vous confie l'animation de la session <strong>${formation.titre}</strong>.</p>
-            <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QalioFlex (Tableau de bord → Sessions en sous-traitance).</p>
+            <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QualioFlex (Tableau de bord → Sessions en sous-traitance).</p>
             <table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
               <a href="https://qualioflex.fr/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
             </td></tr></table>` + piedEmail
@@ -223,13 +223,13 @@ serve(async (req) => {
       await envoyerEmailResend(
         RESEND_API_KEY,
         email,
-        `${nomDemandeur} vous invite à co-animer une formation sur QalioFlex`,
+        `${nomDemandeur} vous invite à co-animer une formation sur QualioFlex`,
         enteteEmail("Vous êtes invité(e) à créer votre espace formateur") +
         `<p style="color:#555;line-height:1.6;">
           <strong>${nomDemandeur}</strong> souhaite vous confier l'animation de la session <strong>${formation.titre}</strong> en sous-traitance.
         </p>
         <p style="color:#555;line-height:1.6;">
-          Créez votre espace formateur QalioFlex (votre propre organisme, votre propre NDA) en quelques minutes pour y accéder — la session sera automatiquement rattachée à votre compte.
+          Créez votre espace formateur QualioFlex (votre propre organisme, votre propre NDA) en quelques minutes pour y accéder — la session sera automatiquement rattachée à votre compte.
         </p>
         <table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
           <a href="${lienInvitation}" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Créer mon espace formateur →</a>
