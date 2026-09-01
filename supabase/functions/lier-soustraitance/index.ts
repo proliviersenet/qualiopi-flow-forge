@@ -83,9 +83,9 @@ serve(async (req) => {
           method: "POST",
           headers: { "Authorization": `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "QalioFlex <noreply@qualioflex.fr>",
+            from: "QualioFlex <noreply@qualioflex.fr>",
             to: [orgDemandeur.email_contact],
-            subject: `Votre sous-traitant a créé son espace QalioFlex`,
+            subject: `Votre sous-traitant a créé son espace QualioFlex`,
             html: `<p>Le formateur invité pour <strong>${formationTitre}</strong> a créé son espace et a désormais accès à la session.</p>`,
           }),
         });
