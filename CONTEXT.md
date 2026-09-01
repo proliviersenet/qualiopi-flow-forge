@@ -1,4 +1,4 @@
-# CONTEXT.md — QalioFlex
+# CONTEXT.md — QualioFlex
 
 > Fichier de contexte à coller à la racine du repo, à donner à n'importe quelle session Claude (web, Claude Code, etc.) pour reprendre le projet sans perte d'information.
 > Dernière mise à jour : 1 juillet 2026 (session 3 — module Formations complet + pages Profil & Paramètres)
@@ -9,7 +9,7 @@
 
 ```
 Lis le fichier CONTEXT.md à la racine du projet pour comprendre 
-le contexte complet de QalioFlex avant toute action. 
+le contexte complet de QualioFlex avant toute action. 
 Préviens-moi de ce que tu as compris avant de commencer à coder.
 ```
 
@@ -27,7 +27,7 @@ Puis préciser la tâche du jour — voir §8 "Roadmap" pour la liste des priori
 - Adresse : 80 rue du Nouveau Bois, 37550 Saint-Avertin
 - Contact : olivier@exsenco.fr / 06 07 46 74 09
 
-**QalioFlex** = SaaS Qualiopi destiné aux formateurs indépendants et organismes de formation, pour gérer la conformité Qualiopi (sessions, documents, signatures, questionnaires, BPF, pré-audits).
+**QualioFlex** = SaaS Qualiopi destiné aux formateurs indépendants et organismes de formation, pour gérer la conformité Qualiopi (sessions, documents, signatures, questionnaires, BPF, pré-audits).
 
 ---
 
@@ -104,7 +104,7 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 
 | Email | Mot de passe | Rôle |
 |---|---|---|
-| olivier@exsenco.fr | À changer après reset (était QalioFlex2026!) | Organisme ExSenCo créé en base, NDA 24370470637 |
+| olivier@exsenco.fr | À changer après reset (était QualioFlex2026!) | Organisme ExSenCo créé en base, NDA 24370470637 |
 | do.senet@gmail.com | — | Profil sans organisme (test) |
 | olivoa@hotmail.fr | Choisi à l'inscription | Compte test "EMKA Electronique" — inscription via SIRET, créé le 29/06 |
 
@@ -164,10 +164,10 @@ Autres fichiers présents dans `src/pages/` : `Demo.tsx`, `Features.tsx`, `Index
 9. **Pages footer** : CGU, Politique de confidentialité, RGPD, Contact, Centre d'aide, Référentiel Qualiopi
 10. **Pré-audit** — page réelle (edge function `lancer-preaudit` déjà prête en base)
 11. **Stripe** — abonnement récurrent + paiement ponctuel (frais récupération données)
-12. **Factures QalioFlex** — PDF aux couleurs ExSenCo dans espace "Mon compte", déclenchées via webhook Stripe
+12. **Factures QualioFlex** — PDF aux couleurs ExSenCo dans espace "Mon compte", déclenchées via webhook Stripe
 13. **Historique mots de passe** — edge function `check-password-history` + table `password_history` (dette technique sécurité)
 
-### SEO Exsenco (hors QalioFlex)
+### SEO Exsenco (hors QualioFlex)
 Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-37984663690180d4996bc68e523316c7
 ⚠️ Lien nécessite authentification Notion — à partager en export ou en copiant le contenu si analyse nécessaire.
 6. Réactiver la **confirmation email** avant lancement public (actuellement désactivée volontairement pour les tests)
@@ -176,7 +176,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
    - **Abonnement récurrent** (plan mensuel/annuel formateur)
    - **Paiement ponctuel** 10 € frais récupération données lors suppression de compte (placeholder déjà en place dans Settings.tsx → étape "payment")
    - Stripe retenu vs Lemon Squeezy/Paddle : clients 100% France B2B, TVA autoliquidée, frais Stripe ~1,75€/abo vs ~2,50€ MoR — pas d'avantage fiscal pour un MoR dans ce contexte
-   - **Après intégration Stripe** : générer et stocker les **factures d'utilisation QalioFlex** dans l'espace "Mon compte" de chaque formateur (PDF aux couleurs de la charte ExSenCo, mentions légales complètes, téléchargeable pour la comptabilité) — déclenchées via webhook Stripe à chaque paiement réussi
+   - **Après intégration Stripe** : générer et stocker les **factures d'utilisation QualioFlex** dans l'espace "Mon compte" de chaque formateur (PDF aux couleurs de la charte ExSenCo, mentions légales complètes, téléchargeable pour la comptabilité) — déclenchées via webhook Stripe à chaque paiement réussi
 
 ### Roadmap V2 (pivot)
 - Formateurs portés sous certification Qualiopi ExSenCo
@@ -223,7 +223,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 - Le flow documentaire Qualiopi ne se déclenche qu'après upload du fichier stagiaires par le client
 
 #### Logo cliquable (todo rapide)
-- Logo QalioFlex dans Header → lien vers `/dashboard` si connecté, `/` sinon
+- Logo QualioFlex dans Header → lien vers `/dashboard` si connecté, `/` sinon
 
 
 ### ✅ Flow client complet validé le 19/07/2026
@@ -265,7 +265,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 
 ### Principes
 - Pas de convention pour les stagiaires (supprimé du flow)
-- Tous les formulaires sont intégrés dans QalioFlex (pas de lien externe)
+- Tous les formulaires sont intégrés dans QualioFlex (pas de lien externe)
 - Toutes les réponses sont stockées et génèrent une synthèse groupe
 - Tous les documents restent accessibles dans la session (formateur + client)
 - Gestion manuelle des stagiaires : ajout / modification / suppression possible
@@ -275,13 +275,13 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 | # | Étape | Type | Déclencheur | Bloquant | Alerte |
 |---|---|---|---|---|---|
 | 1 | Livret d'accueil + règlement intérieur | Envoi PDF | Dès création session | Non | — |
-| 2 | Questionnaire positionnement AVANT | Form QalioFlex | Dès création session | **OUI** | Formateur + client si manque 2j avant début |
+| 2 | Questionnaire positionnement AVANT | Form QualioFlex | Dès création session | **OUI** | Formateur + client si manque 2j avant début |
 | 3 | Feuilles de présence | Signature Docusign | Pendant la formation | Non | — |
-| 4 | Questionnaire positionnement APRÈS | Form QalioFlex | Fin de formation | Non | — |
-| 5 | Évaluation à chaud | Form QalioFlex | Fin de formation | Non | — |
-| 6 | Évaluation du formateur | Form QalioFlex | Fin de formation | Non | — |
+| 4 | Questionnaire positionnement APRÈS | Form QualioFlex | Fin de formation | Non | — |
+| 5 | Évaluation à chaud | Form QualioFlex | Fin de formation | Non | — |
+| 6 | Évaluation du formateur | Form QualioFlex | Fin de formation | Non | — |
 | 7 | Attestation de fin de formation | Envoi PDF | Fin de formation | Non | — |
-| 8 | Évaluation à froid | Form QalioFlex | J+90 (3 mois) | Non | Formateur + client si manque 1 semaine après envoi |
+| 8 | Évaluation à froid | Form QualioFlex | J+90 (3 mois) | Non | Formateur + client si manque 1 semaine après envoi |
 
 ### Flow client
 
@@ -336,10 +336,10 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 - Bouton relance dropdown dans StagiairesList (formateur + client)
 - Toast affiche les vrais canaux envoyés (email/SMS) depuis results API
 - Fix SMS : URL `/transactionalSMS/send`, format numéro `33XXXXXXXXX`
-- Sender ID "QalioFlex" demandé auprès du support Brevo (en attente activation)
+- Sender ID "QualioFlex" demandé auprès du support Brevo (en attente activation)
 - Convention supprimée du flow stagiaires
 - Gestion manuelle stagiaires : ajout/modification/suppression inline dans StagiairesList
-- Logo QalioFlex cliquable dans tous les emails (lien vers qualioflex.fr)
+- Logo QualioFlex cliquable dans tous les emails (lien vers qualioflex.fr)
 
 **Module documents formation (en cours de test) :**
 - Profile.tsx : upload logo organisme (PNG/JPG/WebP/SVG) → Storage `documents-qualiopi/logos/{organisme_id}/`
@@ -362,7 +362,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 
 ### 🔜 Prochaines priorités (dans l'ordre)
 1. **Documents générés** : Convention, Livret d'accueil, Feuille de présence, Attestation de réalisation (HTML→PDF, logo + infos légales auto)
-2. **Questionnaires intégrés** : Positionnement avant/après, Évaluation à chaud, Évaluation formateur par stagiaire, Évaluation formation par formateur (forms HTML QalioFlex, stockés en base, synthèse groupe)
+2. **Questionnaires intégrés** : Positionnement avant/après, Évaluation à chaud, Évaluation formateur par stagiaire, Évaluation formation par formateur (forms HTML QualioFlex, stockés en base, synthèse groupe)
 3. **Flow auto post-import stagiaires** : envoi livret + questionnaire positionnement avant, alerte bloquante 2j avant formation
 4. **Évaluation à froid** J+90 (cron Supabase)
 5. **DocuSign** : feuilles de présence
@@ -405,7 +405,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 
 **DocuSign production — Go-Live soumis, en attente de validation DocuSign (30 juillet 2026) :**
 • Forfait **Standard** confirmé actif sur le compte production (672336548) → accès API débloqué, le blocage précédent est levé
-• Formulaire de mise en production (Go-Live) rempli et signé par Olivier depuis `apps-d.docusign.com/admin/apps-and-keys` (app "QualiFlow-ExSenCo", clé `dbc125da-0b6b-46d8-aa3e-ff348aafe9da`) : CGU acceptées, compte de production "672336548" sélectionné, questionnaire business rempli (usage externe — stagiaires/clients signataires ; description QalioFlex ; lien `https://qualioflex.fr`), Account ID production `a5d1bca6-d904-41b5-ba57-13e33b0ca01f` renseigné, formulaire signé via DocuSign PowerForm
+• Formulaire de mise en production (Go-Live) rempli et signé par Olivier depuis `apps-d.docusign.com/admin/apps-and-keys` (app "QualiFlow-ExSenCo", clé `dbc125da-0b6b-46d8-aa3e-ff348aafe9da`) : CGU acceptées, compte de production "672336548" sélectionné, questionnaire business rempli (usage externe — stagiaires/clients signataires ; description QualioFlex ; lien `https://qualioflex.fr`), Account ID production `a5d1bca6-d904-41b5-ba57-13e33b0ca01f` renseigné, formulaire signé via DocuSign PowerForm
 • Statut DocuSign au 30/07 : **"En attente d'approbation"** — délai annoncé par DocuSign jusqu'à 48h de révision
 • **Prochaine étape une fois l'approbation reçue** : générer une nouvelle paire de clés RSA spécifique à la prod, faire le JWT consent grant pour cette nouvelle clé, puis mettre à jour les secrets Supabase (`DOCUSIGN_API_ACCOUNT_ID` → `a5d1bca6-d904-41b5-ba57-13e33b0ca01f`, `DOCUSIGN_USER_ID` → `e484eee4-d3ee-4557-8c9d-a9f504b9e9d4`, `DOCUSIGN_BASE_URL` → `https://eu.docusign.net`, `DOCUSIGN_AUTH_URL` → `https://account.docusign.com` à confirmer, `DOCUSIGN_PRIVATE_KEY` → nouvelle clé RSA prod une fois générée), puis tester un vrai envoi de signature en prod
 • Repères non-secrets côté compte développeur/sandbox (EXSENCO, id 48719560) : User ID `efa94943-6de2-49a6-9560-b7eda8eadffa`, API Account ID `f2bc363a-6ca2-4323-ada6-87ffe387ce34`, Base URI `https://demo.docusign.net`
@@ -433,7 +433,7 @@ Dashboard Notion SEO : https://app.notion.com/p/Dashboard-SEO-Exsenco-3798466369
 **Chatbot assistant IA (SAV niveau 1 + on-boarding) — déployé formateur + client :**
 - Décisions validées avec Olivier : 100% IA générative (Claude), déploiement simultané formateur + client, base de connaissance rédigée par Claude à partir des vraies fonctionnalités de l'appli, escalade niveau 2 par email avec résumé de conversation
 - Tables `chatbot_conversations` et `chatbot_messages` créées (RLS : chacun voit ses propres conversations, le formateur voit aussi celles de ses clients pour contrôle qualité)
-- Edge Function `chatbot-assistant` déployée : identifie l'appelant (formateur ou client) via son rôle, construit un contexte dynamique (organisme, nb formations/clients, profil complet ou non pour un formateur ; fiche entreprise pour un client), appelle l'API Claude (`claude-sonnet-4-6`) avec une base de connaissance complète rédigée à partir des fonctionnalités réelles de QalioFlex
+- Edge Function `chatbot-assistant` déployée : identifie l'appelant (formateur ou client) via son rôle, construit un contexte dynamique (organisme, nb formations/clients, profil complet ou non pour un formateur ; fiche entreprise pour un client), appelle l'API Claude (`claude-sonnet-4-6`) avec une base de connaissance complète rédigée à partir des fonctionnalités réelles de QualioFlex
 - Détection automatique d'escalade (`[ESCALADE: raison]` dans la réponse du modèle) → email HTML envoyé à olivier@exsenco.fr via Brevo avec résumé de la conversation, statut conversation mis à jour
 - Widget `ChatbotWidget.tsx` : bulle flottante bas-droite, visible uniquement pour utilisateurs connectés, historique persistant (localStorage + DB), montée globalement dans `App.tsx` donc disponible sur tout le site sans toucher chaque page
 - **Bug trouvé et corrigé en test réel** : `authClient.auth.getUser()` sans argument s'appuie sur la session interne du client Supabase (vide côté edge function) et non sur le header `Authorization` global → toutes les requêtes échouaient en 500 "Utilisateur non authentifié". Fix : passer explicitement le JWT à `getUser(jwt)`.
