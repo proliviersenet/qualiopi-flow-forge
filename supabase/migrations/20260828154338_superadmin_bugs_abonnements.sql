@@ -46,7 +46,7 @@ create policy "Signaler un bug"
 
 -- =========================================================================
 -- 2. Table abonnements_organismes : ce que chaque organisme formateur paie à
---    Olivier pour QalioFlex. Pas d'intégration Stripe automatique à ce jour
+--    Olivier pour QualioFlex. Pas d'intégration Stripe automatique à ce jour
 --    (roadmap V2 CONTEXT.md §8) → alimentée manuellement par Olivier via
 --    l'espace superadmin. Utilisée pour estimer le CA récurrent par période.
 -- =========================================================================
