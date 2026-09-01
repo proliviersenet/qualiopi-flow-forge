@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Edge Function publique (pas d'authentification) : le stagiaire n'a pas de compte
-// QalioFlex. L'accès est protégé uniquement par un token unique et non devinable
+// QualioFlex. L'accès est protégé uniquement par un token unique et non devinable
 // (généré par envoyer-relance) associé à un seul stagiaire et un seul type de
 // questionnaire (avant/après). On utilise la clé service_role pour contourner la
 // RLS ici — c'est le token, pas une session Supabase, qui fait office d'autorisation.
