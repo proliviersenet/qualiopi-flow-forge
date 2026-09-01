@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !user || user.email?.toLowerCase() !== ADMIN_EMAIL) {
       return new Response(
-        JSON.stringify({ error: "Action réservée à l'administrateur QalioFlex." }),
+        JSON.stringify({ error: "Action réservée à l'administrateur QualioFlex." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
