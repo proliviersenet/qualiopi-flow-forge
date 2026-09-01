@@ -33,7 +33,7 @@ async function envoyerEmail(to: string, toName: string, subject: string, html: s
     method: "POST",
     headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+      sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
       to: [{ email: to, name: toName }],
       subject,
       htmlContent: html,
@@ -57,7 +57,7 @@ function emailWrapper(titre: string, corps: string): string {
         <tr>
           <td style="background:#25245e;padding:32px 40px;">
             <a href="https://qualioflex.fr" style="text-decoration:none;">
-              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QualioFlex</h1>
               <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
             </a>
           </td>
@@ -71,7 +71,7 @@ function emailWrapper(titre: string, corps: string): string {
         <tr>
           <td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;">
             <p style="margin:0;color:#999;font-size:12px;">
-              QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+              QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
               <a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a>
             </p>
           </td>
@@ -128,7 +128,7 @@ Deno.serve(async (req: Request) => {
           `
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">Bonjour,</p>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
-              Votre compte QalioFlex est désactivé depuis le ${new Date(d.demandee_le).toLocaleDateString("fr-FR")}.
+              Votre compte QualioFlex est désactivé depuis le ${new Date(d.demandee_le).toLocaleDateString("fr-FR")}.
               Vos données sont toujours conservées, mais il vous reste <strong>${joursRestants} jours</strong>
               (jusqu'au <strong>${limite}</strong>) pour nous contacter si vous souhaitez récupérer l'accès à votre compte.
             </p>
@@ -142,7 +142,7 @@ Deno.serve(async (req: Request) => {
             </table>
           `
         );
-        const ok = await envoyerEmail(d.email, d.email, "[QalioFlex] Il vous reste " + joursRestants + " jours pour récupérer vos données", html);
+        const ok = await envoyerEmail(d.email, d.email, "[QualioFlex] Il vous reste " + joursRestants + " jours pour récupérer vos données", html);
         if (ok) {
           await admin.from("demandes_suppression_compte").update({ relance_j5_envoyee: true }).eq("id", d.id);
           relancesJ5++;
@@ -156,7 +156,7 @@ Deno.serve(async (req: Request) => {
           `
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">Bonjour,</p>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
-              Votre compte QalioFlex est toujours désactivé depuis le ${new Date(d.demandee_le).toLocaleDateString("fr-FR")}.
+              Votre compte QualioFlex est toujours désactivé depuis le ${new Date(d.demandee_le).toLocaleDateString("fr-FR")}.
               Il vous reste <strong>${joursRestants} jours</strong> (jusqu'au <strong>${limite}</strong>) pour nous contacter
               si vous souhaitez récupérer l'accès à votre compte et à vos données.
             </p>
@@ -170,7 +170,7 @@ Deno.serve(async (req: Request) => {
             </table>
           `
         );
-        const ok = await envoyerEmail(d.email, d.email, "[QalioFlex] Dernier rappel : " + joursRestants + " jours avant suppression définitive", html);
+        const ok = await envoyerEmail(d.email, d.email, "[QualioFlex] Dernier rappel : " + joursRestants + " jours avant suppression définitive", html);
         if (ok) {
           await admin.from("demandes_suppression_compte").update({ relance_j15_envoyee: true }).eq("id", d.id);
           relancesJ15++;
@@ -197,7 +197,7 @@ Deno.serve(async (req: Request) => {
             </table>
           `
         );
-        const ok = await envoyerEmail(ADMIN_EMAIL, "Olivier", "[QalioFlex] Compte à traiter : " + d.email, html);
+        const ok = await envoyerEmail(ADMIN_EMAIL, "Olivier", "[QualioFlex] Compte à traiter : " + d.email, html);
         if (ok) {
           await admin.from("demandes_suppression_compte").update({ notif_olivier_envoyee: true }).eq("id", d.id);
           notifsOlivier++;
