@@ -3,7 +3,7 @@
 Ce fichier sert de référence ("baseline") pour la veille automatique mise en place
 le 31/07/2026 à la demande d'Olivier, afin de détecter toute évolution du
 référentiel national qualité / guide de lecture Qualiopi et d'évaluer si
-QalioFlex doit évoluer pour rester conforme.
+QualioFlex doit évoluer pour rester conforme.
 
 Source officielle surveillée :
 https://travail-emploi.gouv.fr/referentiel-national-qualite-guide-de-lecture-qualiopi
@@ -42,18 +42,18 @@ relevé ci-dessus.
 - Si rien n'a changé : aucune action, aucune notification.
 - Si la date ou le numéro de version a changé : Olivier est notifié
   (push) avec un résumé de ce qui a changé, un lien direct vers le PDF à
-  jour, et une proposition de points à vérifier dans QalioFlex (contenus
+  jour, et une proposition de points à vérifier dans QualioFlex (contenus
   générés — supports, programmes, émargements, conventions — qui citent
   ou s'appuient sur des indicateurs du référentiel).
 - Ce fichier doit alors être mis à jour (nouvelle baseline) après lecture
   par Olivier ou par Claude lors d'une session de suivi.
 
-## Points QalioFlex potentiellement impactés par une évolution du référentiel
+## Points QualioFlex potentiellement impactés par une évolution du référentiel
 
 À revérifier à chaque changement de version détecté :
 - Les modèles de support pédagogique / programme / livret d'accueil
   générés (`documents_formation`) — vocabulaire, mentions obligatoires.
 - Le contenu des émargements et attestations.
 - Les convention de formation (Chantier 5 — signature DocuSign).
-- Tout texte d'aide ou de documentation interne à QalioFlex mentionnant
+- Tout texte d'aide ou de documentation interne à QualioFlex mentionnant
   des indicateurs precis du référentiel.
