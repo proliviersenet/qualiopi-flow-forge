@@ -151,7 +151,7 @@ serve(async (req) => {
   <div class="no-print">
     <button onclick="window.print()" style="background:#25245e;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;">🖨️ Imprimer / Enregistrer en PDF</button>
   </div>
-  <div class="footer">Document généré par QalioFlex — ${esc(org.raison_sociale || "")}</div>
+  <div class="footer">Document généré par QualioFlex — ${esc(org.raison_sociale || "")}</div>
 </body>
 </html>`;
 
