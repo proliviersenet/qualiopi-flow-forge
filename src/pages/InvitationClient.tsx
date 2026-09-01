@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { validatePassword } from "@/lib/passwordUtils";
+import Logo from "@/components/Logo";
 
 const InvitationClient = () => {
   const { token } = useParams<{ token: string }>();
@@ -143,7 +144,7 @@ const InvitationClient = () => {
           <CardContent className="pt-8 pb-8 text-center">
             <p className="text-5xl mb-4">🎉</p>
             <h2 className="text-xl font-bold mb-2" style={{ color: "#25245e" }}>Votre espace est créé !</h2>
-            <p className="text-gray-500 text-sm mb-6">Bienvenue sur QalioFlex. Votre formateur a été notifié et va prochainement affecter vos formations. Vous pouvez maintenant vous connecter.</p>
+            <p className="text-gray-500 text-sm mb-6">Bienvenue sur QualioFlex. Votre formateur a été notifié et va prochainement affecter vos formations. Vous pouvez maintenant vous connecter.</p>
             <Button
               onClick={() => navigate("/login")}
               style={{ background: "#f2901e", color: "#fff" }}
@@ -161,9 +162,9 @@ const InvitationClient = () => {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-md mx-auto">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: "#25245e" }}>QalioFlex</h1>
-          <p className="text-sm text-gray-400">by ExSenCo</p>
+        <div className="flex flex-col items-center mb-8">
+          <Logo size={34} withWordmark />
+          <p className="text-sm text-gray-400 mt-1">by ExSenCo</p>
         </div>
 
         <Card>
@@ -290,7 +291,7 @@ const InvitationClient = () => {
         </Card>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          QalioFlex by SARL EXSENCO · <a href="https://qualioflex.fr/confidentialite" className="hover:underline">Confidentialité</a>
+          QualioFlex by SARL EXSENCO · <a href="https://qualioflex.fr/confidentialite" className="hover:underline">Confidentialité</a>
         </p>
       </div>
     </div>

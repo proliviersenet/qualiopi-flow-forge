@@ -642,7 +642,7 @@ const FormationDetail = () => {
                         {generatingTrame
                           ? "Claude analyse vos documents et rédige la trame — ça peut prendre 1 à 3 minutes, ne quittez pas la page."
                           : documents.trame_pedagogique
-                          ? "Générée par QalioFlex — confidentielle, usage formateur uniquement"
+                          ? "Générée par QualioFlex — confidentielle, usage formateur uniquement"
                           : "Générée automatiquement quand support + programme sont uploadés"}
                       </p>
                     </div>
@@ -670,7 +670,7 @@ const FormationDetail = () => {
                         {generatingDevisGenerique
                           ? "Génération en cours..."
                           : documents.devis_generique
-                          ? "Généré par QalioFlex — à personnaliser (client, dates) avant envoi"
+                          ? "Généré par QualioFlex — à personnaliser (client, dates) avant envoi"
                           : "Devis de prospection, utilisable avant même d'avoir un client ou une session"}
                       </p>
                     </div>

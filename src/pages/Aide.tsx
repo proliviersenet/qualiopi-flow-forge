@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const faqs = [
   { q: "Comment créer ma première formation ?", r: "Depuis le menu 'Formations', cliquez sur '+ Nouvelle formation'. Remplissez les 3 étapes (informations générales, détails, confirmation) puis choisissez 'Enregistrer en brouillon' ou 'Publier'." },
   { q: "Comment générer et télécharger mon BPF ?", r: "Accédez à la page 'BPF' depuis le menu. Créez votre bilan annuel, renseignez les indicateurs, puis cliquez sur '📄 Télécharger PDF'. Un guide de déclaration sur MAF est inclus dans le document." },
-  { q: "Qu'est-ce que le document_mode 'auto' vs 'import' ?", r: "'Auto' : QalioFlex génère et envoie automatiquement les documents à signer électroniquement. 'Import' : vous importez vos propres documents (papier ou autres logiciels)." },
+  { q: "Qu'est-ce que le document_mode 'auto' vs 'import' ?", r: "'Auto' : QualioFlex génère et envoie automatiquement les documents à signer électroniquement. 'Import' : vous importez vos propres documents (papier ou autres logiciels)." },
   { q: "Comment modifier mon profil ou les infos de mon organisme ?", r: "Cliquez sur votre avatar en haut à droite → 'Mon profil'. Vous pouvez modifier vos infos personnelles et les données de votre organisme (raison sociale, NDA, adresse, email de contact...)." },
   { q: "Comment changer mon mot de passe ?", r: "Menu avatar → 'Paramètres' → section 'Sécurité'. Le nouveau mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial." },
   { q: "Mon BPF ne se crée pas — que faire ?", r: "Vérifiez que votre compte est bien rattaché à un organisme (page Profil → section 'Mon organisme'). Si la section n'apparaît pas, contactez le support." },
@@ -28,7 +28,7 @@ const Aide = () => {
         <div className="container mx-auto px-4 max-w-3xl">
           <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
           <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Centre d'aide</h1>
-          <p className="text-gray-500 mb-8">Retrouvez les réponses aux questions les plus fréquentes sur QalioFlex.</p>
+          <p className="text-gray-500 mb-8">Retrouvez les réponses aux questions les plus fréquentes sur QualioFlex.</p>
 
           <div className="space-y-3">
             {faqs.map((faq, i) => (

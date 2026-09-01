@@ -58,7 +58,7 @@ const Documentation = () => {
       <div className="container mx-auto px-4 max-w-3xl">
         <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
         <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Documentation</h1>
-        <p className="text-gray-500 mb-8">Tout ce que vous devez savoir pour utiliser QalioFlex efficacement.</p>
+        <p className="text-gray-500 mb-8">Tout ce que vous devez savoir pour utiliser QualioFlex efficacement.</p>
 
         <div className="space-y-6">
           {sections.map((s) => (

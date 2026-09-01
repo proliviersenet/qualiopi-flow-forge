@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import Logo from '@/components/Logo';
 
 const Mockup = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -15,10 +16,7 @@ const Mockup = () => {
       <div className="bg-white py-4 px-6 border-b border-gray-200 sticky top-0 z-10">
         <div className="flex justify-between items-center">
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-md bg-exsenco-blue mr-3 flex items-center justify-center">
-              <span className="text-white font-bold">FP</span>
-            </div>
-            <h1 className="text-xl font-bold text-exsenco-blue">QalioFlex</h1>
+            <Logo size={28} withWordmark />
           </div>
           <div className="flex space-x-4">
             <div className="w-8 h-8 rounded-full bg-gray-200"></div>

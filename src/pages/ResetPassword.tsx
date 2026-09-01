@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
 import { validatePassword } from "@/lib/passwordUtils";
+import Logo from "@/components/Logo";
 
 const ResetPassword = () => {
   const { toast } = useToast();
@@ -96,9 +97,9 @@ const ResetPassword = () => {
       <div className="flex-grow flex items-center justify-center p-4 bg-gray-50">
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
-            <Link to="/" className="inline-block">
-              <span className="text-2xl font-bold" style={{ color: "#25245e" }}>QalioFlex</span>
-              <span className="text-gray-400 text-xs block">by ExSenCo</span>
+            <Link to="/" className="inline-flex flex-col items-center">
+              <Logo size={32} withWordmark />
+              <span className="text-gray-400 text-xs mt-1">by ExSenCo</span>
             </Link>
           </div>
 

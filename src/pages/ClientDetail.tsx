@@ -99,7 +99,7 @@ const ClientDetail = () => {
   const [generatingDoc, setGeneratingDoc] = useState<string | null>(null); // clé = `${sessionId}:${type}`
   // Point non bloquant #62 : quand la formation est en mode "import" (choix fait
   // par le formateur à la création — cf. FormationCreation.tsx, document_mode),
-  // le devis et la convention ne sont pas générés par QalioFlex mais importés
+  // le devis et la convention ne sont pas générés par QualioFlex mais importés
   // tels quels (documents déjà existants côté formateur). docsSessionFichiers
   // stocke l'URL du fichier importé, en parallèle de docsSession (HTML généré).
   const [docsSessionFichiers, setDocsSessionFichiers] = useState<Record<string, Record<string, string>>>({});
@@ -794,7 +794,7 @@ const ClientDetail = () => {
                             // "import" à la création de la formation (document_mode), il a déjà
                             // ce document — on lui propose de l'importer plutôt que de le
                             // générer automatiquement. Livret/émargement restent toujours
-                            // générés par QalioFlex (pas de sens à les avoir "déjà" avant coup).
+                            // générés par QualioFlex (pas de sens à les avoir "déjà" avant coup).
                             const modeImport = type === "devis" && session.formation?.document_mode === "import";
                             return (
                               <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -808,7 +808,7 @@ const ClientDetail = () => {
                                       : modeImport
                                       ? (fichierUrl ? "Importé — visible par le client" : "Formation en mode \"import\" : dépose ton document existant")
                                       : html
-                                      ? "Généré par QalioFlex — visible par le client"
+                                      ? "Généré par QualioFlex — visible par le client"
                                       : "À générer avant le début de la session"}
                                   </p>
                                 </div>
@@ -866,7 +866,7 @@ const ClientDetail = () => {
                             const titreFormation = (session.formation as Record<string, string>)?.titre || "";
                             // Point non bloquant #62 : si la formation est en document_mode
                             // "import", le formateur a déjà sa convention (signée ou non hors
-                            // QalioFlex) — on lui propose de l'importer directement plutôt que
+                            // QualioFlex) — on lui propose de l'importer directement plutôt que
                             // de la faire générer puis signer via DocuSign, ce qui n'a pas de
                             // sens s'il gère déjà cette étape lui-même.
                             const modeImport = session.formation?.document_mode === "import";

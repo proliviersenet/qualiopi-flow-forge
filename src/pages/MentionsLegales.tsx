@@ -50,7 +50,7 @@ const MentionsLegales = () => {
 
           <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-3">
             <h2 className="text-lg font-semibold" style={{ color: "#25245e" }}>Propriété intellectuelle</h2>
-            <p className="text-sm">L'ensemble du contenu de QalioFlex (textes, graphismes, logo, icônes, interface, code source) est la propriété exclusive de SARL EXSENCO, protégé par le droit d'auteur français et les conventions internationales. Toute reproduction partielle ou totale sans autorisation écrite préalable est strictement interdite et constitue une contrefaçon sanctionnée par les articles L.335-2 et suivants du Code de la Propriété Intellectuelle.</p>
+            <p className="text-sm">L'ensemble du contenu de QualioFlex (textes, graphismes, logo, icônes, interface, code source) est la propriété exclusive de SARL EXSENCO, protégé par le droit d'auteur français et les conventions internationales. Toute reproduction partielle ou totale sans autorisation écrite préalable est strictement interdite et constitue une contrefaçon sanctionnée par les articles L.335-2 et suivants du Code de la Propriété Intellectuelle.</p>
           </section>
 
           <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-3">
@@ -60,12 +60,12 @@ const MentionsLegales = () => {
 
           <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-3">
             <h2 className="text-lg font-semibold" style={{ color: "#25245e" }}>Cookies</h2>
-            <p className="text-sm">QalioFlex utilise uniquement des cookies strictement nécessaires au fonctionnement de l'application (session d'authentification). Aucun cookie publicitaire ou de tracking tiers n'est déposé. Ces cookies ne nécessitent pas de consentement préalable (Article 5.3 de la Directive 2002/58/CE).</p>
+            <p className="text-sm">QualioFlex utilise uniquement des cookies strictement nécessaires au fonctionnement de l'application (session d'authentification). Aucun cookie publicitaire ou de tracking tiers n'est déposé. Ces cookies ne nécessitent pas de consentement préalable (Article 5.3 de la Directive 2002/58/CE).</p>
           </section>
 
           <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-3">
             <h2 className="text-lg font-semibold" style={{ color: "#25245e" }}>Limitation de responsabilité</h2>
-            <p className="text-sm">SARL EXSENCO s'efforce d'assurer l'exactitude et la mise à jour des informations diffusées sur QalioFlex. Toutefois, elle ne peut garantir l'exactitude, la précision ou l'exhaustivité des informations. EXSENCO décline toute responsabilité pour les dommages directs ou indirects résultant de l'utilisation de la plateforme.</p>
+            <p className="text-sm">SARL EXSENCO s'efforce d'assurer l'exactitude et la mise à jour des informations diffusées sur QualioFlex. Toutefois, elle ne peut garantir l'exactitude, la précision ou l'exhaustivité des informations. EXSENCO décline toute responsabilité pour les dommages directs ou indirects résultant de l'utilisation de la plateforme.</p>
           </section>
 
           <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-3">

@@ -19,12 +19,12 @@ const Confidentialite = () => {
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>1. Responsable du traitement</h2>
-            <p>QalioFlex est édité par <strong>SARL EXSENCO</strong>, dont le siège social est situé au 80 rue du Nouveau Bois, 37550 Saint-Avertin. SIRET : 892 787 458 000 17. Contact : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
+            <p>QualioFlex est édité par <strong>SARL EXSENCO</strong>, dont le siège social est situé au 80 rue du Nouveau Bois, 37550 Saint-Avertin. SIRET : 892 787 458 000 17. Contact : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>2. Données collectées</h2>
-            <p>Dans le cadre de l'utilisation de QalioFlex, nous collectons :</p>
+            <p>Dans le cadre de l'utilisation de QualioFlex, nous collectons :</p>
             <ul className="list-disc list-inside space-y-1 mt-2">
               <li>Données d'identification : nom, prénom, adresse email, numéro de téléphone</li>
               <li>Données professionnelles : raison sociale, SIRET, NDA, adresse de l'organisme</li>
@@ -37,7 +37,7 @@ const Confidentialite = () => {
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>3. Finalités du traitement</h2>
             <p>Vos données sont traitées pour :</p>
             <ul className="list-disc list-inside space-y-1 mt-2">
-              <li>Fournir et améliorer les services QalioFlex</li>
+              <li>Fournir et améliorer les services QualioFlex</li>
               <li>Assurer la gestion de votre compte utilisateur</li>
               <li>Garantir la conformité avec le référentiel Qualiopi</li>
               <li>Envoyer des notifications liées à votre activité (relances, signatures)</li>

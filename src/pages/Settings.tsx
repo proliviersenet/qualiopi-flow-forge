@@ -324,7 +324,7 @@ const Settings = () => {
           <DialogHeader>
             <DialogTitle className="text-red-600">Supprimer votre compte ?</DialogTitle>
             <DialogDescription className="pt-2 space-y-2">
-              <p>Votre espace QalioFlex sera <strong>immédiatement rendu inaccessible</strong> : vous ne pourrez plus vous reconnecter.</p>
+              <p>Votre espace QualioFlex sera <strong>immédiatement rendu inaccessible</strong> : vous ne pourrez plus vous reconnecter.</p>
               <p className="font-medium text-gray-700">Données concernées :</p>
               <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
                 <li>Formations et programmes</li>

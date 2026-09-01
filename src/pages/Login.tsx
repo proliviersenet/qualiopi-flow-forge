@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
+import Logo from "@/components/Logo";
 
 const Login = () => {
   const { toast } = useToast();
@@ -35,7 +36,7 @@ const Login = () => {
       });
       if (error) throw error;
       const role = data.user?.user_metadata?.role;
-      toast({ title: "Connexion réussie", description: "Bienvenue sur QalioFlex !" });
+      toast({ title: "Connexion réussie", description: "Bienvenue sur QualioFlex !" });
       navigate(role === "client" ? "/espace-client" : "/dashboard");
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Identifiants incorrects";
@@ -50,15 +51,15 @@ const Login = () => {
       <div className="flex-grow flex items-center justify-center p-4 bg-gray-50">
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
-            <Link to="/" className="inline-block">
-              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
-              <span className="text-gray-400 text-xs block">by ExSenCo</span>
+            <Link to="/" className="inline-flex flex-col items-center">
+              <Logo size={32} withWordmark />
+              <span className="text-gray-400 text-xs mt-1">by ExSenCo</span>
             </Link>
           </div>
           <Card>
             <CardHeader>
               <CardTitle>Connexion</CardTitle>
-              <CardDescription>Accédez à votre espace QalioFlex</CardDescription>
+              <CardDescription>Accédez à votre espace QualioFlex</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">

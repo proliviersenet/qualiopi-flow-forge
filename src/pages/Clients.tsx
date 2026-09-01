@@ -161,7 +161,7 @@ const Clients = () => {
           {showInviteForm && (
             <Card className="mb-6 p-5 border-orange-200 bg-orange-50">
               <h3 className="font-semibold mb-1" style={{ color: "#25245e" }}>✉️ Inviter un client par email</h3>
-              <p className="text-sm text-gray-500 mb-4">Votre client recevra un lien pour créer son espace QalioFlex en autonomie à partir de son SIREN.</p>
+              <p className="text-sm text-gray-500 mb-4">Votre client recevra un lien pour créer son espace QualioFlex en autonomie à partir de son SIREN.</p>
               <div className="flex gap-2">
                 <Input
                   type="email"

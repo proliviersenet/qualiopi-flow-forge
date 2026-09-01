@@ -245,7 +245,7 @@ const EspaceClient = () => {
       if (missing.length > 0) {
         toast({
           title: "Format incorrect",
-          description: `Colonnes manquantes : ${missing.join(", ")}. Téléchargez le template QalioFlex pour utiliser le bon format.`,
+          description: `Colonnes manquantes : ${missing.join(", ")}. Téléchargez le template QualioFlex pour utiliser le bon format.`,
           variant: "destructive",
         });
         return;

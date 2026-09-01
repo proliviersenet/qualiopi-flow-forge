@@ -19,37 +19,37 @@ const Conditions = () => {
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>1. Éditeur</h2>
-            <p>QalioFlex est édité par <strong>SARL EXSENCO</strong> — 80 rue du Nouveau Bois, 37550 Saint-Avertin — SIRET 892 787 458 000 17. En utilisant QalioFlex, vous acceptez les présentes conditions dans leur intégralité.</p>
+            <p>QualioFlex est édité par <strong>SARL EXSENCO</strong> — 80 rue du Nouveau Bois, 37550 Saint-Avertin — SIRET 892 787 458 000 17. En utilisant QualioFlex, vous acceptez les présentes conditions dans leur intégralité.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>2. Description du service</h2>
-            <p>QalioFlex est une plateforme SaaS de gestion de la conformité Qualiopi destinée aux formateurs indépendants et organismes de formation. Elle permet notamment de gérer les formations, sessions, clients, documents, BPF et questionnaires de satisfaction.</p>
+            <p>QualioFlex est une plateforme SaaS de gestion de la conformité Qualiopi destinée aux formateurs indépendants et organismes de formation. Elle permet notamment de gérer les formations, sessions, clients, documents, BPF et questionnaires de satisfaction.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>3. Accès au service</h2>
-            <p>L'accès à QalioFlex nécessite la création d'un compte utilisateur. Vous êtes responsable de la confidentialité de vos identifiants. Tout accès depuis votre compte est réputé effectué par vous.</p>
+            <p>L'accès à QualioFlex nécessite la création d'un compte utilisateur. Vous êtes responsable de la confidentialité de vos identifiants. Tout accès depuis votre compte est réputé effectué par vous.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>4. Utilisation acceptable</h2>
-            <p>Vous vous engagez à utiliser QalioFlex exclusivement pour des finalités légales et professionnelles. Sont notamment interdits : tout contenu illicite, toute tentative d'intrusion, tout usage à des fins concurrentielles non autorisées.</p>
+            <p>Vous vous engagez à utiliser QualioFlex exclusivement pour des finalités légales et professionnelles. Sont notamment interdits : tout contenu illicite, toute tentative d'intrusion, tout usage à des fins concurrentielles non autorisées.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>5. Propriété intellectuelle</h2>
-            <p>L'ensemble des éléments de QalioFlex (interface, code, logo, marque) sont la propriété exclusive de SARL EXSENCO. Toute reproduction ou représentation non autorisée est strictement interdite.</p>
+            <p>L'ensemble des éléments de QualioFlex (interface, code, logo, marque) sont la propriété exclusive de SARL EXSENCO. Toute reproduction ou représentation non autorisée est strictement interdite.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>6. Disponibilité</h2>
-            <p>EXSENCO s'engage à maintenir QalioFlex disponible 24h/24, 7j/7, hors maintenances planifiées annoncées à l'avance. Aucune garantie de disponibilité absolue n'est accordée.</p>
+            <p>EXSENCO s'engage à maintenir QualioFlex disponible 24h/24, 7j/7, hors maintenances planifiées annoncées à l'avance. Aucune garantie de disponibilité absolue n'est accordée.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>7. Responsabilité</h2>
-            <p>EXSENCO ne saurait être tenu responsable des dommages indirects liés à l'utilisation de QalioFlex. L'utilisateur est seul responsable des données qu'il saisit et de leur conformité avec la réglementation applicable (Qualiopi, RGPD, etc.).</p>
+            <p>EXSENCO ne saurait être tenu responsable des dommages indirects liés à l'utilisation de QualioFlex. L'utilisateur est seul responsable des données qu'il saisit et de leur conformité avec la réglementation applicable (Qualiopi, RGPD, etc.).</p>
           </section>
 
           <section>

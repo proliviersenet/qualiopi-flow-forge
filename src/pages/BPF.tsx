@@ -34,7 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 // qu'un résumé simplifié (nb_stagiaires, nb_heures_formation, ca_formation,
 // taux_satisfaction, nb_sessions, nb_formations, repartition_thematiques) —
 // ces colonnes ont été supprimées (sauf nb_sessions/nb_formations, gardées
-// comme suivi interne QalioFlex, hors périmètre officiel du BPF) et
+// comme suivi interne QualioFlex, hors périmètre officiel du BPF) et
 // remplacées par la structure ci-dessous.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -333,7 +333,7 @@ const BPF = () => {
     // cadres sans risque réglementaire (nb de sessions et de formations
     // distinctes réellement dispensées durant l'exercice, calculées depuis
     // les sessions de l'organisme) — ces deux champs sont explicitement
-    // "suivi interne QalioFlex, hors périmètre officiel du BPF" (cf.
+    // "suivi interne QualioFlex, hors périmètre officiel du BPF" (cf.
     // commentaire en tête de fichier). Les cadres officiels du Cerfa
     // (financiers, typologie des stagiaires...) restent volontairement
     // saisis à la main : les déduire automatiquement risquerait de produire
@@ -547,7 +547,7 @@ const BPF = () => {
         title="Le module BPF, c'est quoi ?"
         items={[
           "Le Bilan Pédagogique et Financier (BPF) est ta déclaration annuelle obligatoire auprès de la DREETS.",
-          "QalioFlex pré-remplit automatiquement le nombre de sessions et de formations dispensées sur l'exercice (suivi interne).",
+          "QualioFlex pré-remplit automatiquement le nombre de sessions et de formations dispensées sur l'exercice (suivi interne).",
           "Les cadres officiels du Cerfa (finances, typologie des stagiaires...) restent à saisir toi-même : eux seul garantissent l'exactitude de ta déclaration DREETS.",
           "Vérifie chaque cadre, complète ce qui manque, puis télétransmets-le sur monactiviteformation.emploi.gouv.fr.",
         ]}
@@ -930,7 +930,7 @@ const BPF = () => {
 
               {/* SUIVI INTERNE — hors Cerfa */}
               <AccordionItem value="interne">
-                <AccordionTrigger className="text-sm font-semibold text-gray-500">Suivi interne QalioFlex (non transmis à la DREETS)</AccordionTrigger>
+                <AccordionTrigger className="text-sm font-semibold text-gray-500">Suivi interne QualioFlex (non transmis à la DREETS)</AccordionTrigger>
                 <AccordionContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Nombre de sessions</Label><Input name="nb_sessions" type="number" value={form.nb_sessions} onChange={handleChange} placeholder="ex: 24" /></div>
@@ -1026,7 +1026,7 @@ export const imprimerBPF = (bpf: BPFRecord, organisme: OrganismeData) => {
 
   <div class="header">
     <div>
-      <div style="font-size:10pt;opacity:0.7;margin-bottom:4px;">QalioFlex — by ExSenCo</div>
+      <div style="font-size:10pt;opacity:0.7;margin-bottom:4px;">QualioFlex — by ExSenCo</div>
       <h1>Bilan Pédagogique et Financier</h1>
       <div class="subtitle">Cerfa n°10443*17 — Déclaration DREETS / MAF</div>
     </div>
@@ -1196,7 +1196,7 @@ export const imprimerBPF = (bpf: BPFRecord, organisme: OrganismeData) => {
   </div>
 
   <div class="footer">
-    Document généré par <strong>QalioFlex</strong> — by ExSenCo · ${dateDeclaration}<br>
+    Document généré par <strong>QualioFlex</strong> — by ExSenCo · ${dateDeclaration}<br>
     Ce document est un outil de préparation. La déclaration officielle doit être effectuée sur MAF.
   </div>
 </div>

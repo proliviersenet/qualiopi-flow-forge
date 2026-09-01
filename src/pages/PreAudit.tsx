@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 // du référentiel national qualité, calculé à partir des vraies données de
 // l'organisme (formations, sessions, stagiaires, documents). Contrairement à un
 // vrai audit Certifopac, ce n'est pas une preuve de conformité opposable : les
-// indicateurs sans source de donnée fiable dans QalioFlex (qualification des
+// indicateurs sans source de donnée fiable dans QualioFlex (qualification des
 // formateurs, réclamations, financement...) sont honnêtement marqués
 // "à vérifier manuellement" plutôt que masqués ou faussement validés.
 // Déclenche l'edge function lancer-preaudit, qui écrit aussi dans

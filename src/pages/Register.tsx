@@ -10,12 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
 import { validatePassword } from "@/lib/passwordUtils";
+import Logo from "@/components/Logo";
 
 const Register = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   // Chantier "sous-traitance" (28/08) : lien /register?st=<token> envoyé quand un
-  // formateur invite un sous-traitant qui n'a pas encore de compte QalioFlex — on
+  // formateur invite un sous-traitant qui n'a pas encore de compte QualioFlex — on
   // affiche le contexte de l'invitation et, une fois le compte formateur créé, on
   // rattache automatiquement la session sous-traitée (voir handleSubmit).
   const [searchParams] = useSearchParams();
@@ -179,10 +180,10 @@ const Register = () => {
             description: "La session sous-traitée n'a pas pu être rattachée automatiquement. Contactez le formateur qui vous a invité.",
           });
         } else {
-          toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — la session vous a été rattachée.` });
+          toast({ title: "Espace créé !", description: `Bienvenue sur QualioFlex — la session vous a été rattachée.` });
         }
       } else {
-        toast({ title: "Espace créé !", description: `Bienvenue sur QalioFlex — ${formData.raisonSociale}` });
+        toast({ title: "Espace créé !", description: `Bienvenue sur QualioFlex — ${formData.raisonSociale}` });
       }
       navigate("/dashboard");
     } catch (error: unknown) {
@@ -198,9 +199,9 @@ const Register = () => {
       <div className="flex-grow flex items-center justify-center p-4 bg-gray-50">
         <div className="w-full max-w-lg">
           <div className="mb-6 text-center">
-            <Link to="/" className="inline-block">
-              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
-              <span className="text-gray-400 text-xs block">by ExSenCo</span>
+            <Link to="/" className="inline-flex flex-col items-center">
+              <Logo size={32} withWordmark />
+              <span className="text-gray-400 text-xs mt-1">by ExSenCo</span>
             </Link>
           </div>
 

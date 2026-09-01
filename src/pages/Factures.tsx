@@ -22,7 +22,7 @@ const Factures = () => {
               <p className="text-4xl mb-4">🚧</p>
               <p className="text-gray-700 font-semibold">Bientôt disponible</p>
               <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-                Vos factures mensuelles apparaîtront ici automatiquement une fois la facturation QalioFlex activée.
+                Vos factures mensuelles apparaîtront ici automatiquement une fois la facturation QualioFlex activée.
               </p>
             </CardContent>
           </Card>

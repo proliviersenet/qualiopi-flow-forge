@@ -24,7 +24,7 @@ const Qualiopi = () => {
       <div className="container mx-auto px-4 max-w-3xl">
         <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
         <h1 className="text-3xl font-bold mt-4 mb-2" style={{ color: "#25245e" }}>Référentiel Qualiopi</h1>
-        <p className="text-gray-500 mb-8">Les 7 critères du Référentiel National Qualité (RNQ) que QalioFlex vous aide à respecter.</p>
+        <p className="text-gray-500 mb-8">Les 7 critères du Référentiel National Qualité (RNQ) que QualioFlex vous aide à respecter.</p>
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-8">
           <h2 className="font-bold text-blue-900 mb-2">Qu'est-ce que Qualiopi ?</h2>
@@ -46,7 +46,7 @@ const Qualiopi = () => {
         </div>
 
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
-          <h2 className="font-bold mb-2" style={{ color: "#f2901e" }}>Comment QalioFlex vous aide</h2>
+          <h2 className="font-bold mb-2" style={{ color: "#f2901e" }}>Comment QualioFlex vous aide</h2>
           <ul className="text-sm text-gray-700 space-y-1">
             <li>✓ <strong>Critère 3</strong> : Positionnement et adaptation — via les questionnaires pré-formation</li>
             <li>✓ <strong>Critère 7</strong> : Recueil des appréciations — via les évaluations stagiaires (à venir)</li>
