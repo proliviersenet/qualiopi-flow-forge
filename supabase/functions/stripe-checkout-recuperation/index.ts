@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
         {
           price_data: {
             currency: "eur",
-            product_data: { name: "Récupération de données QalioFlex (export complet)" },
+            product_data: { name: "Récupération de données QualioFlex (export complet)" },
             unit_amount: MONTANT_CENTIMES,
           },
           quantity: 1,
