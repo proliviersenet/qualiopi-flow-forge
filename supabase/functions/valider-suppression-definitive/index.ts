@@ -9,7 +9,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Seul ce compte (Olivier, propriétaire de QalioFlex) est autorisé à valider
+// Seul ce compte (Olivier, propriétaire de QualioFlex) est autorisé à valider
 // une suppression définitive. Aucune purge automatique n'existe ailleurs :
 // c'est toujours un geste manuel, volontaire, depuis /admin/suppressions.
 const ADMIN_EMAIL = "olivier@exsenco.fr";
@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !user || user.email?.toLowerCase() !== ADMIN_EMAIL) {
       return new Response(
-        JSON.stringify({ error: "Action réservée à l'administrateur QalioFlex." }),
+        JSON.stringify({ error: "Action réservée à l'administrateur QualioFlex." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
