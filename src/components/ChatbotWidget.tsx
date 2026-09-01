@@ -234,7 +234,7 @@ const ChatbotWidget = () => {
             </div>
             <div className="flex-1">
               <p className="text-white font-semibold text-sm">Qualios</p>
-              <p className="text-white/60 text-xs">Assistant QalioFlex · réponse en quelques secondes</p>
+              <p className="text-white/60 text-xs">Assistant QualioFlex · réponse en quelques secondes</p>
             </div>
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white">
               <X size={18} />
@@ -244,7 +244,7 @@ const ChatbotWidget = () => {
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
             {messages.length === 0 && !loading && (
               <div className="text-sm text-gray-500 px-2 py-4">
-                👋 Salut ! Je suis Qualios, l'assistant QalioFlex. Pose-moi une question sur l'appli, ou dis-moi ce que
+                👋 Salut ! Je suis Qualios, l'assistant QualioFlex. Pose-moi une question sur l'appli, ou dis-moi ce que
                 tu cherches à faire — je t'aide à démarrer.
               </div>
             )}
@@ -304,7 +304,7 @@ const ChatbotWidget = () => {
           onTouchStart={(e) => { const t = e.touches[0]; if (t) startDrag(t.clientX, t.clientY); }}
           onClick={handleToggle}
           className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center bg-white hover:scale-105 transition-transform overflow-hidden cursor-grab active:cursor-grabbing touch-none"
-          aria-label="Ouvrir Qualios, l'assistant QalioFlex (glisser pour déplacer)"
+          aria-label="Ouvrir Qualios, l'assistant QualioFlex (glisser pour déplacer)"
         >
           {open ? <X size={22} style={{ color: "#25245e" }} /> : <img src={qualiosAvatar} alt="Qualios" className="w-full h-full object-contain p-1" />}
         </button>

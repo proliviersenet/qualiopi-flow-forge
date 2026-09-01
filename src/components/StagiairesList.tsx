@@ -149,7 +149,7 @@ const motifs = [
 // Chantier 3 (audit du 13/08, suite du correctif du 01/08 sur declencher-flow-session
 // et positionnement-public) : la relance MANUELLE (bouton "📨 Relancer" ci-dessous,
 // handleRelance) appelait envoyer-relance sans jamais fournir de `lien` — pour un
-// motif nécessitant une action du stagiaire (qui n'a pas de compte QalioFlex), le
+// motif nécessitant une action du stagiaire (qui n'a pas de compte QualioFlex), le
 // lien générique /espace-client renvoyé par défaut par envoyer-relance ne mène nulle
 // part d'utilisable. On couvre ici les motifs qui ont déjà une page publique par
 // token (mêmes routes que /positionnement, /emargement, /evaluation utilisées par

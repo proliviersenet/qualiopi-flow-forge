@@ -15,6 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import Logo from '@/components/Logo';
 
 interface HeaderProps {
   user?: {
@@ -68,7 +69,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link to={logoHref ?? defaultHref} className="flex items-center">
-              <span className="text-exsenco-blue text-2xl font-bold">QalioFlex</span>
+              <Logo size={30} withWordmark wordmarkColor="#25245e" />
             </Link>
           </div>
 

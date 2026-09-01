@@ -139,7 +139,7 @@ const OnboardingChecklist = () => {
               </div>
               <div>
                 <DialogTitle style={{ color: "#25245e" }}>
-                  {role === "formateur" ? "Bienvenue sur QalioFlex !" : "Bienvenue dans ton espace client !"}
+                  {role === "formateur" ? "Bienvenue sur QualioFlex !" : "Bienvenue dans ton espace client !"}
                 </DialogTitle>
                 <p className="text-xs text-gray-400">{doneCount}/{trackable.length} étapes complétées</p>
               </div>

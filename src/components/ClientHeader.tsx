@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import Logo from "@/components/Logo";
 
 interface ClientHeaderProps {
   active: "formations" | "profil" | "parametres";
@@ -21,7 +22,7 @@ const ClientHeader = ({ active, email, onLogout }: ClientHeaderProps) => {
     <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
       <div className="container mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
         <Link to="/espace-client" className="flex items-center gap-2">
-          <span className="text-xl font-bold" style={{ color: "#25245e" }}>QalioFlex</span>
+          <Logo size={26} withWordmark />
           <span className="text-xs text-gray-400">Espace client</span>
         </Link>
 
