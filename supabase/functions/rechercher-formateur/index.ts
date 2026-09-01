@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Chantier "sous-traitance" (28/08) : annuaire des formateurs QalioFlex, recherchable
+// Chantier "sous-traitance" (28/08) : annuaire des formateurs QualioFlex, recherchable
 // par nom/raison sociale — utilisé par le bouton "Sous-traiter cette formation" pour
 // retrouver un formateur déjà inscrit sur la plateforme. Volontairement pas de policy
 // RLS ouverte sur `organismes` pour ça (fuite de données à toute la plateforme) : tout
