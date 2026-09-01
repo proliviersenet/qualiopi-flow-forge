@@ -128,9 +128,9 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: "QalioFlex <noreply@qualioflex.fr>",
+            from: "QualioFlex <noreply@qualioflex.fr>",
             to: [emailFormateur],
-            subject: `${nom} a créé son compte client sur QalioFlex`,
+            subject: `${nom} a créé son compte client sur QualioFlex`,
             html: `
 <!DOCTYPE html>
 <html lang="fr">
@@ -143,7 +143,7 @@ serve(async (req) => {
         <tr>
           <td style="background:#25245e;padding:32px 40px;">
             <a href="https://qualioflex.fr" style="text-decoration:none;">
-              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QualioFlex</h1>
               <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
             </a>
           </td>
@@ -153,7 +153,7 @@ serve(async (req) => {
           <td style="padding:40px;">
             <h2 style="color:#25245e;font-size:20px;margin:0 0 16px;">Votre client a créé son espace</h2>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
-              Bonne nouvelle : <strong>${nom}</strong>${email ? ` (${email})` : ""} vient de finaliser la création de son compte sur <strong>QalioFlex</strong> suite à votre invitation.
+              Bonne nouvelle : <strong>${nom}</strong>${email ? ` (${email})` : ""} vient de finaliser la création de son compte sur <strong>QualioFlex</strong> suite à votre invitation.
             </p>
             <p style="color:#555;line-height:1.6;margin:0 0 32px;">
               Vous pouvez dès maintenant consulter sa fiche, lui affecter une formation et suivre l'avancement de son dossier.
@@ -174,7 +174,7 @@ serve(async (req) => {
         <tr>
           <td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;">
             <p style="margin:0;color:#999;font-size:12px;">
-              QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+              QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
               <a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a>
             </p>
           </td>
