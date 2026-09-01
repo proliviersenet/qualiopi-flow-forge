@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // large n'a été ouverte pour ça — voir la migration superadmin_bugs_abonnements).
 //
 // Important sur le CA : aucune intégration de facturation automatique
-// (Stripe...) n'existe à ce jour dans QalioFlex. Les deux composantes du CA
+// (Stripe...) n'existe à ce jour dans QualioFlex. Les deux composantes du CA
 // renvoyées ici sont donc des ESTIMATIONS :
 // - ca_abonnements_centimes : régime mensuel équivalent des abonnements
 //   actuellement actifs (table abonnements_organismes, alimentée à la main par
@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !user || user.email?.toLowerCase() !== ADMIN_EMAIL) {
       return new Response(
-        JSON.stringify({ error: "Action réservée à l'administrateur QalioFlex." }),
+        JSON.stringify({ error: "Action réservée à l'administrateur QualioFlex." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
