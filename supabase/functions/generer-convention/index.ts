@@ -182,7 +182,7 @@ serve(async (req) => {
     </div>
   </div>
 
-  <p class="footer-mention">Document généré par QalioFlex — conservé dans l'espace de la session, accessible uniquement à l'organisme de formation et au client.</p>
+  <p class="footer-mention">Document généré par QualioFlex — conservé dans l'espace de la session, accessible uniquement à l'organisme de formation et au client.</p>
 </body>
 </html>`;
 
