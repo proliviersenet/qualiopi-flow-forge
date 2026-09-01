@@ -42,7 +42,7 @@ serve(async (req) => {
     const sousTexte = nbAvis > 0 ? `${nbAvis} avis` : "Pas encore d'avis";
     return `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="90" viewBox="0 0 280 90">
   <rect width="280" height="90" rx="10" fill="#ffffff" stroke="#e5e5e5"/>
-  <text x="14" y="24" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#25245e">Note formateur QalioFlex</text>
+  <text x="14" y="24" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#25245e">Note formateur QualioFlex</text>
   ${etoiles}
   <text x="112" y="46" font-family="Arial,sans-serif" font-size="20" font-weight="bold" fill="#25245e">${noteTxt}/5</text>
   <text x="14" y="70" font-family="Arial,sans-serif" font-size="12" fill="#818284">${sousTexte}</text>
