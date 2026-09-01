@@ -111,7 +111,7 @@ const DOC_TYPES: DocType[] = [
     participe: "téléchargé",
   },
   {
-    // Étape 2 du flow Qualiopi (CONTEXT.md) — Form QalioFlex, BLOQUANTE (bloque
+    // Étape 2 du flow Qualiopi (CONTEXT.md) — Form QualioFlex, BLOQUANTE (bloque
     // l'accès à l'émargement tant qu'elle n'est pas "signe", voir
     // StagiairesList.tsx). doc_questionnaire_avant et token_questionnaire_avant
     // existaient déjà (utilisés par positionnement-public) ; seules les
@@ -209,7 +209,7 @@ serve(async (req) => {
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
     <a href="https://qualioflex.fr" style="text-decoration:none;">
-      <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+      <h1 style="color:#fff;margin:0;font-size:20px;">QualioFlex</h1>
       <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
     </a>
   </div>
@@ -224,16 +224,16 @@ serve(async (req) => {
     <p style="font-size:13px;color:#777;">Besoin d'aide ?
       <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
     </p>
-    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
 </body></html>`;
             const r = await fetch("https://api.brevo.com/v3/smtp/email", {
               method: "POST",
               headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
               body: JSON.stringify({
-                sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+                sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
                 to: [{ email: s.email_pro, name: `${prenom} ${nom}` }],
-                subject: `[QalioFlex] Rappel — ${dt.label}`,
+                subject: `[QualioFlex] Rappel — ${dt.label}`,
                 htmlContent: html,
               }),
             });
@@ -249,9 +249,9 @@ serve(async (req) => {
               method: "POST",
               headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
               body: JSON.stringify({
-                sender: "QalioFlex",
+                sender: "QualioFlex",
                 recipient: phoneIntl,
-                content: `QalioFlex : Bonjour ${prenom}, rappel pour ${verbe} ${dt.label} : ${lien}`,
+                content: `QualioFlex : Bonjour ${prenom}, rappel pour ${verbe} ${dt.label} : ${lien}`,
                 type: "transactional",
                 unicodeEnabled: false,
               }),
@@ -284,12 +284,12 @@ serve(async (req) => {
             const htmlAlerte = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#c0392b;padding:20px 30px;border-radius:8px 8px 0 0;">
-    <h1 style="color:#fff;margin:0;font-size:18px;">⚠️ QalioFlex — Document manquant</h1>
+    <h1 style="color:#fff;margin:0;font-size:18px;">⚠️ QualioFlex — Document manquant</h1>
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
     <p><strong>${prenom} ${nom}</strong> n'a toujours pas ${participe} <strong>${dt.label}</strong> pour la formation <strong>"${titre}"</strong>, ${joursEcoules} jours après l'envoi du lien.</p>
     <p>Merci de relancer directement le stagiaire si besoin.</p>
-    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO</p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO</p>
   </div>
 </body></html>`;
             let envoiOk = false;
@@ -298,9 +298,9 @@ serve(async (req) => {
                 method: "POST",
                 headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+                  sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
                   to: [{ email: dest.email, name: dest.name }],
-                  subject: `[QalioFlex] ⚠️ Document manquant — ${prenom} ${nom}`,
+                  subject: `[QualioFlex] ⚠️ Document manquant — ${prenom} ${nom}`,
                   htmlContent: htmlAlerte,
                 }),
               });
