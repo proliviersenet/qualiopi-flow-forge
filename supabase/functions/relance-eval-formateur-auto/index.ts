@@ -60,7 +60,7 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+          sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
           to: [{ email, name: nom }],
           subject: sujet,
           htmlContent: html,
@@ -73,7 +73,7 @@ serve(async (req) => {
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
     <a href="https://qualioflex.fr" style="text-decoration:none;">
-      <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+      <h1 style="color:#fff;margin:0;font-size:20px;">QualioFlex</h1>
       <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
     </a>
   </div>
@@ -90,7 +90,7 @@ serve(async (req) => {
     <p style="font-size:13px;color:#777;">Besoin d'aide ?
       <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
     </p>
-    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
 </body></html>`;
 
@@ -127,7 +127,7 @@ serve(async (req) => {
       const lien = `https://qualioflex.fr/evaluation/${token}`;
       const ok = await envoyerEmail(
         s.email_pro, `${s.prenom} ${s.nom}`,
-        `[QalioFlex] Évaluez votre formateur — ${titre}`,
+        `[QualioFlex] Évaluez votre formateur — ${titre}`,
         emailEvaluation(s.prenom ?? "", s.nom ?? "", titre, lien),
       );
 
@@ -203,7 +203,7 @@ serve(async (req) => {
         if (evalRow.statut === "a_envoyer") {
           const ok = await envoyerEmail(
             c.contact_email, nomContact,
-            `[QalioFlex] Évaluez le formateur — ${titre}`,
+            `[QualioFlex] Évaluez le formateur — ${titre}`,
             emailEvaluation(nomContact, "", titre, lien),
           );
           if (ok) {
@@ -221,14 +221,14 @@ serve(async (req) => {
             const emailFormateur = (formation?.organismes as Record<string, string> | null)?.email_contact;
             if (emailFormateur) {
               await envoyerEmail(emailFormateur, "Formateur",
-                `[QalioFlex] ⚠️ Évaluation client non complétée — ${titre}`,
+                `[QualioFlex] ⚠️ Évaluation client non complétée — ${titre}`,
                 `<p>${c.raison_sociale} n'a pas encore complété l'évaluation du formateur pour "${titre}", ${jours} jours après l'envoi.</p>`);
               await supabase.from("evaluations_formateur_clients").update({ alerte_envoyee: true }).eq("id", evalRow.id as string);
               resultats.push({ type: "client", client_id: clientId, statut: "alerte_envoyee" });
             }
           } else if (jours >= 2 && !evalRow.relance_envoyee) {
             const ok = await envoyerEmail(c.contact_email, nomContact,
-              `[QalioFlex] Rappel — Évaluez le formateur`,
+              `[QualioFlex] Rappel — Évaluez le formateur`,
               emailEvaluation(nomContact, "", titre, lien));
             if (ok) {
               await supabase.from("evaluations_formateur_clients").update({ relance_envoyee: true }).eq("id", evalRow.id as string);
