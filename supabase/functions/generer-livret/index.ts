@@ -156,7 +156,7 @@ Consignes :
   </div>
 
   <div class="footer">
-    ${org.raison_sociale || ""} — Livret d'accueil généré par QalioFlex
+    ${org.raison_sociale || ""} — Livret d'accueil généré par QualioFlex
   </div>
 </div>
 </body>
