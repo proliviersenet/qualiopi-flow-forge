@@ -114,14 +114,14 @@ serve(async (req) => {
       const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#c0392b;padding:20px 30px;border-radius:8px 8px 0 0;">
-    <h1 style="color:#fff;margin:0;font-size:18px;">⚠️ QalioFlex — Questionnaire de positionnement manquant</h1>
+    <h1 style="color:#fff;margin:0;font-size:18px;">⚠️ QualioFlex — Questionnaire de positionnement manquant</h1>
   </div>
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
     <p>La formation <strong>"${titre}"</strong> débute dans <strong>2 jours</strong>.</p>
     <p>Le questionnaire de positionnement avant formation — étape bloquante du parcours Qualiopi — n'a pas encore été complété par :</p>
     <p style="background:#fff5f5;border-left:3px solid #c0392b;padding:10px 14px;font-weight:bold;">${listeStagiaires}</p>
     <p>Merci de relancer directement le(s) stagiaire(s) concerné(s) avant le début de la formation.</p>
-    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
 </body></html>`;
 
@@ -132,9 +132,9 @@ serve(async (req) => {
           method: "POST",
           headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
           body: JSON.stringify({
-            sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+            sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
             to: [{ email: dest.email, name: dest.name }],
-            subject: `[QalioFlex] ⚠️ Questionnaire de positionnement manquant — formation dans 2 jours`,
+            subject: `[QualioFlex] ⚠️ Questionnaire de positionnement manquant — formation dans 2 jours`,
             htmlContent: html,
           }),
         });
