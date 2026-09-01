@@ -29,7 +29,7 @@ serve(async (req) => {
     const action = motifAction[motif] ?? motif;
     const titre = formation_titre ?? "votre formation";
     // Correctif audit du 01/08 (test grandeur réelle) : pour un stagiaire (qui n'a
-    // pas de compte QalioFlex), le lien générique vers /espace-client ne mène nulle
+    // pas de compte QualioFlex), le lien générique vers /espace-client ne mène nulle
     // part d'utilisable — seul le lien direct par token (/positionnement/:token,
     // /emargement/:token, etc., même construction que relance-documents-auto) lui
     // permet d'agir. Les appelants concernés (declencher-flow-session,
@@ -60,7 +60,7 @@ serve(async (req) => {
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
     <a href="https://qualioflex.fr" style="text-decoration:none;">
-      <h1 style="color:#fff;margin:0;font-size:20px;">QalioFlex</h1>
+      <h1 style="color:#fff;margin:0;font-size:20px;">QualioFlex</h1>
       <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px;">by ExSenCo</p>
     </a>
   </div>
@@ -78,12 +78,12 @@ serve(async (req) => {
     <p style="font-size:13px;color:#777;">Besoin d'aide ?
       <a href="mailto:olivier@exsenco.fr" style="color:#25245e;font-weight:bold;">olivier@exsenco.fr</a>
     </p>
-    <p style="font-size:11px;color:#aaa;margin-top:20px;">QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
+    <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
 </body></html>`;
 
     const txt = `Bonjour ${prenom} ${nom}, ${action} pour "${titre}" est en attente. Lien : ${lien} —${blocRgpdTxt} Aide : olivier@exsenco.fr`;
-    const sms = `QalioFlex : Bonjour ${prenom}, ${action} pour "${titre}" est en attente. ${lien}`;
+    const sms = `QualioFlex : Bonjour ${prenom}, ${action} pour "${titre}" est en attente. ${lien}`;
 
     const results: Record<string, boolean> = {};
     const errors: string[] = [];
@@ -93,9 +93,9 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: { name: "QalioFlex by ExSenCo", email: "olivier@exsenco.fr" },
+          sender: { name: "QualioFlex by ExSenCo", email: "olivier@exsenco.fr" },
           to: [{ email, name: `${prenom} ${nom}` }],
-          subject: `[QalioFlex] Rappel — action en attente`,
+          subject: `[QualioFlex] Rappel — action en attente`,
           htmlContent: html,
           textContent: txt,
         }),
@@ -116,9 +116,9 @@ serve(async (req) => {
         method: "POST",
         headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: "QalioFlex",
+          sender: "QualioFlex",
           recipient: phoneIntl,
-          content: `QalioFlex : Bonjour ${prenom}, une action est en attente pour votre formation. Connectez-vous sur qualioflex.fr`,
+          content: `QualioFlex : Bonjour ${prenom}, une action est en attente pour votre formation. Connectez-vous sur qualioflex.fr`,
           type: "transactional",
           unicodeEnabled: false,
         }),
