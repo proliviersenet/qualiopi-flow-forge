@@ -69,9 +69,9 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "QalioFlex <noreply@qualioflex.fr>",
+        from: "QualioFlex <noreply@qualioflex.fr>",
         to: [email],
-        subject: `${formateur_nom || "Votre formateur"} vous invite à rejoindre QalioFlex`,
+        subject: `${formateur_nom || "Votre formateur"} vous invite à rejoindre QualioFlex`,
         html: `
 <!DOCTYPE html>
 <html lang="fr">
@@ -84,7 +84,7 @@ serve(async (req) => {
         <tr>
           <td style="background:#25245e;padding:32px 40px;">
             <a href="https://qualioflex.fr" style="text-decoration:none;">
-              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QalioFlex</h1>
+              <h1 style="margin:0;color:#fff;font-size:24px;font-weight:bold;">QualioFlex</h1>
               <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p>
             </a>
           </td>
@@ -92,9 +92,9 @@ serve(async (req) => {
         <!-- Body -->
         <tr>
           <td style="padding:40px;">
-            <h2 style="color:#25245e;font-size:20px;margin:0 0 16px;">Vous êtes invité(e) à rejoindre QalioFlex</h2>
+            <h2 style="color:#25245e;font-size:20px;margin:0 0 16px;">Vous êtes invité(e) à rejoindre QualioFlex</h2>
             <p style="color:#555;line-height:1.6;margin:0 0 16px;">
-              <strong>${formateur_nom || "Votre formateur"}</strong>${organisme_nom ? ` (${organisme_nom})` : ""} vous invite à créer votre espace client sur <strong>QalioFlex</strong>, la plateforme de gestion de formations conformes Qualiopi.
+              <strong>${formateur_nom || "Votre formateur"}</strong>${organisme_nom ? ` (${organisme_nom})` : ""} vous invite à créer votre espace client sur <strong>QualioFlex</strong>, la plateforme de gestion de formations conformes Qualiopi.
             </p>
             <p style="color:#555;line-height:1.6;margin:0 0 32px;">
               Cliquez sur le bouton ci-dessous pour créer votre espace en moins de 2 minutes. Il vous suffira de saisir votre numéro SIREN pour que vos informations soient automatiquement récupérées.
@@ -119,7 +119,7 @@ serve(async (req) => {
         <tr>
           <td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;">
             <p style="margin:0;color:#999;font-size:12px;">
-              QalioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+              QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
               <a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a>
             </p>
           </td>
