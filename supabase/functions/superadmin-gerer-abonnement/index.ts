@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Chantier "superadmin" (28/08) : création/modification de l'abonnement d'un
-// organisme (ce qu'il paie à Olivier pour QalioFlex). Pas d'intégration Stripe
+// organisme (ce qu'il paie à Olivier pour QualioFlex). Pas d'intégration Stripe
 // à ce jour → saisie manuelle par Olivier depuis l'espace superadmin. Même
 // pattern d'auth que lister-demandes-suppression.
 
@@ -28,7 +28,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !user || user.email?.toLowerCase() !== ADMIN_EMAIL) {
       return new Response(
-        JSON.stringify({ error: "Action réservée à l'administrateur QalioFlex." }),
+        JSON.stringify({ error: "Action réservée à l'administrateur QualioFlex." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
