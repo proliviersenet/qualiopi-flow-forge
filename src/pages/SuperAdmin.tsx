@@ -170,52 +170,88 @@ const SuperAdmin = () => {
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <Card><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">Formateurs inscrits</p>
-                  <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formateurs}</p>
-                </CardContent></Card>
-                <Card><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">Clients (tous formateurs)</p>
-                  <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_clients}</p>
-                  <p className="text-xs text-gray-400 mt-1">≈ {kpis.clients_par_formateur} / formateur</p>
-                </CardContent></Card>
-                <Card><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">Formations disponibles</p>
-                  <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formations_disponibles}</p>
-                  <p className="text-xs text-gray-400 mt-1">catalogue publié</p>
-                </CardContent></Card>
-                <Card><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">Sessions démarrées — {LABEL_PERIODE[periode].toLowerCase()}</p>
-                  <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formations_produites_periode}</p>
-                  <p className={`text-xs mt-1 ${kpis.croissance_pct >= 0 ? "text-green-600" : "text-red-500"}`}>
-                    {kpis.croissance_pct >= 0 ? "↑" : "↓"} {Math.abs(kpis.croissance_pct)}% vs période précédente
-                  </p>
-                </CardContent></Card>
+                <Card
+                  role="button" tabIndex={0}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => navigate("/superadmin/explorer?vue=formateurs")}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">Formateurs inscrits</p>
+                    <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formateurs}</p>
+                  </CardContent>
+                </Card>
+                <Card
+                  role="button" tabIndex={0}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => navigate("/superadmin/explorer?vue=clients")}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">Clients (tous formateurs)</p>
+                    <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_clients}</p>
+                    <p className="text-xs text-gray-400 mt-1">≈ {kpis.clients_par_formateur} / formateur</p>
+                  </CardContent>
+                </Card>
+                <Card
+                  role="button" tabIndex={0}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => navigate("/superadmin/explorer?vue=formations")}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">Formations disponibles</p>
+                    <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formations_disponibles}</p>
+                    <p className="text-xs text-gray-400 mt-1">catalogue publié</p>
+                  </CardContent>
+                </Card>
+                <Card
+                  role="button" tabIndex={0}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => navigate(`/superadmin/explorer?vue=sessions&periode=${periode}`)}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">Sessions démarrées — {LABEL_PERIODE[periode].toLowerCase()}</p>
+                    <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{kpis.nb_formations_produites_periode}</p>
+                    <p className={`text-xs mt-1 ${kpis.croissance_pct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                      {kpis.croissance_pct >= 0 ? "↑" : "↓"} {Math.abs(kpis.croissance_pct)}% vs période précédente
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <Card className="md:col-span-2"><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">CA estimé — {LABEL_PERIODE[periode].toLowerCase()}</p>
-                  <p className="text-3xl font-bold" style={{ color: "#f2901e" }}>{formatEuros(kpis.ca_total_centimes)}</p>
-                  <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                    <span>Abonnements ({kpis.nb_abonnements_actifs} actifs) : {formatEuros(kpis.ca_abonnements_centimes)}</span>
-                    <span>Formations : {formatEuros(kpis.ca_formations_centimes)}</span>
-                  </div>
-                  {kpis.nb_sessions_sans_prix > 0 && (
-                    <p className="text-xs text-amber-600 mt-2">
-                      ⚠️ {kpis.nb_sessions_sans_prix} session(s) de la période sans prix renseigné sur leur formation — non comptées dans le CA formations.
-                    </p>
-                  )}
-                </CardContent></Card>
-                <Card><CardContent className="pt-5">
-                  <p className="text-xs text-gray-400 mb-1">Alertes bug nouvelles</p>
-                  <p className="text-2xl font-bold" style={{ color: kpis.nb_bugs_nouveaux > 0 ? "#dc2626" : "#25245e" }}>{kpis.nb_bugs_nouveaux}</p>
-                </CardContent></Card>
+                <Card
+                  className="md:col-span-2 cursor-pointer transition-shadow hover:shadow-md"
+                  role="button" tabIndex={0}
+                  onClick={() => navigate(`/superadmin/explorer?vue=sessions&periode=${periode}`)}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">CA estimé — {LABEL_PERIODE[periode].toLowerCase()}</p>
+                    <p className="text-3xl font-bold" style={{ color: "#f2901e" }}>{formatEuros(kpis.ca_total_centimes)}</p>
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                      <span>Abonnements ({kpis.nb_abonnements_actifs} actifs) : {formatEuros(kpis.ca_abonnements_centimes)}</span>
+                      <span>Formations : {formatEuros(kpis.ca_formations_centimes)}</span>
+                    </div>
+                    {kpis.nb_sessions_sans_prix > 0 && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        ⚠️ {kpis.nb_sessions_sans_prix} session(s) de la période sans prix renseigné sur leur formation — non comptées dans le CA formations.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card
+                  role="button" tabIndex={0}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => document.getElementById("alertes-bug")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-gray-400 mb-1">Alertes bug nouvelles</p>
+                    <p className="text-2xl font-bold" style={{ color: kpis.nb_bugs_nouveaux > 0 ? "#dc2626" : "#25245e" }}>{kpis.nb_bugs_nouveaux}</p>
+                  </CardContent>
+                </Card>
               </div>
             </>
           )}
 
-          <Card>
+          <Card id="alertes-bug">
             <CardHeader className="pb-2">
               <CardTitle className="text-base" style={{ color: "#25245e" }}>
                 🚨 Alertes bug {bugsNouveaux.length > 0 && <Badge variant="destructive" className="ml-2">{bugsNouveaux.length} en attente</Badge>}

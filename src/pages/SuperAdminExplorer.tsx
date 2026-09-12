@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,19 @@ const DOCS_SESSION = [
   { type: "convention", label: "📄 Convention", fn: "generer-convention" },
 ] as const;
 
+const LABEL_VUE: Record<string, string> = {
+  formateurs: "Formateurs inscrits",
+  clients: "Clients (tous formateurs)",
+  formations: "Formations disponibles",
+  sessions: "Sessions démarrées",
+};
+const LABEL_PERIODE_VUE: Record<string, string> = {
+  mois: "ce mois-ci",
+  trimestre: "ce trimestre",
+  semestre: "ce semestre",
+  annee: "cette année",
+};
+
 const MOTIFS_RELANCE = [
   { value: "livret", label: "Livret d'accueil" },
   { value: "questionnaire_avant", label: "Questionnaire avant formation" },
@@ -42,6 +55,9 @@ const MOTIFS_RELANCE = [
 ];
 
 interface OrganismeResult { id: string; raison_sociale: string; nda: string | null; siret: string | null; email_contact: string | null; nb_clients: number; nb_formations: number; }
+interface ClientListe { id: string; raison_sociale: string; contact_email: string | null; organisme_id: string; organisme_nom: string; }
+interface FormationListe { id: string; titre: string; statut: string; organisme_id: string; organisme_nom: string; }
+interface SessionListe { id: string; date_debut: string | null; statut: string; formation_titre: string; client_nom: string; organisme_id: string | null; organisme_nom: string; }
 interface Client { id: string; raison_sociale: string; contact_email: string | null; siret: string | null; }
 interface Formation { id: string; titre: string; statut: string; tarif: string | null; montant_ht: number | null; }
 interface SessionRow { id: string; formation_id: string; client_id: string; date_debut: string | null; date_fin: string | null; lieu: string | null; statut: string; formations: { titre: string } | null; clients: { raison_sociale: string } | null; }
@@ -59,11 +75,23 @@ const SuperAdminExplorer = () => {
   const { session: authSession, loading: authLoading } = useAuth();
   const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
 
+  // Arrivée depuis une carte KPI cliquable du tableau de bord (SuperAdmin.tsx,
+  // 12/09) : ?vue=formateurs|clients|formations|sessions (+ &periode=... pour
+  // "sessions") déclenche le chargement direct de la liste complète
+  // correspondante, sans avoir à taper une recherche.
+  const [searchParams] = useSearchParams();
+  const vue = searchParams.get("vue");
+  const periodeVue = searchParams.get("periode") || "mois";
+
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [resultats, setResultats] = useState<OrganismeResult[] | null>(null);
+  const [listeLoading, setListeLoading] = useState(false);
+  const [clientsListe, setClientsListe] = useState<ClientListe[] | null>(null);
+  const [formationsListe, setFormationsListe] = useState<FormationListe[] | null>(null);
+  const [sessionsListe, setSessionsListe] = useState<SessionListe[] | null>(null);
 
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [organisme, setOrganisme] = useState<Record<string, unknown> | null>(null);
@@ -94,6 +122,46 @@ const SuperAdminExplorer = () => {
     });
     setReady(true);
   }, [authSession, authLoading, navigate]);
+
+  // Chargement direct de la liste correspondant à la carte KPI cliquée (voir
+  // SuperAdmin.tsx). "formateurs" réutilise volontairement le même état
+  // (resultats) et le même bloc d'affichage que la recherche manuelle
+  // ci-dessous — c'est exactement la même liste, juste non filtrée.
+  useEffect(() => {
+    if (!ready || !vue) return;
+    const charger = async () => {
+      setListeLoading(true);
+      setResultats(null);
+      setClientsListe(null);
+      setFormationsListe(null);
+      setSessionsListe(null);
+
+      if (vue === "formateurs") {
+        const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "formateurs" } });
+        setListeLoading(false);
+        if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
+        setResultats(data?.organismes || []);
+      } else if (vue === "clients") {
+        const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "clients" } });
+        setListeLoading(false);
+        if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
+        setClientsListe(data?.clients || []);
+      } else if (vue === "formations") {
+        const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "formations" } });
+        setListeLoading(false);
+        if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
+        setFormationsListe(data?.formations || []);
+      } else if (vue === "sessions") {
+        const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "sessions_periode", periode: periodeVue } });
+        setListeLoading(false);
+        if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
+        setSessionsListe(data?.sessions || []);
+      } else {
+        setListeLoading(false);
+      }
+    };
+    charger();
+  }, [ready, vue, periodeVue, toast]);
 
   const rechercher = async () => {
     if (query.trim().length < 2) { toast({ title: "Saisissez au moins 2 caractères", variant: "destructive" }); return; }
@@ -222,6 +290,63 @@ const SuperAdminExplorer = () => {
               )}
             </CardContent>
           </Card>
+
+          {vue && (
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-gray-500">
+                Vue depuis le tableau de bord : <strong>{LABEL_VUE[vue] || vue}</strong>
+                {vue === "sessions" && <> — {LABEL_PERIODE_VUE[periodeVue] || periodeVue}</>}
+              </p>
+              <Link to="/superadmin/explorer"><Button variant="ghost" size="sm">✕ Fermer la vue</Button></Link>
+            </div>
+          )}
+
+          {listeLoading && <div className="py-8 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /></div>}
+
+          {clientsListe && !listeLoading && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>👥 Clients ({clientsListe.length})</CardTitle></CardHeader>
+              <CardContent className="space-y-1 max-h-[28rem] overflow-y-auto">
+                {clientsListe.length === 0 && <p className="text-sm text-gray-400">Aucun client.</p>}
+                {clientsListe.map(c => (
+                  <button key={c.id} onClick={() => ouvrirOrganisme(c.organisme_id)} className="w-full text-left flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                    <span className="text-sm text-gray-700">{c.raison_sociale} <span className="text-xs text-gray-400">({c.contact_email || "—"})</span></span>
+                    <span className="text-xs text-gray-400">via {c.organisme_nom}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {formationsListe && !listeLoading && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🎓 Formations publiées ({formationsListe.length})</CardTitle></CardHeader>
+              <CardContent className="space-y-1 max-h-[28rem] overflow-y-auto">
+                {formationsListe.length === 0 && <p className="text-sm text-gray-400">Aucune formation.</p>}
+                {formationsListe.map(f => (
+                  <button key={f.id} onClick={() => ouvrirOrganisme(f.organisme_id)} className="w-full text-left flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                    <span className="text-sm text-gray-700">{f.titre}</span>
+                    <span className="text-xs text-gray-400">via {f.organisme_nom}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {sessionsListe && !listeLoading && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>📅 Sessions démarrées ({sessionsListe.length})</CardTitle></CardHeader>
+              <CardContent className="space-y-1 max-h-[28rem] overflow-y-auto">
+                {sessionsListe.length === 0 && <p className="text-sm text-gray-400">Aucune session sur cette période.</p>}
+                {sessionsListe.map(s => (
+                  <button key={s.id} onClick={() => ouvrirSession(s.id)} className={`w-full text-left flex items-center justify-between p-2 rounded hover:bg-gray-50 ${sessionId === s.id ? "bg-gray-50" : ""}`}>
+                    <span className="text-sm text-gray-700">{s.formation_titre} — {s.client_nom} <span className="text-xs text-gray-400">({s.organisme_nom})</span></span>
+                    <span className="text-xs text-gray-400">{s.date_debut ? new Date(s.date_debut).toLocaleDateString("fr-FR") : "—"} · {s.statut}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {loadingOrg && <div className="py-8 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /></div>}
 
