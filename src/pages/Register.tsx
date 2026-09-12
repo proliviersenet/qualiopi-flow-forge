@@ -187,7 +187,17 @@ const Register = () => {
       }
       navigate("/dashboard");
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Une erreur est survenue";
+      // Les erreurs Supabase (PostgrestError, RLS, contraintes...) ne sont pas
+      // des instances d'Error — sans ce cas, leur message réel était perdu et
+      // on affichait toujours "Une erreur est survenue" (bug constaté au beta
+      // test du 12/09 : impossible de diagnostiquer l'échec de création de
+      // l'organisme faute de message précis).
+      const msg =
+        error instanceof Error
+          ? error.message
+          : error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
+            ? (error as { message: string }).message
+            : "Une erreur est survenue";
       toast({ title: "Erreur d'inscription", description: msg, variant: "destructive" });
     } finally {
       setIsLoading(false);
