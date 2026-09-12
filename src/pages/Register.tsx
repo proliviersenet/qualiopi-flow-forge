@@ -11,7 +11,6 @@ import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
 import { validatePassword } from "@/lib/passwordUtils";
 import Logo from "@/components/Logo";
-import SocialAuthButtons from "@/components/SocialAuthButtons";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Register = () => {
@@ -332,12 +331,18 @@ const Register = () => {
                   </div>
                 )}
 
-                {oauthCompletion ? (
+                {/* Pas de bouton Google ici (choix du 12/09) : la création d'un
+                    espace formateur doit imperativement passer par la
+                    recherche SIRET en premier. "Continuer avec Google"
+                    n'existe que sur la page Connexion (Login.tsx), pour se
+                    reconnecter à un compte déjà créé. Ce bandeau ne concerne
+                    donc que le cas de secours (voir Dashboard.tsx) : un
+                    compte Google sans organisme associé — jamais atteint
+                    depuis cette page en usage normal, seulement redirigé ici. */}
+                {oauthCompletion && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
                     ✓ Connecté avec Google ({formData.email}) — plus qu'une étape : renseignez votre SIRET pour créer votre espace.
                   </div>
-                ) : (
-                  <SocialAuthButtons dividerPosition="after" />
                 )}
 
                 {/* ÉTAPE 1 — SIRET */}
