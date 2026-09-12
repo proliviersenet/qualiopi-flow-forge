@@ -12,12 +12,40 @@ import Footer from "@/components/Footer";
 import { validatePassword } from "@/lib/passwordUtils";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
+import SocialAuthButtons from "@/components/SocialAuthButtons";
 
+// Page unique "Accéder à QualioFlex" (fusion Connexion + Inscription, 12/09).
+//
+// Avant, /login (email+mot de passe+Google) et /register (SIRET puis email+
+// mot de passe, sans Google) étaient deux pages séparées. Problème constaté
+// en beta test (retour Jean-Pascal Mollet) : Google ne distingue pas
+// "se connecter" de "créer un compte" — un nouvel utilisateur arrivant sur
+// /login pouvait cliquer sur "Continuer avec Google", ce qui créait bel et
+// bien un compte, sans jamais passer par la case SIRET obligatoire. Le petit
+// bandeau de complétion qui suivait pouvait passer inaperçu, laissant
+// l'utilisateur "connecté" mais bloqué partout ailleurs dans l'app.
+//
+// /login et /register pointent maintenant vers ce même composant (voir
+// App.tsx), qui gère 3 états :
+//  - "access"   : étape d'entrée unique — bouton Google + email/mot de passe.
+//                 On tente une connexion ; si elle échoue (pas de compte ou
+//                 mauvais mot de passe), on bascule automatiquement vers la
+//                 création d'espace, sans faire retaper l'email/mot de passe.
+//  - "signup"   : l'assistant SIRET existant (inchangé), déclenché soit
+//                 automatiquement après un échec de connexion, soit
+//                 explicitement via "Nouveau sur QualioFlex ?", soit
+//                 immédiatement pour un lien d'invitation sous-traitance
+//                 (?st=...). Pas de bouton Google ici : la création d'un
+//                 espace formateur doit toujours passer par la recherche
+//                 SIRET (règle métier inchangée).
+//  - "oauthCompletion" : cas de secours — session déjà active (retour
+//                 Google) mais sans organisme rattaché. Comportement
+//                 identique à avant.
 const Register = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { session: authSession, loading: authLoading } = useAuth();
-  // Utilisateur déjà connecté en arrivant sur /register (typiquement : retour
+  // Utilisateur déjà connecté en arrivant sur la page (typiquement : retour
   // de redirection Google/OAuth, voir SocialAuthButtons + Dashboard.tsx). Dans
   // ce cas le compte existe déjà — il ne reste plus qu'à renseigner
   // l'entreprise (SIRET) pour finaliser l'espace, sans email/mot de passe.
@@ -31,6 +59,12 @@ const Register = () => {
   const stToken = searchParams.get("st");
   const [invitationSoustraitance, setInvitationSoustraitance] = useState<{ formation_titre: string; organisme_demandeur_nom: string; email_invite: string } | null>(null);
   const [invitationInvalide, setInvitationInvalide] = useState(false);
+
+  // Étape affichée : "access" (connexion/entrée unique) ou "signup" (assistant
+  // SIRET). Un lien d'invitation sous-traitance saute directement à "signup",
+  // comme avant.
+  const [mode, setMode] = useState<"access" | "signup">(stToken ? "signup" : "access");
+
   const [isLoading, setIsLoading] = useState(false);
   const [siretLoading, setSiretLoading] = useState(false);
   const [siretTrouve, setSiretTrouve] = useState(false);
@@ -94,6 +128,48 @@ const Register = () => {
 
   const handleRoleChange = (value: string) => {
     setFormData(prev => ({ ...prev, role: value }));
+  };
+
+  const extractMessage = (error: unknown, fallback: string) =>
+    error instanceof Error
+      ? error.message
+      : error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : fallback;
+
+  // Étape d'entrée unique : on tente d'abord une connexion classique. Si elle
+  // échoue (email inconnu OU mauvais mot de passe — Supabase ne distingue pas
+  // les deux pour des raisons de sécurité), on bascule vers la création
+  // d'espace en conservant l'email/mot de passe déjà saisis, pour ne rien
+  // faire retaper.
+  const handleAccessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email || !formData.password) {
+      toast({ title: "Erreur", description: "Veuillez renseigner votre email et votre mot de passe", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error, data } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+      if (error) {
+        setMode("signup");
+        toast({
+          title: "Compte introuvable avec ces identifiants",
+          description: "Si vous êtes nouveau sur QualioFlex, créez votre espace ci-dessous (SIRET requis). Si vous avez déjà un compte, vérifiez votre mot de passe.",
+        });
+        return;
+      }
+      const role = data.user?.user_metadata?.role;
+      toast({ title: "Connexion réussie", description: "Bienvenue sur QualioFlex !" });
+      navigate(role === "client" ? "/espace-client" : "/dashboard");
+    } catch (error: unknown) {
+      toast({ title: "Erreur de connexion", description: extractMessage(error, "Une erreur est survenue"), variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Étape 1 — Recherche SIRET et pré-remplissage automatique
@@ -206,7 +282,21 @@ const Register = () => {
             },
           },
         });
-        if (authError) throw authError;
+        if (authError) {
+          // Cas fréquent depuis la fusion Connexion/Inscription : l'email a
+          // en fait déjà un compte (créé via Google, ou mot de passe oublié)
+          // — on renvoie vers l'étape de connexion plutôt que d'afficher une
+          // erreur technique sans solution.
+          if (/already registered|already exists|user already/i.test(authError.message)) {
+            setMode("access");
+            toast({
+              title: "Ce compte existe déjà",
+              description: "Un compte est déjà associé à cet email. Connectez-vous avec votre mot de passe, avec Google, ou utilisez \"Mot de passe oublié\".",
+            });
+            return;
+          }
+          throw authError;
+        }
         if (!authData.user) throw new Error("Erreur lors de la création du compte");
 
         // Pas de session = confirmation email en attente : on ne peut rien
@@ -276,21 +366,15 @@ const Register = () => {
       // on affichait toujours "Une erreur est survenue" (bug constaté au beta
       // test du 12/09 : impossible de diagnostiquer l'échec de création de
       // l'organisme faute de message précis).
-      const msg =
-        error instanceof Error
-          ? error.message
-          : error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
-            ? (error as { message: string }).message
-            : "Une erreur est survenue";
-      toast({ title: "Erreur d'inscription", description: msg, variant: "destructive" });
+      toast({ title: "Erreur d'inscription", description: extractMessage(error, "Une erreur est survenue"), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Évite un flash du formulaire complet (email/mot de passe) le temps de
-  // vérifier si un utilisateur arrivant déjà connecté (retour Google) a
-  // besoin de compléter son entreprise ou peut filer directement au dashboard.
+  // Évite un flash du formulaire complet le temps de vérifier si un
+  // utilisateur arrivant déjà connecté (retour Google) a besoin de compléter
+  // son entreprise ou peut filer directement au dashboard.
   if (checkingOAuthProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -298,6 +382,8 @@ const Register = () => {
       </div>
     );
   }
+
+  const showWizard = mode === "signup" || oauthCompletion;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -310,198 +396,276 @@ const Register = () => {
             </Link>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Créer votre espace formateur</CardTitle>
-              <CardDescription>
-                Commencez par votre SIRET — vos informations sont pré-remplies automatiquement
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSubmit}>
-              <CardContent className="space-y-4">
-
-                {invitationSoustraitance && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm text-purple-800">
-                    🤝 <strong>{invitationSoustraitance.organisme_demandeur_nom}</strong> vous invite à co-animer la formation <strong>{invitationSoustraitance.formation_titre}</strong> en sous-traitance. Créez votre espace formateur ci-dessous pour y accéder — la session vous sera automatiquement rattachée.
-                  </div>
-                )}
-                {invitationInvalide && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-                    ⚠️ Ce lien d'invitation à la sous-traitance n'est plus valide (expiré ou déjà utilisé). Vous pouvez tout de même créer votre espace formateur ci-dessous, mais contactez le formateur qui vous a invité pour qu'il vous confie de nouveau la session.
-                  </div>
-                )}
-
-                {/* Pas de bouton Google ici (choix du 12/09) : la création d'un
-                    espace formateur doit imperativement passer par la
-                    recherche SIRET en premier. "Continuer avec Google"
-                    n'existe que sur la page Connexion (Login.tsx), pour se
-                    reconnecter à un compte déjà créé. Ce bandeau ne concerne
-                    donc que le cas de secours (voir Dashboard.tsx) : un
-                    compte Google sans organisme associé — jamais atteint
-                    depuis cette page en usage normal, seulement redirigé ici. */}
-                {oauthCompletion && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                    ✓ Connecté avec Google ({formData.email}) — plus qu'une étape : renseignez votre SIRET pour créer votre espace.
-                  </div>
-                )}
-
-                {/* ÉTAPE 1 — SIRET */}
-                <div className="space-y-2">
-                  <Label htmlFor="siret">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">1</span>
-                      SIRET de votre entreprise *
-                    </span>
-                  </Label>
-                  <div className="flex gap-2">
+          {!showWizard ? (
+            // ÉTAPE D'ENTRÉE UNIQUE — Google + email/mot de passe. On ne sait
+            // pas encore si la personne a déjà un compte ou non : "Accéder"
+            // tente une connexion, et bascule automatiquement vers la
+            // création d'espace en cas d'échec (voir handleAccessSubmit).
+            <Card>
+              <CardHeader>
+                <CardTitle>Accéder à QualioFlex</CardTitle>
+                <CardDescription>Connexion ou création de votre espace formateur</CardDescription>
+              </CardHeader>
+              <form onSubmit={handleAccessSubmit}>
+                <CardContent className="space-y-4">
+                  <SocialAuthButtons dividerPosition="after" />
+                  <div className="space-y-2">
+                    <Label htmlFor="access-email">Email professionnel</Label>
                     <Input
-                      id="siret" name="siret"
-                      placeholder="14 chiffres — ex : 89278745800017"
-                      maxLength={14}
-                      value={formData.siret}
+                      id="access-email" name="email" type="email"
+                      placeholder="olivier@exsenco.fr"
+                      value={formData.email}
                       onChange={handleChange}
-                      className="flex-1"
+                      required
+                      disabled={!!invitationSoustraitance}
+                      className={invitationSoustraitance ? "bg-gray-100 text-gray-500" : undefined}
                     />
-                    <Button type="button" variant="outline" onClick={fetchSiret} disabled={siretLoading}>
-                      {siretLoading ? "Recherche..." : "Rechercher"}
-                    </Button>
                   </div>
-                </div>
-
-                {/* Résultat SIRET — données auto-remplies */}
-                {siretTrouve && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
-                      <span>✓</span> Entreprise trouvée — informations pré-remplies
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="access-password">Mot de passe</Label>
+                      <Link to="/reset-password" className="text-xs text-exsenco-blue hover:underline">Mot de passe oublié ?</Link>
                     </div>
-                    <div className="space-y-2">
-                      <div>
-                        <Label className="text-xs text-gray-500">Raison sociale</Label>
-                        <p className="text-sm font-medium">{formData.raisonSociale}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">Adresse</Label>
-                        <p className="text-sm">{formData.adresse}</p>
-                      </div>
-                      <div className="flex gap-4">
-                        <div>
-                          <Label className="text-xs text-gray-500">Code NAF</Label>
-                          <p className="text-sm">{formData.codeNaf}</p>
-                        </div>
-                        {formData.nda && (
-                          <div>
-                            <Label className="text-xs text-gray-500">NDA Formation</Label>
-                            <p className="text-sm font-medium text-exsenco-blue">{formData.nda}</p>
-                          </div>
-                        )}
-                      </div>
+                    <div className="relative">
+                      <Input
+                        id="access-password" name="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={formData.password}
+                        onChange={handleChange}
+                        required
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        aria-label={showPassword ? "Masquer le mot de passe" : "Voir le mot de passe"}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
                   </div>
-                )}
+                </CardContent>
+                <CardFooter className="flex flex-col">
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? "Connexion en cours..." : "Accéder à mon espace"}
+                  </Button>
+                  <p className="mt-4 text-center text-sm text-gray-600">
+                    Nouveau sur QualioFlex ?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setMode("signup")}
+                      className="text-exsenco-blue hover:underline"
+                    >
+                      Créer mon espace formateur
+                    </button>
+                  </p>
+                </CardFooter>
+              </form>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>{oauthCompletion ? "Finaliser votre espace" : "Créer votre espace formateur"}</CardTitle>
+                <CardDescription>
+                  {oauthCompletion
+                    ? "Plus qu'une étape : renseignez votre SIRET pour créer votre espace"
+                    : "Commencez par votre SIRET — vos informations sont pré-remplies automatiquement"}
+                </CardDescription>
+              </CardHeader>
+              <form onSubmit={handleSubmit}>
+                <CardContent className="space-y-4">
 
-                {/* ÉTAPE 2 — Email + Tel */}
-                {siretTrouve && (
-                  <>
-                    {!oauthCompletion && (
+                  {invitationSoustraitance && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm text-purple-800">
+                      🤝 <strong>{invitationSoustraitance.organisme_demandeur_nom}</strong> vous invite à co-animer la formation <strong>{invitationSoustraitance.formation_titre}</strong> en sous-traitance. Créez votre espace formateur ci-dessous pour y accéder — la session vous sera automatiquement rattachée.
+                    </div>
+                  )}
+                  {invitationInvalide && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                      ⚠️ Ce lien d'invitation à la sous-traitance n'est plus valide (expiré ou déjà utilisé). Vous pouvez tout de même créer votre espace formateur ci-dessous, mais contactez le formateur qui vous a invité pour qu'il vous confie de nouveau la session.
+                    </div>
+                  )}
+
+                  {/* Pas de bouton Google ici : la création d'un espace
+                      formateur doit imperativement passer par la recherche
+                      SIRET en premier. "Continuer avec Google" n'existe que
+                      sur l'étape d'entrée ci-dessus, pour se reconnecter à un
+                      compte déjà créé. Ce bandeau ne concerne donc que le cas
+                      de secours (voir Dashboard.tsx) : un compte Google sans
+                      organisme associé — jamais atteint depuis cette étape en
+                      usage normal, seulement redirigé ici. */}
+                  {oauthCompletion && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                      ✓ Connecté avec Google ({formData.email}) — plus qu'une étape : renseignez votre SIRET pour créer votre espace.
+                    </div>
+                  )}
+
+                  {/* ÉTAPE 1 — SIRET */}
+                  <div className="space-y-2">
+                    <Label htmlFor="siret">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">1</span>
+                        SIRET de votre entreprise *
+                      </span>
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="siret" name="siret"
+                        placeholder="14 chiffres — ex : 89278745800017"
+                        maxLength={14}
+                        value={formData.siret}
+                        onChange={handleChange}
+                        className="flex-1"
+                      />
+                      <Button type="button" variant="outline" onClick={fetchSiret} disabled={siretLoading}>
+                        {siretLoading ? "Recherche..." : "Rechercher"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Résultat SIRET — données auto-remplies */}
+                  {siretTrouve && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
+                        <span>✓</span> Entreprise trouvée — informations pré-remplies
+                      </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">2</span>
-                            Email professionnel *
-                          </span>
-                        </Label>
-                        <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required disabled={!!invitationSoustraitance} className={invitationSoustraitance ? "bg-gray-100 text-gray-500" : undefined} />
+                        <div>
+                          <Label className="text-xs text-gray-500">Raison sociale</Label>
+                          <p className="text-sm font-medium">{formData.raisonSociale}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Adresse</Label>
+                          <p className="text-sm">{formData.adresse}</p>
+                        </div>
+                        <div className="flex gap-4">
+                          <div>
+                            <Label className="text-xs text-gray-500">Code NAF</Label>
+                            <p className="text-sm">{formData.codeNaf}</p>
+                          </div>
+                          {formData.nda && (
+                            <div>
+                              <Label className="text-xs text-gray-500">NDA Formation</Label>
+                              <p className="text-sm font-medium text-exsenco-blue">{formData.nda}</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="telephone">Téléphone</Label>
-                      <Input id="telephone" name="telephone" placeholder="06 07 46 74 09" value={formData.telephone} onChange={handleChange} />
                     </div>
+                  )}
 
-                    {/* Rôle */}
-                    <div className="space-y-2">
-                      <Label>Je suis *</Label>
-                      <RadioGroup value={formData.role} onValueChange={handleRoleChange} className="flex flex-col space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="formateur_certifie" id="formateur_certifie" />
-                          <Label htmlFor="formateur_certifie">Formateur indépendant certifié Qualiopi</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="of_complet" id="of_complet" />
-                          <Label htmlFor="of_complet">Organisme de formation (OF)</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-
-                    {!oauthCompletion && (
-                      <>
-                        {/* Mot de passe */}
+                  {/* ÉTAPE 2 — Email + Tel */}
+                  {siretTrouve && (
+                    <>
+                      {!oauthCompletion && (
                         <div className="space-y-2">
-                          <Label htmlFor="password">
+                          <Label htmlFor="email">
                             <span className="inline-flex items-center gap-1">
-                              <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">3</span>
-                              Mot de passe *
+                              <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">2</span>
+                              Email professionnel *
                             </span>
                           </Label>
-                          <div className="relative">
-                            <Input id="password" name="password" type={showPassword ? "text" : "password"} placeholder="Ex: MonMot2Passe!" value={formData.password} onChange={handleChange} required className="pr-10" />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                          </div>
-                          {/* Indicateur de force */}
-                          {formData.password.length > 0 && (() => {
-                            const check = validatePassword(formData.password);
-                            return (
-                              <div className="space-y-1 pt-1">
-                                {check.rules.map((rule) => (
-                                  <div key={rule.label} className={`flex items-center gap-1.5 text-xs ${rule.ok ? "text-green-600" : "text-gray-400"}`}>
-                                    <span>{rule.ok ? "✓" : "○"}</span>
-                                    <span>{rule.label}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
+                          <Input id="email" name="email" type="email" placeholder="olivier@exsenco.fr" value={formData.email} onChange={handleChange} required disabled={!!invitationSoustraitance} className={invitationSoustraitance ? "bg-gray-100 text-gray-500" : undefined} />
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-                          <div className="relative">
-                            <Input id="confirmPassword" name="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" value={formData.confirmPassword} onChange={handleChange} required className="pr-10" />
-                            <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
+                      )}
+                      <div className="space-y-2">
+                        <Label htmlFor="telephone">Téléphone</Label>
+                        <Input id="telephone" name="telephone" placeholder="06 07 46 74 09" value={formData.telephone} onChange={handleChange} />
+                      </div>
 
-              </CardContent>
-              <CardFooter className="flex flex-col">
-                {siretTrouve ? (
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading
-                      ? "Création de votre espace..."
-                      : oauthCompletion
-                        ? `Finaliser mon espace ${formData.raisonSociale}`
-                        : `Créer l'espace ${formData.raisonSociale}`}
-                  </Button>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center">
-                    Saisissez votre SIRET et cliquez sur Rechercher pour commencer
-                  </p>
-                )}
-                {!oauthCompletion && (
-                  <p className="mt-4 text-center text-sm text-gray-600">
-                    Déjà un compte ?{" "}
-                    <Link to="/login" className="text-exsenco-blue hover:underline">Se connecter</Link>
-                  </p>
-                )}
-              </CardFooter>
-            </form>
-          </Card>
+                      {/* Rôle */}
+                      <div className="space-y-2">
+                        <Label>Je suis *</Label>
+                        <RadioGroup value={formData.role} onValueChange={handleRoleChange} className="flex flex-col space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="formateur_certifie" id="formateur_certifie" />
+                            <Label htmlFor="formateur_certifie">Formateur indépendant certifié Qualiopi</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="of_complet" id="of_complet" />
+                            <Label htmlFor="of_complet">Organisme de formation (OF)</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      {!oauthCompletion && (
+                        <>
+                          {/* Mot de passe */}
+                          <div className="space-y-2">
+                            <Label htmlFor="password">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="bg-exsenco-blue text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">3</span>
+                                Mot de passe *
+                              </span>
+                            </Label>
+                            <div className="relative">
+                              <Input id="password" name="password" type={showPassword ? "text" : "password"} placeholder="Ex: MonMot2Passe!" value={formData.password} onChange={handleChange} required className="pr-10" />
+                              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                            {/* Indicateur de force */}
+                            {formData.password.length > 0 && (() => {
+                              const check = validatePassword(formData.password);
+                              return (
+                                <div className="space-y-1 pt-1">
+                                  {check.rules.map((rule) => (
+                                    <div key={rule.label} className={`flex items-center gap-1.5 text-xs ${rule.ok ? "text-green-600" : "text-gray-400"}`}>
+                                      <span>{rule.ok ? "✓" : "○"}</span>
+                                      <span>{rule.label}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
+                            <div className="relative">
+                              <Input id="confirmPassword" name="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" value={formData.confirmPassword} onChange={handleChange} required className="pr-10" />
+                              <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                </CardContent>
+                <CardFooter className="flex flex-col">
+                  {siretTrouve ? (
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading
+                        ? "Création de votre espace..."
+                        : oauthCompletion
+                          ? `Finaliser mon espace ${formData.raisonSociale}`
+                          : `Créer l'espace ${formData.raisonSociale}`}
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">
+                      Saisissez votre SIRET et cliquez sur Rechercher pour commencer
+                    </p>
+                  )}
+                  {!oauthCompletion && (
+                    <p className="mt-4 text-center text-sm text-gray-600">
+                      Déjà un compte ?{" "}
+                      <button
+                        type="button"
+                        onClick={() => setMode("access")}
+                        className="text-exsenco-blue hover:underline"
+                      >
+                        Se connecter
+                      </button>
+                    </p>
+                  )}
+                </CardFooter>
+              </form>
+            </Card>
+          )}
         </div>
       </div>
       <Footer />
