@@ -195,6 +195,16 @@ const Dashboard = () => {
         }
       }
 
+      // Connexion via Google (ou autre OAuth à venir) sans passer par le
+      // formulaire SIRET : aucune entreprise n'a jamais été renseignée (pas
+      // de pending_registration non plus, sinon traité ci-dessus). On
+      // renvoie vers /register, qui détecte la session déjà active et
+      // affiche uniquement l'étape SIRET pour finaliser l'espace.
+      if (!profile?.organisme_id) {
+        navigate('/register');
+        return;
+      }
+
       if (profile?.organisme_id) {
         const { data: org } = await supabase
           .from('organismes')

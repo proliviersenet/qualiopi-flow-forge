@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff } from "lucide-react";
 import Footer from "@/components/Footer";
 import Logo from "@/components/Logo";
+import SocialAuthButtons from "@/components/SocialAuthButtons";
 
 const Login = () => {
   const { toast } = useToast();
@@ -97,6 +98,9 @@ const Login = () => {
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? "Connexion en cours..." : "Se connecter"}
                 </Button>
+                <div className="w-full mt-4">
+                  <SocialAuthButtons />
+                </div>
                 <p className="mt-4 text-center text-sm text-gray-600">
                   Pas encore de compte ?{" "}
                   <Link to="/register" className="text-exsenco-blue hover:underline">Créer mon espace</Link>
