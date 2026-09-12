@@ -131,14 +131,48 @@ const Register = () => {
 
     setIsLoading(true);
     try {
-      // 1. Créer le compte Supabase Auth
+      // 1. Créer le compte Supabase Auth. Toutes les infos SIRET/entreprise
+      // saisies sont aussi stockées en user_metadata (pending_registration) :
+      // si la confirmation par email est activée, aucune session n'est
+      // renvoyée tant que l'utilisateur n'a pas cliqué le lien reçu — donc
+      // impossible de créer l'organisme tout de suite (RLS exige une
+      // session active). Ces données restent alors "en attente" et servent
+      // à finaliser automatiquement l'inscription au premier chargement du
+      // dashboard après confirmation (voir Dashboard.tsx).
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: { data: { nom_complet: formData.raisonSociale || formData.email } }
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: {
+            nom_complet: formData.raisonSociale || formData.email,
+            pending_registration: true,
+            siret: formData.siret,
+            siren: formData.siren,
+            raison_sociale: formData.raisonSociale,
+            adresse: formData.adresse,
+            code_naf: formData.codeNaf,
+            nda: formData.nda,
+            telephone: formData.telephone,
+            role: formData.role,
+            st_token: stToken || null,
+          },
+        },
       });
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erreur lors de la création du compte");
+
+      // Pas de session = confirmation email en attente : on ne peut rien
+      // créer sous RLS maintenant. Les données sont déjà sauvegardées
+      // ci-dessus (user_metadata) et seront traitées automatiquement dès
+      // que l'utilisateur confirme son adresse et revient sur le site.
+      if (!authData.session) {
+        toast({
+          title: "Vérifiez votre boîte mail",
+          description: "Un email de confirmation vient de vous être envoyé. Cliquez sur le lien qu'il contient pour activer votre compte — votre espace formateur sera créé automatiquement à ce moment-là.",
+        });
+        return;
+      }
 
       // 2. Créer l'organisme avec toutes les données SIRET
       const { data: orgData, error: orgError } = await supabase

@@ -133,11 +133,67 @@ const Dashboard = () => {
       setUser({ name: u.user_metadata?.nom_complet || u.email || '', email: u.email || '', profileImage: '' });
 
       // Récupérer le profil + organisme
-      const { data: profile } = await supabase
+      let { data: profile } = await supabase
         .from('profiles')
         .select('*, organisme_id')
         .eq('id', u.id)
         .single();
+
+      // Finalisation de l'inscription après confirmation email (voir
+      // Register.tsx) : quand la confirmation par email est activée,
+      // signUp() ne renvoie aucune session tant que l'utilisateur n'a pas
+      // cliqué le lien reçu — impossible à ce moment-là de créer
+      // l'organisme/le profil (RLS exige une session active). Les infos
+      // SIRET saisies à l'inscription ont donc été mises de côté dans
+      // user_metadata (pending_registration). Ici, au premier chargement du
+      // dashboard après confirmation (une session valide existe désormais) :
+      // on les récupère pour finaliser la création, une seule fois.
+      if (!profile?.organisme_id && u.user_metadata?.pending_registration) {
+        const meta = u.user_metadata as Record<string, string | boolean | null | undefined>;
+        const { data: orgData, error: orgError } = await supabase
+          .from('organismes')
+          .insert({
+            owner_user_id: u.id,
+            siret: (meta.siret as string) || '',
+            siren: (meta.siren as string) || '',
+            raison_sociale: (meta.raison_sociale as string) || '',
+            adresse: (meta.adresse as string) || '',
+            code_naf: (meta.code_naf as string) || '',
+            nda: (meta.nda as string) || '',
+            email_contact: u.email,
+            telephone: (meta.telephone as string) || '',
+          })
+          .select('id')
+          .single();
+
+        if (!orgError && orgData) {
+          await supabase.from('profiles').upsert({
+            id: u.id,
+            email: u.email,
+            nom_complet: (meta.raison_sociale as string) || u.email,
+            role: (meta.role as string) || 'formateur_certifie',
+            organisme_id: orgData.id,
+            onboarding_complete: true,
+          });
+
+          // Chantier "sous-traitance" : rattachement différé pour la même
+          // raison (pas de session au moment de l'inscription initiale).
+          if (meta.st_token) {
+            await supabase.functions.invoke('lier-soustraitance', { body: { token: meta.st_token } });
+          }
+
+          // On retire le flag pour ne pas retenter à chaque connexion.
+          await supabase.auth.updateUser({ data: { pending_registration: false } });
+
+          ({ data: profile } = await supabase
+            .from('profiles')
+            .select('*, organisme_id')
+            .eq('id', u.id)
+            .single());
+        } else if (orgError) {
+          console.error('Erreur finalisation inscription (post-confirmation):', orgError);
+        }
+      }
 
       if (profile?.organisme_id) {
         const { data: org } = await supabase
