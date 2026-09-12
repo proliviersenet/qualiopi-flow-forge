@@ -24,6 +24,29 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ADMIN_EMAIL = "olivier@exsenco.fr";
 
+// Bornes de période — dupliqué à l'identique depuis superadmin-kpis (chaque
+// Edge Function est déployée indépendamment, pas de module partagé à ce jour)
+// pour que la liste ouverte depuis une carte KPI corresponde exactement au
+// chiffre affiché (12/09 : cartes KPI rendues cliquables → liste détaillée).
+type Periode = "mois" | "trimestre" | "semestre" | "annee";
+
+function debutPeriode(ref: Date, periode: Periode): Date {
+  const y = ref.getUTCFullYear();
+  const m = ref.getUTCMonth();
+  if (periode === "mois") return new Date(Date.UTC(y, m, 1));
+  if (periode === "trimestre") return new Date(Date.UTC(y, Math.floor(m / 3) * 3, 1));
+  if (periode === "semestre") return new Date(Date.UTC(y, m < 6 ? 0 : 6, 1));
+  return new Date(Date.UTC(y, 0, 1));
+}
+
+function moisParPeriode(periode: Periode): number {
+  return { mois: 1, trimestre: 3, semestre: 6, annee: 12 }[periode];
+}
+
+function ajouterMois(d: Date, n: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate()));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -43,7 +66,151 @@ Deno.serve(async (req: Request) => {
     }
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query, organisme_id, session_id } = await req.json();
+    const { action, query, organisme_id, session_id, type, periode: periodeBody, reference_date } = await req.json();
+
+    // Point d'entrée pour les cartes KPI cliquables du tableau de bord
+    // (SuperAdmin.tsx) : contrairement à "rechercher" (nécessite une saisie
+    // texte), "lister" renvoie directement la liste complète correspondant à
+    // un KPI donné, sans filtre.
+    if (action === "lister") {
+      if (type === "formateurs") {
+        const { data: organismes, error } = await admin
+          .from("organismes")
+          .select("id, raison_sociale, nda, siret, email_contact")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+
+        const ids = (organismes ?? []).map((o: { id: string }) => o.id);
+        const [{ data: clientsCount }, { data: formationsCount }] = await Promise.all([
+          ids.length ? admin.from("clients").select("organisme_id").in("organisme_id", ids) : Promise.resolve({ data: [] }),
+          ids.length ? admin.from("formations").select("organisme_id").in("organisme_id", ids) : Promise.resolve({ data: [] }),
+        ]);
+        const nbClientsParOrg: Record<string, number> = {};
+        (clientsCount ?? []).forEach((c: { organisme_id: string }) => { nbClientsParOrg[c.organisme_id] = (nbClientsParOrg[c.organisme_id] || 0) + 1; });
+        const nbFormationsParOrg: Record<string, number> = {};
+        (formationsCount ?? []).forEach((f: { organisme_id: string }) => { nbFormationsParOrg[f.organisme_id] = (nbFormationsParOrg[f.organisme_id] || 0) + 1; });
+
+        return new Response(
+          JSON.stringify({
+            organismes: (organismes ?? []).map((o: { id: string; raison_sociale: string; nda: string; siret: string; email_contact: string }) => ({
+              ...o,
+              nb_clients: nbClientsParOrg[o.id] || 0,
+              nb_formations: nbFormationsParOrg[o.id] || 0,
+            })),
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (type === "clients") {
+        const { data: clients, error } = await admin
+          .from("clients")
+          .select("id, raison_sociale, contact_email, organisme_id")
+          .order("created_at", { ascending: false })
+          .limit(300);
+        if (error) throw error;
+
+        const orgIds = Array.from(new Set((clients ?? []).map((c: { organisme_id: string }) => c.organisme_id)));
+        const { data: orgs } = orgIds.length
+          ? await admin.from("organismes").select("id, raison_sociale").in("id", orgIds)
+          : { data: [] };
+        const nomParOrg: Record<string, string> = {};
+        (orgs ?? []).forEach((o: { id: string; raison_sociale: string }) => { nomParOrg[o.id] = o.raison_sociale; });
+
+        return new Response(
+          JSON.stringify({
+            clients: (clients ?? []).map((c: { id: string; raison_sociale: string; contact_email: string | null; organisme_id: string }) => ({
+              ...c,
+              organisme_nom: nomParOrg[c.organisme_id] || "—",
+            })),
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (type === "formations") {
+        const { data: formations, error } = await admin
+          .from("formations")
+          .select("id, titre, statut, organisme_id")
+          .eq("statut", "publie")
+          .order("created_at", { ascending: false })
+          .limit(300);
+        if (error) throw error;
+
+        const orgIds = Array.from(new Set((formations ?? []).map((f: { organisme_id: string }) => f.organisme_id)));
+        const { data: orgs } = orgIds.length
+          ? await admin.from("organismes").select("id, raison_sociale").in("id", orgIds)
+          : { data: [] };
+        const nomParOrg: Record<string, string> = {};
+        (orgs ?? []).forEach((o: { id: string; raison_sociale: string }) => { nomParOrg[o.id] = o.raison_sociale; });
+
+        return new Response(
+          JSON.stringify({
+            formations: (formations ?? []).map((f: { id: string; titre: string; statut: string; organisme_id: string }) => ({
+              ...f,
+              organisme_nom: nomParOrg[f.organisme_id] || "—",
+            })),
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (type === "sessions_periode") {
+        const p: Periode = (["mois", "trimestre", "semestre", "annee"] as const).includes(periodeBody) ? periodeBody : "mois";
+        const refDate = reference_date ? new Date(reference_date) : new Date();
+        const nbMois = moisParPeriode(p);
+        const debut = debutPeriode(refDate, p);
+        const fin = ajouterMois(debut, nbMois);
+
+        const { data: sessions, error } = await admin
+          .from("sessions")
+          .select("id, date_debut, statut, formation_id, client_id")
+          .gte("date_debut", debut.toISOString())
+          .lt("date_debut", fin.toISOString())
+          .order("date_debut", { ascending: false })
+          .limit(300);
+        if (error) throw error;
+
+        const formationIds = Array.from(new Set((sessions ?? []).map((s: { formation_id: string }) => s.formation_id)));
+        const clientIds = Array.from(new Set((sessions ?? []).map((s: { client_id: string }) => s.client_id)));
+        const [{ data: formations }, { data: clients }] = await Promise.all([
+          formationIds.length ? admin.from("formations").select("id, titre, organisme_id").in("id", formationIds) : Promise.resolve({ data: [] }),
+          clientIds.length ? admin.from("clients").select("id, raison_sociale").in("id", clientIds) : Promise.resolve({ data: [] }),
+        ]);
+        const orgIds = Array.from(new Set((formations ?? []).map((f: { organisme_id: string }) => f.organisme_id)));
+        const { data: orgs } = orgIds.length
+          ? await admin.from("organismes").select("id, raison_sociale").in("id", orgIds)
+          : { data: [] };
+
+        const formationMap: Record<string, { titre: string; organisme_id: string }> = {};
+        (formations ?? []).forEach((f: { id: string; titre: string; organisme_id: string }) => { formationMap[f.id] = f; });
+        const clientMap: Record<string, string> = {};
+        (clients ?? []).forEach((c: { id: string; raison_sociale: string }) => { clientMap[c.id] = c.raison_sociale; });
+        const orgMap: Record<string, string> = {};
+        (orgs ?? []).forEach((o: { id: string; raison_sociale: string }) => { orgMap[o.id] = o.raison_sociale; });
+
+        return new Response(
+          JSON.stringify({
+            sessions: (sessions ?? []).map((s: { id: string; date_debut: string | null; statut: string; formation_id: string; client_id: string }) => {
+              const f = formationMap[s.formation_id];
+              return {
+                id: s.id,
+                date_debut: s.date_debut,
+                statut: s.statut,
+                formation_titre: f?.titre || "Formation",
+                client_nom: clientMap[s.client_id] || "—",
+                organisme_id: f?.organisme_id || null,
+                organisme_nom: f ? (orgMap[f.organisme_id] || "—") : "—",
+              };
+            }),
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ error: "Type de liste inconnu." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     if (action === "rechercher") {
       const q = (query || "").trim();
