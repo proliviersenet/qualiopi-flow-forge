@@ -72,6 +72,17 @@ const Formations = () => {
           .eq("id", profile.organisme_id)
           .single();
         setDateAuditSurveillance((org as { date_dernier_audit_surveillance: string | null } | null)?.date_dernier_audit_surveillance ?? null);
+      } else {
+        // Avant : page vide sans explication, cul-de-sac pour un compte dont
+        // l'inscription (SIRET) n'a jamais été finalisée — cf. retour beta
+        // test Jean-Pascal Mollet (12/09), même correctif que
+        // FormationCreation.tsx.
+        toast({
+          title: "Complétez d'abord votre inscription",
+          description: "Votre espace formateur n'est pas encore finalisé — renseignez votre SIRET pour continuer.",
+        });
+        navigate("/register");
+        return;
       }
       setLoading(false);
     };

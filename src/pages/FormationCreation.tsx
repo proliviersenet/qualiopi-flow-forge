@@ -67,11 +67,18 @@ const FormationCreation = () => {
       if (profile?.organisme_id) {
         setOrganismeId(profile.organisme_id);
       } else {
+        // Avant : toast + page vide, cul-de-sac pour un compte dont
+        // l'inscription (SIRET) n'a jamais été finalisée (ex. arrivé via
+        // Google puis parti naviguer ailleurs sans compléter — cf. retour
+        // beta test Jean-Pascal Mollet, 12/09). On renvoie systématiquement
+        // vers /register, qui détecte la session déjà active et n'affiche
+        // que l'étape SIRET manquante.
         toast({
-          title: "Aucun organisme rattaché",
-          description: "Votre profil n'est lié à aucun organisme. Impossible de créer une formation.",
-          variant: "destructive",
+          title: "Complétez d'abord votre inscription",
+          description: "Votre espace formateur n'est pas encore finalisé — renseignez votre SIRET pour continuer.",
         });
+        navigate("/register");
+        return;
       }
       setCheckingSession(false);
     };
