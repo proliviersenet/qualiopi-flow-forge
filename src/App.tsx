@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
-import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Formations from "./pages/Formations";
@@ -74,7 +73,12 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/login" element={<Login />} />
+          {/* Fusion "Connexion" / "Inscription" (12/09) : les deux URLs pointent
+              vers le même composant Register, qui détecte automatiquement s'il
+              s'agit d'une connexion ou d'une création de compte — évite la
+              confusion constatée en beta test (bouton Google ambigu entre les
+              deux pages, cf. retour Jean-Pascal Mollet). */}
+          <Route path="/login" element={<Register />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/formations" element={<Formations />} />
