@@ -23,10 +23,15 @@ import { validatePassword } from "@/lib/passwordUtils";
 // Étapes du tunnel de suppression
 type DeleteStep = "idle" | "confirm" | "recovery" | "payment" | "done";
 
+// Chantier "2FA" (14/09, point 13 de l'audit) : facteur TOTP tel que renvoyé
+// par supabase.auth.mfa.listFactors() — on ne garde que les champs utilisés
+// ici plutôt que le type complet du SDK.
+type FacteurMfa = { id: string; status: string; friendly_name?: string | null };
+
 const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { session: authSession, loading: authLoading } = useAuth();
+  const { session: authSession, loading: authLoading, refreshMfaStatus } = useAuth();
 
   const [user, setUser] = useState<{ name: string; email: string; profileImage: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,9 +44,32 @@ const Settings = () => {
   const [deleting, setDeleting] = useState(false);
   const [payingStripe, setPayingStripe] = useState(false);
 
+  // Chantier "2FA" (14/09, point 13 de l'audit) : activation opt-in de la
+  // double authentification (TOTP), proposée ici dans la carte "Sécurité"
+  // existante, sur le même principe que le tunnel de suppression de compte
+  // ci-dessous (étapes successives dans un état local dédié).
+  const [mfaFactors, setMfaFactors] = useState<FacteurMfa[]>([]);
+  const [mfaLoadingList, setMfaLoadingList] = useState(true);
+  const [mfaEnrolling, setMfaEnrolling] = useState(false);
+  const [mfaPendingFactorId, setMfaPendingFactorId] = useState<string | null>(null);
+  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [mfaVerifyCode, setMfaVerifyCode] = useState("");
+  const [mfaVerifying, setMfaVerifying] = useState(false);
+  const [mfaUnenrollingId, setMfaUnenrollingId] = useState<string | null>(null);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
+  };
+
+  const chargerFacteursMfa = async () => {
+    setMfaLoadingList(true);
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (!error && data) {
+      setMfaFactors(data.totp.map((f) => ({ id: f.id, status: f.status, friendly_name: f.friendly_name })));
+    }
+    setMfaLoadingList(false);
   };
 
   useEffect(() => {
@@ -56,6 +84,7 @@ const Settings = () => {
       setUser({ name: u.user_metadata?.nom_complet || u.email || "", email: u.email || "", profileImage: "" });
       setNotifRelances(u.user_metadata?.notif_relances !== false);
       setNotifSignatures(u.user_metadata?.notif_signatures !== false);
+      await chargerFacteursMfa();
       setLoading(false);
     };
     init();
@@ -111,6 +140,76 @@ const Settings = () => {
     } else {
       toast({ title: "Préférences enregistrées" });
     }
+  };
+
+  // Chantier "2FA" — étape 1 : démarre l'activation (génère le secret + QR
+  // code côté Supabase, non encore vérifié tant que confirmerActivationMfa
+  // n'a pas réussi).
+  const demarrerActivationMfa = async () => {
+    setMfaEnrolling(true);
+    setMfaVerifyCode("");
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: `QualioFlex ${new Date().toLocaleDateString("fr-FR")}`,
+    });
+    if (error || !data) {
+      toast({ title: "Erreur", description: error?.message || "Impossible de démarrer l'activation.", variant: "destructive" });
+      setMfaEnrolling(false);
+      return;
+    }
+    setMfaPendingFactorId(data.id);
+    setMfaQrCode(data.totp.qr_code);
+    setMfaSecret(data.totp.secret);
+  };
+
+  const annulerActivationMfa = async () => {
+    if (mfaPendingFactorId) {
+      await supabase.auth.mfa.unenroll({ factorId: mfaPendingFactorId });
+    }
+    setMfaEnrolling(false);
+    setMfaPendingFactorId(null);
+    setMfaQrCode(null);
+    setMfaSecret(null);
+    setMfaVerifyCode("");
+  };
+
+  // Chantier "2FA" — étape 2 : vérifie le code à 6 chiffres pour confirmer
+  // que l'application d'authentification est bien configurée, et n'active
+  // le facteur qu'à ce moment-là (Supabase le considère "verified").
+  const confirmerActivationMfa = async () => {
+    if (!mfaPendingFactorId) return;
+    if (mfaVerifyCode.trim().length !== 6) {
+      toast({ title: "Code invalide", description: "Saisissez le code à 6 chiffres affiché par votre application d'authentification.", variant: "destructive" });
+      return;
+    }
+    setMfaVerifying(true);
+    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaPendingFactorId, code: mfaVerifyCode.trim() });
+    setMfaVerifying(false);
+    if (error) {
+      toast({ title: "Code incorrect", description: "Vérifiez le code affiché par votre application et réessayez.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Double authentification activée", description: "Un code vous sera désormais demandé à chaque connexion." });
+    setMfaEnrolling(false);
+    setMfaPendingFactorId(null);
+    setMfaQrCode(null);
+    setMfaSecret(null);
+    setMfaVerifyCode("");
+    await chargerFacteursMfa();
+    await refreshMfaStatus();
+  };
+
+  const desactiverMfa = async (factorId: string) => {
+    setMfaUnenrollingId(factorId);
+    const { error } = await supabase.auth.mfa.unenroll({ factorId });
+    setMfaUnenrollingId(null);
+    if (error) {
+      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Double authentification désactivée" });
+    await chargerFacteursMfa();
+    await refreshMfaStatus();
   };
 
   // Demande de suppression de compte : rend le compte immédiatement inaccessible
@@ -200,6 +299,8 @@ const Settings = () => {
     );
   }
 
+  const facteursVerifies = mfaFactors.filter((f) => f.status === "verified");
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header user={user || { name: "", email: "", profileImage: "" }} onLogout={handleLogout} />
@@ -260,6 +361,80 @@ const Settings = () => {
                 <Button onClick={savePassword} disabled={savingPassword} style={{ background: "#f2901e", color: "#fff" }} className="font-bold">
                   {savingPassword ? "Mise à jour..." : "Changer le mot de passe"}
                 </Button>
+              </div>
+
+              {/* Chantier "2FA" (14/09, point 13 de l'audit) : activation
+                  optionnelle d'un second facteur (TOTP, type Google
+                  Authenticator/Authy). Volontairement opt-in — l'audit
+                  demande d'"étudier l'activation", pas de l'imposer. */}
+              <div className="pt-6 mt-2 border-t space-y-4">
+                <div>
+                  <p className="font-medium text-sm">Double authentification (2FA)</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Ajoutez une couche de sécurité supplémentaire : un code à 6 chiffres généré par une application d'authentification (Google Authenticator, Microsoft Authenticator...) vous sera demandé à chaque connexion.
+                  </p>
+                </div>
+
+                {mfaLoadingList ? (
+                  <p className="text-sm text-gray-400">Chargement...</p>
+                ) : mfaEnrolling ? (
+                  <div className="bg-gray-50 border rounded-lg p-4 space-y-3">
+                    <p className="text-sm text-gray-600">
+                      Scannez ce QR code avec votre application d'authentification, puis saisissez le code à 6 chiffres qu'elle affiche pour confirmer l'activation.
+                    </p>
+                    {mfaQrCode && (
+                      <div className="flex justify-center bg-white p-3 rounded border">
+                        <img src={mfaQrCode} alt="QR code d'activation de la double authentification" className="h-40 w-40" />
+                      </div>
+                    )}
+                    {mfaSecret && (
+                      <p className="text-xs text-gray-400 text-center break-all">
+                        Ou saisissez manuellement cette clé : <span className="font-mono">{mfaSecret}</span>
+                      </p>
+                    )}
+                    <div className="space-y-2 max-w-[200px] mx-auto">
+                      <Label htmlFor="mfa-verify-code">Code de vérification</Label>
+                      <Input
+                        id="mfa-verify-code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="123456"
+                        value={mfaVerifyCode}
+                        onChange={(e) => setMfaVerifyCode(e.target.value.replace(/\D/g, ""))}
+                        className="text-center tracking-widest"
+                      />
+                    </div>
+                    <div className="flex justify-center gap-2">
+                      <Button variant="outline" onClick={annulerActivationMfa} disabled={mfaVerifying}>
+                        Annuler
+                      </Button>
+                      <Button onClick={confirmerActivationMfa} disabled={mfaVerifying} style={{ background: "#f2901e", color: "#fff" }} className="font-bold">
+                        {mfaVerifying ? "Vérification..." : "Activer"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : facteursVerifies.length > 0 ? (
+                  <div className="space-y-2">
+                    {facteursVerifies.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="text-sm text-green-700">✓ Double authentification activée{f.friendly_name ? ` — ${f.friendly_name}` : ""}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => desactiverMfa(f.id)}
+                          disabled={mfaUnenrollingId === f.id}
+                        >
+                          {mfaUnenrollingId === f.id ? "Désactivation..." : "Désactiver"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Button variant="outline" onClick={demarrerActivationMfa} disabled={mfaEnrolling}>
+                    Activer la double authentification
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
