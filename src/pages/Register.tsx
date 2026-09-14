@@ -68,6 +68,16 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [siretLoading, setSiretLoading] = useState(false);
   const [siretTrouve, setSiretTrouve] = useState(false);
+  // Sécurité "SIRET déjà utilisé" (14/09, suite au bug de boucle infinie sur
+  // la finalisation OAuth) : après avoir trouvé l'entreprise via l'API gouv,
+  // on vérifie côté serveur (edge function verifier-siret-existant) si ce
+  // SIRET a déjà un compte QualioFlex — finalisé ("organisme_existant") ou
+  // commencé mais jamais confirmé par email ("inscription_en_attente") —
+  // avant d'autoriser la suite du formulaire de création.
+  const [siretStatut, setSiretStatut] = useState<"libre" | "organisme_existant" | "inscription_en_attente" | null>(null);
+  const [siretEmailMasque, setSiretEmailMasque] = useState("");
+  const [renvoiEnCours, setRenvoiEnCours] = useState(false);
+  const [renvoiEnvoye, setRenvoiEnvoye] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -181,6 +191,9 @@ const Register = () => {
     }
     setSiretLoading(true);
     setSiretTrouve(false);
+    setSiretStatut(null);
+    setSiretEmailMasque("");
+    setRenvoiEnvoye(false);
     try {
       const resp = await fetch(
         `https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`,
@@ -209,10 +222,48 @@ const Register = () => {
       }));
       setSiretTrouve(true);
       toast({ title: "Entreprise trouvée !", description: `${r.nom_raison_sociale || r.nom_complet} — données pré-remplies` });
+
+      // Sécurité "SIRET déjà utilisé" (14/09) : on vérifie côté serveur si un
+      // compte QualioFlex existe déjà pour ce SIRET (finalisé ou en attente de
+      // confirmation) avant d'autoriser la suite. En cas d'erreur de cette
+      // vérification (fonction indisponible, réseau...), on ne bloque pas
+      // l'inscription — on suppose "libre" pour ne pas casser le parcours
+      // existant à cause d'un souci sur cette sécurité additionnelle.
+      try {
+        const { data: verif, error: verifError } = await supabase.functions.invoke("verifier-siret-existant", {
+          body: { action: "verifier", siret },
+        });
+        if (verifError || !verif || verif.error) {
+          setSiretStatut("libre");
+        } else {
+          setSiretStatut(verif.statut || "libre");
+          setSiretEmailMasque(verif.email_masque || "");
+        }
+      } catch {
+        setSiretStatut("libre");
+      }
     } catch (err) {
       toast({ title: "SIRET non trouvé", description: err instanceof Error ? err.message : "Vérifiez le numéro", variant: "destructive" });
     } finally {
       setSiretLoading(false);
+    }
+  };
+
+  // Renvoie l'email de confirmation à un compte créé avec ce SIRET mais
+  // jamais confirmé (voir siretStatut === "inscription_en_attente").
+  const renvoyerConfirmation = async () => {
+    setRenvoiEnCours(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verifier-siret-existant", {
+        body: { action: "renvoyer_confirmation", siret: formData.siret },
+      });
+      if (error || !data?.success) throw new Error(data?.error || "Erreur lors du renvoi");
+      setRenvoiEnvoye(true);
+      toast({ title: "Email renvoyé !", description: "Vérifiez votre boîte mail (et le dossier spam/courrier indésirable)." });
+    } catch (err) {
+      toast({ title: "Erreur", description: err instanceof Error ? err.message : "Une erreur est survenue", variant: "destructive" });
+    } finally {
+      setRenvoiEnCours(false);
     }
   };
 
@@ -239,6 +290,14 @@ const Register = () => {
     }
     if (!formData.siret) {
       toast({ title: "SIRET requis", description: "Recherchez votre entreprise par SIRET pour créer votre espace", variant: "destructive" });
+      return;
+    }
+    // Sécurité "SIRET déjà utilisé" (14/09) : garde-fou en plus du fait que le
+    // bouton de soumission n'est pas affiché dans ce cas — un formulaire avec
+    // un seul champ texte visible peut se soumettre via la touche Entrée sans
+    // passer par le bouton.
+    if (siretStatut === "organisme_existant" || siretStatut === "inscription_en_attente") {
+      toast({ title: "SIRET déjà utilisé", description: "Un compte existe déjà pour cette entreprise — voir les options ci-dessus.", variant: "destructive" });
       return;
     }
 
@@ -334,7 +393,13 @@ const Register = () => {
       if (orgError) throw orgError;
 
       // 3. Mettre à jour le profil avec le rôle et l'organisme
-      await supabase.from("profiles").upsert({
+      // Bug constaté le 14/09 (retour Google → boucle infinie sur cette page) :
+      // l'erreur de cet appel n'était pas vérifiée, donc un échec (ex. policy
+      // RLS manquante en INSERT sur profiles, corrigée le 14/09) passait
+      // inaperçu — l'app affichait "Espace créé !" et redirigeait vers
+      // /dashboard, qui renvoyait aussitôt ici faute de organisme_id rempli,
+      // donnant l'impression d'une boucle sans aucun message d'erreur exploitable.
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         email: userEmail,
         nom_complet: formData.raisonSociale || userEmail,
@@ -342,6 +407,7 @@ const Register = () => {
         organisme_id: orgData?.id,
         onboarding_complete: true,
       });
+      if (profileError) throw profileError;
 
       // Chantier "sous-traitance" : rattachement de la session sous-traitée si
       // l'inscription vient d'une invitation. Non bloquant — le compte est déjà créé
@@ -384,6 +450,12 @@ const Register = () => {
   }
 
   const showWizard = mode === "signup" || oauthCompletion;
+  // Sécurité "SIRET déjà utilisé" (14/09) : dérivés utilisés pour n'afficher
+  // la suite du formulaire (étape 2, bouton de création) que si aucun compte
+  // n'existe déjà pour ce SIRET.
+  const siretEnVerification = siretTrouve && siretLoading;
+  const siretBloque = siretTrouve && (siretStatut === "organisme_existant" || siretStatut === "inscription_en_attente");
+  const siretPeutContinuer = siretTrouve && siretStatut === "libre";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -562,8 +634,45 @@ const Register = () => {
                     </div>
                   )}
 
+                  {/* Sécurité "SIRET déjà utilisé" (14/09) : un compte existe
+                      déjà, finalisé, pour ce SIRET — on oriente vers la
+                      connexion plutôt que de laisser créer un doublon. */}
+                  {siretBloque && siretStatut === "organisme_existant" && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-2 text-amber-900">
+                      <p className="text-sm font-medium">
+                        Un compte QualioFlex existe déjà pour cette entreprise{siretEmailMasque ? ` (${siretEmailMasque})` : ""}.
+                      </p>
+                      <p className="text-sm">Connectez-vous plutôt, ou utilisez « Mot de passe oublié » si besoin.</p>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setMode("access")}>
+                        Se connecter
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Un compte a été créé avec ce SIRET mais l'email n'a
+                      jamais été confirmé — on propose de renvoyer le mail
+                      plutôt que de laisser repartir de zéro (et créer un
+                      second organisme en doublon). */}
+                  {siretBloque && siretStatut === "inscription_en_attente" && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-2 text-amber-900">
+                      <p className="text-sm font-medium">
+                        Une inscription a déjà été commencée avec ce SIRET{siretEmailMasque ? ` (${siretEmailMasque})` : ""}, mais l'email de confirmation n'a pas encore été validé.
+                      </p>
+                      {renvoiEnvoye ? (
+                        <p className="text-sm text-green-700">✓ Email renvoyé — vérifiez votre boîte mail (et les spams).</p>
+                      ) : (
+                        <>
+                          <p className="text-sm">Cliquez sur le lien reçu par email pour activer le compte, ou renvoyez l'email si besoin.</p>
+                          <Button type="button" variant="outline" size="sm" onClick={renvoyerConfirmation} disabled={renvoiEnCours}>
+                            {renvoiEnCours ? "Envoi..." : "Renvoyer l'email de confirmation"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* ÉTAPE 2 — Email + Tel */}
-                  {siretTrouve && (
+                  {siretPeutContinuer && (
                     <>
                       {!oauthCompletion && (
                         <div className="space-y-2">
@@ -643,7 +752,7 @@ const Register = () => {
 
                 </CardContent>
                 <CardFooter className="flex flex-col">
-                  {siretTrouve ? (
+                  {siretPeutContinuer ? (
                     <Button type="submit" className="w-full" disabled={isLoading}>
                       {isLoading
                         ? "Création de votre espace..."
@@ -651,7 +760,9 @@ const Register = () => {
                           ? `Finaliser mon espace ${formData.raisonSociale}`
                           : `Créer l'espace ${formData.raisonSociale}`}
                     </Button>
-                  ) : (
+                  ) : siretEnVerification ? (
+                    <p className="text-sm text-gray-500 text-center">Vérification en cours...</p>
+                  ) : siretBloque ? null : (
                     <p className="text-sm text-gray-500 text-center">
                       Saisissez votre SIRET et cliquez sur Rechercher pour commencer
                     </p>
