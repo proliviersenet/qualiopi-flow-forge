@@ -8,7 +8,7 @@ Format : chaque entrée indique la date, un résumé de ce qui a changé et pour
 
 ## Non publié (en cours sur `staging`)
 
-- **Double authentification (2FA)** — étude et mise en place en cours pour les comptes formateur (point 13 de l'audit).
+- **Double authentification (2FA)** — activation optionnelle (opt-in) d'un second facteur TOTP (type Google Authenticator) pour les comptes formateur, depuis Paramètres → Sécurité : QR code à scanner, code à 6 chiffres demandé à chaque connexion une fois activée. Écran de vérification dédié après une connexion par mot de passe ou par Google. Répond au point 13 de l'audit "Processus digital" (étudier l'activation du 2FA). En test sur l'environnement de staging avant mise en production.
 
 ## 2026-09-14
 
