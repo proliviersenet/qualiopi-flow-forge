@@ -216,14 +216,40 @@ Deno.serve(async (req: Request) => {
       const q = (query || "").trim();
       if (q.length < 2) return new Response(JSON.stringify({ organismes: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-      const { data: organismes, error } = await admin
+      // Recherche directe sur l'organisme (raison sociale, NDA, SIRET, email
+      // de contact déclaré à l'inscription).
+      const { data: orgsDirects, error: errOrgs } = await admin
         .from("organismes")
         .select("id, raison_sociale, nda, siret, email_contact")
-        .or(`raison_sociale.ilike.%${q}%,nda.ilike.%${q}%,siret.ilike.%${q}%`)
+        .or(`raison_sociale.ilike.%${q}%,nda.ilike.%${q}%,siret.ilike.%${q}%,email_contact.ilike.%${q}%`)
         .limit(20);
-      if (error) throw error;
+      if (errOrgs) throw errOrgs;
 
-      const ids = (organismes ?? []).map((o: { id: string }) => o.id);
+      // Recherche complémentaire sur le nom/email du formateur lui-même (table
+      // profiles) : un recherche souvent par le nom de la personne plutôt que
+      // par la raison sociale de son entreprise — bug constaté le 14/09
+      // (Olivier cherche "jean-pascal mollet", introuvable alors que son
+      // organisme existe bien sous le nom "DAC CONSEIL ET FORMATION").
+      const { data: profilsMatch, error: errProfils } = await admin
+        .from("profiles")
+        .select("organisme_id, nom_complet, email")
+        .or(`nom_complet.ilike.%${q}%,email.ilike.%${q}%`)
+        .not("organisme_id", "is", null)
+        .limit(20);
+      if (errProfils) throw errProfils;
+
+      const idsDejaTrouves = new Set((orgsDirects ?? []).map((o: { id: string }) => o.id));
+      const idsSupplementaires = Array.from(new Set(
+        (profilsMatch ?? [])
+          .map((p: { organisme_id: string | null }) => p.organisme_id)
+          .filter((id): id is string => !!id && !idsDejaTrouves.has(id))
+      ));
+      const { data: orgsSupplementaires } = idsSupplementaires.length
+        ? await admin.from("organismes").select("id, raison_sociale, nda, siret, email_contact").in("id", idsSupplementaires)
+        : { data: [] };
+
+      const organismes = [...(orgsDirects ?? []), ...(orgsSupplementaires ?? [])];
+      const ids = organismes.map((o: { id: string }) => o.id);
       const [{ data: clientsCount }, { data: formationsCount }] = await Promise.all([
         admin.from("clients").select("organisme_id").in("organisme_id", ids),
         admin.from("formations").select("organisme_id").in("organisme_id", ids),
