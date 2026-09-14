@@ -447,30 +447,32 @@ const Register = () => {
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter className="flex flex-col">
+                <CardFooter className="flex flex-col gap-3">
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Connexion en cours..." : "Accéder à mon espace"}
                   </Button>
-                  <p className="mt-4 text-center text-sm text-gray-600">
-                    Nouveau sur QualioFlex ?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setMode("signup")}
-                      className="text-exsenco-blue hover:underline"
-                    >
-                      Créer mon espace formateur
-                    </button>
-                  </p>
+                  {/* Bouton à part entière (et non un simple lien discret) :
+                      demande explicite du 14/09 pour que "nouveau ici" soit
+                      aussi visible que "j'ai déjà un compte", et mène
+                      directement à l'étape SIRET (mode "signup"). */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setMode("signup")}
+                  >
+                    Nouveau sur QualioFlex ? Créer mon espace formateur
+                  </Button>
                 </CardFooter>
               </form>
             </Card>
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>{oauthCompletion ? "Finaliser votre espace" : "Créer votre espace formateur"}</CardTitle>
+                <CardTitle>{oauthCompletion ? "Finalisez votre inscription" : "Créer votre espace formateur"}</CardTitle>
                 <CardDescription>
                   {oauthCompletion
-                    ? "Plus qu'une étape : renseignez votre SIRET pour créer votre espace"
+                    ? "Une seule étape restante : indiquez votre SIRET et cliquez sur Rechercher"
                     : "Commencez par votre SIRET — vos informations sont pré-remplies automatiquement"}
                 </CardDescription>
               </CardHeader>
@@ -497,8 +499,11 @@ const Register = () => {
                       organisme associé — jamais atteint depuis cette étape en
                       usage normal, seulement redirigé ici. */}
                   {oauthCompletion && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                      ✓ Connecté avec Google ({formData.email}) — plus qu'une étape : renseignez votre SIRET pour créer votre espace.
+                    <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 text-blue-900">
+                      <p className="text-sm">✓ Connecté avec Google ({formData.email})</p>
+                      <p className="font-bold mt-1">
+                        Finalisez votre inscription en saisissant votre SIRET ci-dessous, puis cliquez sur « Rechercher ».
+                      </p>
                     </div>
                   )}
 
