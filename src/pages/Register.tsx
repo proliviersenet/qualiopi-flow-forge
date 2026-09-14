@@ -454,11 +454,12 @@ const Register = () => {
                   {/* Bouton à part entière (et non un simple lien discret) :
                       demande explicite du 14/09 pour que "nouveau ici" soit
                       aussi visible que "j'ai déjà un compte", et mène
-                      directement à l'étape SIRET (mode "signup"). */}
+                      directement à l'étape SIRET (mode "signup"). Couleur
+                      orange de la charte ExSenCo (btn-cta), comme les autres
+                      boutons d'appel à créer un compte sur le site. */}
                   <Button
                     type="button"
-                    variant="outline"
-                    className="w-full"
+                    className="btn-cta w-full font-bold"
                     onClick={() => setMode("signup")}
                   >
                     Nouveau sur QualioFlex ? Créer mon espace formateur
