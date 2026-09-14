@@ -160,14 +160,13 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <div className="flex space-x-2">
-                <Link to="/login">
-                  <Button variant="outline" size="sm">Connexion</Button>
-                </Link>
-                <Link to="/register">
-                  <Button size="sm">Inscription</Button>
-                </Link>
-              </div>
+              // Un seul bouton (14/09) : /login et /register mènent maintenant
+              // à la même page unique (connexion + création d'espace), donc
+              // afficher "Connexion" et "Inscription" côte à côte n'avait
+              // plus de sens et entretenait la confusion "je clique lequel ?".
+              <Link to="/login">
+                <Button size="sm">Accéder à mon espace</Button>
+              </Link>
             )}
 
             {isMobile && (
