@@ -74,6 +74,13 @@ const SuperAdmin = () => {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [bugDetail, setBugDetail] = useState<Bug | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  // La carte "Alertes bug nouvelles" ne fait que défiler vers la section
+  // plus bas — quand celle-ci est déjà visible à l'écran (cas fréquent sur
+  // un tableau de bord qui tient sur une page), le clic ne produisait aucun
+  // effet visible et donnait l'impression d'une carte non cliquable (retour
+  // Olivier 14/09). On ajoute un bref surlignage pour que le clic reste
+  // perceptible même sans défilement.
+  const [alertesBugSurlignees, setAlertesBugSurlignees] = useState(false);
 
   const chargerKpis = useCallback(async (p: Periode) => {
     const { data, error } = await supabase.functions.invoke("superadmin-kpis", { body: { periode: p } });
@@ -240,7 +247,11 @@ const SuperAdmin = () => {
                 <Card
                   role="button" tabIndex={0}
                   className="cursor-pointer transition-shadow hover:shadow-md"
-                  onClick={() => document.getElementById("alertes-bug")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  onClick={() => {
+                    document.getElementById("alertes-bug")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    setAlertesBugSurlignees(true);
+                    setTimeout(() => setAlertesBugSurlignees(false), 1600);
+                  }}
                 >
                   <CardContent className="pt-5">
                     <p className="text-xs text-gray-400 mb-1">Alertes bug nouvelles</p>
@@ -251,7 +262,10 @@ const SuperAdmin = () => {
             </>
           )}
 
-          <Card id="alertes-bug">
+          <Card
+            id="alertes-bug"
+            className={`transition-shadow duration-700 ${alertesBugSurlignees ? "ring-4 ring-red-300 shadow-lg" : ""}`}
+          >
             <CardHeader className="pb-2">
               <CardTitle className="text-base" style={{ color: "#25245e" }}>
                 🚨 Alertes bug {bugsNouveaux.length > 0 && <Badge variant="destructive" className="ml-2">{bugsNouveaux.length} en attente</Badge>}
