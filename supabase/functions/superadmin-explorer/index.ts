@@ -209,6 +209,60 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      if (type === "journal") {
+        // Chantier "audit trail" (14/09) : consultation du journal générique
+        // posé en trigger SQL sur organismes/formations/sessions/clients/
+        // documents_formation/profiles (voir migration
+        // 20260914120000_journal_modifications.sql). Ce journal est
+        // volontairement inaccessible sans la clé service_role — seule
+        // cette Edge Function (réservée à l'administrateur) peut le lire.
+        const { data: entrees, error } = await admin
+          .from("journal_modifications")
+          .select("id, table_source, operation, enregistrement_id, ancien_contenu, nouveau_contenu, utilisateur_id, modifie_le")
+          .order("modifie_le", { ascending: false })
+          .limit(150);
+        if (error) throw error;
+
+        const userIds = Array.from(new Set((entrees ?? []).map((e: { utilisateur_id: string | null }) => e.utilisateur_id).filter((id): id is string => !!id)));
+        const { data: profils } = userIds.length
+          ? await admin.from("profiles").select("id, email, nom_complet").in("id", userIds)
+          : { data: [] };
+        const profilParUser: Record<string, { email: string; nom_complet: string }> = {};
+        (profils ?? []).forEach((p: { id: string; email: string; nom_complet: string }) => { profilParUser[p.id] = p; });
+
+        const resume = (tableSource: string, contenu: Record<string, unknown> | null) => {
+          if (!contenu) return "—";
+          switch (tableSource) {
+            case "organismes": return (contenu.raison_sociale as string) || "—";
+            case "formations": return (contenu.titre as string) || "—";
+            case "clients": return (contenu.raison_sociale as string) || "—";
+            case "profiles": return (contenu.email as string) || (contenu.nom_complet as string) || "—";
+            case "documents_formation": return (contenu.type as string) || "—";
+            case "sessions": return (contenu.date_debut as string) ? `Session du ${contenu.date_debut}` : "—";
+            default: return "—";
+          }
+        };
+
+        return new Response(
+          JSON.stringify({
+            journal: (entrees ?? []).map((e: {
+              id: number; table_source: string; operation: string; enregistrement_id: string | null;
+              ancien_contenu: Record<string, unknown> | null; nouveau_contenu: Record<string, unknown> | null;
+              utilisateur_id: string | null; modifie_le: string;
+            }) => ({
+              id: e.id,
+              table_source: e.table_source,
+              operation: e.operation,
+              enregistrement_id: e.enregistrement_id,
+              resume: resume(e.table_source, e.nouveau_contenu || e.ancien_contenu),
+              utilisateur_email: e.utilisateur_id ? (profilParUser[e.utilisateur_id]?.email || "—") : "— (action système)",
+              modifie_le: e.modifie_le,
+            })),
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       return new Response(JSON.stringify({ error: "Type de liste inconnu." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
