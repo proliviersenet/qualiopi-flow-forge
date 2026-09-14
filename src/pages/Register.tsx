@@ -334,7 +334,13 @@ const Register = () => {
       if (orgError) throw orgError;
 
       // 3. Mettre à jour le profil avec le rôle et l'organisme
-      await supabase.from("profiles").upsert({
+      // Bug constaté le 14/09 (retour Google → boucle infinie sur cette page) :
+      // l'erreur de cet appel n'était pas vérifiée, donc un échec (ex. policy
+      // RLS manquante en INSERT sur profiles, corrigée le 14/09) passait
+      // inaperçu — l'app affichait "Espace créé !" et redirigeait vers
+      // /dashboard, qui renvoyait aussitôt ici faute de organisme_id rempli,
+      // donnant l'impression d'une boucle sans aucun message d'erreur exploitable.
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         email: userEmail,
         nom_complet: formData.raisonSociale || userEmail,
@@ -342,6 +348,7 @@ const Register = () => {
         organisme_id: orgData?.id,
         onboarding_complete: true,
       });
+      if (profileError) throw profileError;
 
       // Chantier "sous-traitance" : rattachement de la session sous-traitée si
       // l'inscription vient d'une invitation. Non bloquant — le compte est déjà créé
