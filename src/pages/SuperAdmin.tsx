@@ -154,9 +154,17 @@ const SuperAdmin = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h1 className="text-2xl font-bold" style={{ color: "#25245e" }}>🛠️ Superadmin — Vue plateforme</h1>
-            <Link to="/superadmin/explorer">
-              <Button variant="outline" size="sm">🔎 Explorateur SAV (organismes, sessions, docs)</Button>
-            </Link>
+            <div className="flex gap-2 flex-wrap">
+              <Link to="/superadmin/explorer">
+                <Button variant="outline" size="sm">🔎 Explorateur SAV (organismes, sessions, docs)</Button>
+              </Link>
+              {/* Chantier "audit trail" (14/09) : accès direct au journal des
+                  modifications (qui a changé quoi, et quand) sur les données
+                  métier sensibles — voir supabase/migrations/20260914120000_journal_modifications.sql */}
+              <Link to="/superadmin/explorer?vue=journal">
+                <Button variant="outline" size="sm">🕵️ Journal d'activité</Button>
+              </Link>
+            </div>
           </div>
           <p className="text-sm text-gray-500 mb-6">
             Réservé à Olivier. Le CA ci-dessous est une <strong>estimation</strong> (pas d'intégration de facturation

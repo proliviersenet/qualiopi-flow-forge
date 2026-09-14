@@ -35,6 +35,7 @@ const LABEL_VUE: Record<string, string> = {
   clients: "Clients (tous formateurs)",
   formations: "Formations disponibles",
   sessions: "Sessions démarrées",
+  journal: "Journal d'activité (dernières modifications)",
 };
 const LABEL_PERIODE_VUE: Record<string, string> = {
   mois: "ce mois-ci",
@@ -58,6 +59,7 @@ interface OrganismeResult { id: string; raison_sociale: string; nda: string | nu
 interface ClientListe { id: string; raison_sociale: string; contact_email: string | null; organisme_id: string; organisme_nom: string; }
 interface FormationListe { id: string; titre: string; statut: string; organisme_id: string; organisme_nom: string; }
 interface SessionListe { id: string; date_debut: string | null; statut: string; formation_titre: string; client_nom: string; organisme_id: string | null; organisme_nom: string; }
+interface JournalEntry { id: number; table_source: string; operation: string; enregistrement_id: string | null; resume: string; utilisateur_email: string | null; modifie_le: string; }
 interface Client { id: string; raison_sociale: string; contact_email: string | null; siret: string | null; }
 interface Formation { id: string; titre: string; statut: string; tarif: string | null; montant_ht: number | null; }
 interface SessionRow { id: string; formation_id: string; client_id: string; date_debut: string | null; date_fin: string | null; lieu: string | null; statut: string; formations: { titre: string } | null; clients: { raison_sociale: string } | null; }
@@ -92,6 +94,7 @@ const SuperAdminExplorer = () => {
   const [clientsListe, setClientsListe] = useState<ClientListe[] | null>(null);
   const [formationsListe, setFormationsListe] = useState<FormationListe[] | null>(null);
   const [sessionsListe, setSessionsListe] = useState<SessionListe[] | null>(null);
+  const [journalListe, setJournalListe] = useState<JournalEntry[] | null>(null);
 
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [organisme, setOrganisme] = useState<Record<string, unknown> | null>(null);
@@ -135,6 +138,7 @@ const SuperAdminExplorer = () => {
       setClientsListe(null);
       setFormationsListe(null);
       setSessionsListe(null);
+      setJournalListe(null);
 
       if (vue === "formateurs") {
         const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "formateurs" } });
@@ -156,6 +160,11 @@ const SuperAdminExplorer = () => {
         setListeLoading(false);
         if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
         setSessionsListe(data?.sessions || []);
+      } else if (vue === "journal") {
+        const { data, error } = await supabase.functions.invoke("superadmin-explorer", { body: { action: "lister", type: "journal" } });
+        setListeLoading(false);
+        if (error || data?.error) { toast({ title: "Erreur", description: msg(error, data), variant: "destructive" }); return; }
+        setJournalListe(data?.journal || []);
       } else {
         setListeLoading(false);
       }
@@ -343,6 +352,27 @@ const SuperAdminExplorer = () => {
                     <span className="text-sm text-gray-700">{s.formation_titre} — {s.client_nom} <span className="text-xs text-gray-400">({s.organisme_nom})</span></span>
                     <span className="text-xs text-gray-400">{s.date_debut ? new Date(s.date_debut).toLocaleDateString("fr-FR") : "—"} · {s.statut}</span>
                   </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {journalListe && !listeLoading && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🕵️ Journal d'activité — 150 dernières modifications</CardTitle></CardHeader>
+              <CardContent className="space-y-1 max-h-[32rem] overflow-y-auto">
+                {journalListe.length === 0 && <p className="text-sm text-gray-400">Aucune modification enregistrée pour l'instant.</p>}
+                {journalListe.map(j => (
+                  <div key={j.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 border-b last:border-b-0">
+                    <div>
+                      <span className="text-sm text-gray-700">{j.resume}</span>
+                      <div className="text-xs text-gray-400">
+                        <Badge variant="outline" className="mr-1 text-xs">{j.operation}</Badge>
+                        {j.table_source} · {j.utilisateur_email || "système"}
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400 whitespace-nowrap ml-2">{new Date(j.modifie_le).toLocaleString("fr-FR")}</span>
+                  </div>
                 ))}
               </CardContent>
             </Card>
