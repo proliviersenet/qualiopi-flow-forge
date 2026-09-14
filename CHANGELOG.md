@@ -6,12 +6,9 @@ Format : chaque entrée indique la date, un résumé de ce qui a changé et pour
 
 À faire avant chaque mise en production : ajouter une entrée ici (voir `checklist_deploiement.md`, étape "Relire le diff").
 
-## Non publié (en cours sur `staging`)
-
-- **Double authentification (2FA)** — activation optionnelle (opt-in) d'un second facteur TOTP (type Google Authenticator) pour les comptes formateur, depuis Paramètres → Sécurité : QR code à scanner, code à 6 chiffres demandé à chaque connexion une fois activée. Écran de vérification dédié après une connexion par mot de passe ou par Google. Répond au point 13 de l'audit "Processus digital" (étudier l'activation du 2FA). En test sur l'environnement de staging avant mise en production.
-
 ## 2026-09-14
 
+- **Double authentification (2FA)** — activation optionnelle (opt-in) d'un second facteur TOTP (type Google Authenticator) pour les comptes formateur, depuis Paramètres → Sécurité : QR code à scanner, code à 6 chiffres demandé à chaque connexion une fois activée. Écran de vérification dédié après une connexion par mot de passe ou par Google. Répond au point 13 de l'audit "Processus digital" (étudier l'activation du 2FA). Testé sur staging puis mis en production.
 - **Correctif critique inscription (RLS `profiles`)** — un compte formateur qui finalisait son inscription (retour Google, ou confirmation d'email) restait bloqué indéfiniment : il manquait la règle de sécurité (RLS) autorisant la création de sa propre ligne dans `profiles`. Corrigé en production (ajout de la règle manquante) ; au moins un compte réel identifié comme bloqué depuis le 08/09 devrait pouvoir se débloquer automatiquement en se reconnectant. Le code (`Register.tsx`) vérifie désormais réellement l'erreur à cette étape au lieu de l'ignorer silencieusement.
 - **Sécurité "SIRET déjà utilisé"** — lors de la recherche SIRET à l'inscription, l'application vérifie maintenant si ce SIRET a déjà un compte QualioFlex : si un compte est déjà finalisé, elle oriente vers la connexion ; si une inscription a été commencée sans confirmation d'email, elle propose de renvoyer l'email de confirmation. Évite les comptes/organismes en doublon. Nouvelle fonction `verifier-siret-existant`.
 - **Templates email brandés** — les emails "Confirmez votre inscription" et "Réinitialisation du mot de passe" utilisaient encore le template par défaut de Supabase (anglais, non brandé). Réécrits en français avec l'identité visuelle QualioFlex.
