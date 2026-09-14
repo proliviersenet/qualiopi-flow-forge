@@ -58,6 +58,18 @@ interface Bug {
   created_at: string;
 }
 
+// Chantier "alerte suppression" (14/09, retour Olivier) : comptes formateur
+// désactivés en attente de suppression définitive (30 jours). Le détail
+// complet (restaurer / supprimer) vit sur /admin/suppressions — voir
+// AdminSuppressions.tsx et supabase/functions/lister-demandes-suppression.
+// Ici on affiche juste une alerte visible pour ne pas laisser un compte
+// passer inaperçu jusqu'à l'échéance des 30 jours.
+interface DemandeSuppression {
+  id: string;
+  email: string;
+  jours_restants: number;
+}
+
 const formatEuros = (centimes: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(centimes / 100);
 
@@ -72,6 +84,7 @@ const SuperAdmin = () => {
   const [periode, setPeriode] = useState<Periode>("mois");
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [bugs, setBugs] = useState<Bug[]>([]);
+  const [demandesSuppression, setDemandesSuppression] = useState<DemandeSuppression[]>([]);
   const [bugDetail, setBugDetail] = useState<Bug | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
   // La carte "Alertes bug nouvelles" ne fait que défiler vers la section
@@ -100,6 +113,18 @@ const SuperAdmin = () => {
     setBugs(data?.bugs || []);
   }, [toast]);
 
+  const chargerDemandesSuppression = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("lister-demandes-suppression");
+    if (error || data?.error) {
+      // Alerte secondaire : une erreur ici ne doit pas bloquer le reste du
+      // tableau de bord, mais Olivier doit pouvoir la voir (ex: fonction en
+      // panne côté Supabase).
+      toast({ title: "Erreur demandes de suppression", description: data?.error || (error ? await extractFunctionErrorMessage(error) : "Erreur."), variant: "destructive" });
+      return;
+    }
+    setDemandesSuppression(data?.demandes || []);
+  }, [toast]);
+
   useEffect(() => {
     if (authLoading) return;
     if (!authSession) { navigate("/login"); return; }
@@ -110,10 +135,10 @@ const SuperAdmin = () => {
       profileImage: "",
     });
     (async () => {
-      await Promise.all([chargerKpis("mois"), chargerBugs()]);
+      await Promise.all([chargerKpis("mois"), chargerBugs(), chargerDemandesSuppression()]);
       setLoading(false);
     })();
-  }, [authSession, authLoading, navigate, chargerKpis, chargerBugs]);
+  }, [authSession, authLoading, navigate, chargerKpis, chargerBugs, chargerDemandesSuppression]);
 
   const changerPeriode = async (p: Periode) => {
     setPeriode(p);
@@ -171,6 +196,31 @@ const SuperAdmin = () => {
             automatique à ce jour) : abonnements = saisis à la main dans l'explorateur, formations = uniquement les
             sessions dont la formation a un prix renseigné.
           </p>
+
+          {demandesSuppression.length > 0 && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate("/admin/suppressions")}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/admin/suppressions")}
+              className="mb-6 p-4 rounded-lg border border-red-200 bg-red-50 flex items-center justify-between gap-3 cursor-pointer hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🗂️</span>
+                <div>
+                  <p className="text-sm font-semibold text-red-700">
+                    {demandesSuppression.length} compte{demandesSuppression.length > 1 ? "s" : ""} en attente de suppression
+                  </p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    {demandesSuppression.some((d) => d.jours_restants <= 0)
+                      ? "Au moins un délai de 30 jours est dépassé — à traiter."
+                      : `Prochaine échéance dans ${Math.min(...demandesSuppression.map((d) => d.jours_restants))} j.`}
+                  </p>
+                </div>
+              </div>
+              <Button size="sm" variant="destructive" className="shrink-0">Voir les demandes →</Button>
+            </div>
+          )}
 
           <div className="flex gap-2 mb-4">
             {(Object.keys(LABEL_PERIODE) as Periode[]).map(p => (
