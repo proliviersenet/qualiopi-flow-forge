@@ -73,7 +73,12 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
             </Link>
           </div>
 
-          {!isMobile && (
+          {/* Fix 21/09 : ces liens menaient tous vers des pages protégées par
+              connexion ; les afficher aux visiteurs non connectés (page
+              d'accueil, etc.) était trompeur car ils redirigeaient vers
+              /login sans prévenir. On les masque désormais tant que
+              isAuthenticated est faux. */}
+          {!isMobile && isAuthenticated && (
             <nav className="hidden md:flex items-center space-x-6">
               <Link to="/dashboard" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Tableau de bord
@@ -169,7 +174,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
               </Link>
             )}
 
-            {isMobile && (
+            {isMobile && isAuthenticated && (
               <Button variant="ghost" className="md:hidden" onClick={toggleMobileMenu}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -190,7 +195,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
           </div>
         </div>
 
-        {isMobile && showMobileMenu && (
+        {isMobile && isAuthenticated && showMobileMenu && (
           <nav className="mt-4 pb-4 flex flex-col space-y-2">
             <Link
               to="/dashboard"
