@@ -2,8 +2,15 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://cvgosywcwqmsegdgjpqp.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_pGVcNwQvTDsIMu4G-NC43A_K2llTneL";
+// Chantier "environnement de staging" (14/09) : bascule automatique sur le
+// projet Supabase de staging quand les variables d'env VITE_SUPABASE_URL /
+// VITE_SUPABASE_PUBLISHABLE_KEY sont definies (c'est le cas sur les
+// deploiements Vercel Preview de la branche `staging`). En prod (branche
+// main), ces variables ne sont pas definies sur Vercel : on retombe sur les
+// valeurs historiques en dur ci-dessous, donc AUCUN changement de
+// comportement pour la prod.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://cvgosywcwqmsegdgjpqp.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_pGVcNwQvTDsIMu4G-NC43A_K2llTneL";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

@@ -150,23 +150,51 @@ const Dashboard = () => {
       // on les récupère pour finaliser la création, une seule fois.
       if (!profile?.organisme_id && u.user_metadata?.pending_registration) {
         const meta = u.user_metadata as Record<string, string | boolean | null | undefined>;
-        const { data: orgData, error: orgError } = await supabase
-          .from('organismes')
-          .insert({
-            owner_user_id: u.id,
-            siret: (meta.siret as string) || '',
-            siren: (meta.siren as string) || '',
-            raison_sociale: (meta.raison_sociale as string) || '',
-            adresse: (meta.adresse as string) || '',
-            code_naf: (meta.code_naf as string) || '',
-            nda: (meta.nda as string) || '',
-            email_contact: u.email,
-            telephone: (meta.telephone as string) || '',
-          })
-          .select('id')
-          .single();
+        // Fix 21/09 : c'est ICI, au premier chargement du dashboard après
+        // confirmation email, que se produisait le bug des comptes/organismes
+        // dupliqués (CR beta test du 15/09 — HEXELYS, DAC CONSEIL ET
+        // FORMATION, TOUR'N INTRA). Rien n'empêchait ce useEffect de
+        // s'exécuter deux fois quasi simultanément (double onglet, rechargement
+        // rapide...) : chaque exécution voyait organisme_id vide et insérait
+        // sa propre copie de l'organisme, à quelques millisecondes d'écart.
+        // Le SIRET est désormais UNIQUE en base (contrainte
+        // organismes_siret_unique) : la deuxième insertion échoue proprement
+        // (code Postgres 23505) au lieu de créer un doublon. On traite ce cas
+        // comme un succès — on récupère l'organisme déjà créé par l'autre
+        // exécution et on s'y rattache — plutôt que de laisser tomber
+        // silencieusement comme avant (c'était la cause de la "boucle infinie"
+        // constatée le 14/09 : organisme jamais créé, organisme_id resté vide).
+        let orgData: { id: string } | null = null;
+        {
+          const { data, error: orgError } = await supabase
+            .from('organismes')
+            .insert({
+              owner_user_id: u.id,
+              siret: (meta.siret as string) || '',
+              siren: (meta.siren as string) || '',
+              raison_sociale: (meta.raison_sociale as string) || '',
+              adresse: (meta.adresse as string) || '',
+              code_naf: (meta.code_naf as string) || '',
+              nda: (meta.nda as string) || '',
+              email_contact: u.email,
+              telephone: (meta.telephone as string) || '',
+            })
+            .select('id')
+            .single();
 
-        if (!orgError && orgData) {
+          if (orgError && orgError.code === '23505' && meta.siret) {
+            const { data: existant } = await supabase
+              .from('organismes')
+              .select('id')
+              .eq('siret', meta.siret as string)
+              .single();
+            orgData = existant ?? null;
+          } else if (!orgError) {
+            orgData = data;
+          }
+        }
+
+        if (orgData) {
           await supabase.from('profiles').upsert({
             id: u.id,
             email: u.email,
@@ -190,8 +218,8 @@ const Dashboard = () => {
             .select('*, organisme_id')
             .eq('id', u.id)
             .single());
-        } else if (orgError) {
-          console.error('Erreur finalisation inscription (post-confirmation):', orgError);
+        } else {
+          console.error('Erreur finalisation inscription (post-confirmation): organisme introuvable après insertion ou conflit SIRET.');
         }
       }
 

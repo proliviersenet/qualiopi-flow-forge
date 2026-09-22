@@ -374,23 +374,48 @@ const Register = () => {
       }
 
       // 2. Créer l'organisme avec toutes les données SIRET
-      const { data: orgData, error: orgError } = await supabase
-        .from("organismes")
-        .insert({
-          owner_user_id: userId,
-          siret: formData.siret,
-          siren: formData.siren,
-          raison_sociale: formData.raisonSociale,
-          adresse: formData.adresse,
-          code_naf: formData.codeNaf,
-          nda: formData.nda,
-          email_contact: userEmail,
-          telephone: formData.telephone,
-        })
-        .select("id")
-        .single();
+      // Fix 21/09 : le SIRET est désormais UNIQUE en base (contrainte
+      // organismes_siret_unique, migration du même jour) pour empêcher les
+      // doublons d'organisme constatés côté beta test (deux insertions
+      // quasi simultanées — double onglet, rechargement rapide...). Un
+      // conflit ici (code Postgres 23505) n'est donc plus une vraie erreur :
+      // ça veut juste dire qu'une autre exécution a gagné la course entre
+      // temps. Dans ce cas on récupère l'organisme déjà créé avec ce SIRET
+      // et on s'y rattache, au lieu d'afficher une erreur à l'utilisateur.
+      let orgData: { id: string } | null = null;
+      {
+        const { data, error: orgError } = await supabase
+          .from("organismes")
+          .insert({
+            owner_user_id: userId,
+            siret: formData.siret,
+            siren: formData.siren,
+            raison_sociale: formData.raisonSociale,
+            adresse: formData.adresse,
+            code_naf: formData.codeNaf,
+            nda: formData.nda,
+            email_contact: userEmail,
+            telephone: formData.telephone,
+          })
+          .select("id")
+          .single();
 
-      if (orgError) throw orgError;
+        if (orgError) {
+          if (orgError.code === "23505") {
+            const { data: existant, error: fetchErr } = await supabase
+              .from("organismes")
+              .select("id")
+              .eq("siret", formData.siret)
+              .single();
+            if (fetchErr || !existant) throw orgError;
+            orgData = existant;
+          } else {
+            throw orgError;
+          }
+        } else {
+          orgData = data;
+        }
+      }
 
       // 3. Mettre à jour le profil avec le rôle et l'organisme
       // Bug constaté le 14/09 (retour Google → boucle infinie sur cette page) :
