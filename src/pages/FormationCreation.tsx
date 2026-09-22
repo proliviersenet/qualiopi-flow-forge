@@ -1,11 +1,12 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Sparkles, FileText, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -19,6 +20,33 @@ import Footer from "@/components/Footer";
 import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Même bucket privé que FormationDetail.tsx pour le support pédagogique —
+// voir migration 20260731090500_bucket_prive_support_pedagogique.sql.
+const SUPPORT_BUCKET = "documents-qualiopi-support";
+
+// Libellés humains des champs extraits, utilisés pour le bandeau "à vérifier"
+// après une analyse automatique de document.
+const LIBELLES_CHAMPS: Record<string, string> = {
+  titre: "Titre",
+  objectifs: "Objectifs pédagogiques",
+  programme: "Programme",
+  duree: "Durée",
+  modalites: "Public visé / modalités",
+  prerequis: "Prérequis",
+};
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // On ne garde que la partie base64, sans le préfixe data:...;base64,
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const FormationCreation = () => {
   const { toast } = useToast();
@@ -42,6 +70,22 @@ const FormationCreation = () => {
     prerequis: "",
     document_mode: "auto",
   });
+
+  // Prototype "création par upload de document" (piste remontée par Baptiste
+  // Leber, CR beta test du 22/09) : le formateur dépose le programme (et
+  // optionnellement le support) en PDF, on pré-remplit le formulaire
+  // ci-dessus à partir de l'analyse du document — mais rien n'est jamais
+  // enregistré sans passage et validation du formateur sur ce même
+  // formulaire. Le tarif n'est JAMAIS pré-rempli automatiquement (règle
+  // actée avec Olivier) : au mieux on affiche un indice à titre informatif.
+  const programmeFileRef = useRef<HTMLInputElement>(null);
+  const supportFileRef = useRef<HTMLInputElement>(null);
+  const [programmeFile, setProgrammeFile] = useState<File | null>(null);
+  const [supportFile, setSupportFile] = useState<File | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyseFaite, setAnalyseFaite] = useState(false);
+  const [champsNonTrouves, setChampsNonTrouves] = useState<string[]>([]);
+  const [tarifDetecte, setTarifDetecte] = useState<number | null>(null);
 
   // Auth + récupération de l'organisme rattaché au profil, comme sur Formations.tsx
   useEffect(() => {
@@ -101,6 +145,77 @@ const FormationCreation = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleAnalyserDocuments = async () => {
+    if (!programmeFile && !supportFile) return;
+
+    const extLower = (f: File) => f.name.split(".").pop()?.toLowerCase() || "";
+    for (const f of [programmeFile, supportFile]) {
+      if (f && extLower(f) !== "pdf") {
+        toast({
+          title: "Format non accepté",
+          description: "Les documents doivent être au format PDF pour être analysés.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setAnalyzing(true);
+    try {
+      const documents: { type: "programme" | "support"; base64: string }[] = [];
+      if (programmeFile) documents.push({ type: "programme", base64: await fileToBase64(programmeFile) });
+      if (supportFile) documents.push({ type: "support", base64: await fileToBase64(supportFile) });
+
+      const { data, error } = await supabase.functions.invoke("analyser-documents-formation", {
+        body: { documents },
+      });
+
+      if (error || data?.error) {
+        let message = data?.error || error?.message;
+        const ctx = (error as { context?: Response })?.context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const body = await ctx.clone().json();
+            if (body?.error) message = body.error;
+          } catch {
+            // corps non-JSON, on garde le message par défaut
+          }
+        }
+        toast({ title: "Erreur d'analyse", description: message, variant: "destructive" });
+        return;
+      }
+
+      const champs = data.champs as { titre: string; objectifs: string; programme: string; duree: string; public_vise: string; prerequis: string };
+
+      setFormData((prev) => ({
+        ...prev,
+        titre: champs.titre || prev.titre,
+        objectifs: champs.objectifs || prev.objectifs,
+        programme: champs.programme || prev.programme,
+        duree: champs.duree || prev.duree,
+        prerequis: champs.prerequis || prev.prerequis,
+        modalites: champs.public_vise
+          ? (prev.modalites ? `${prev.modalites}\n\nPublic visé : ${champs.public_vise}` : `Public visé : ${champs.public_vise}`)
+          : prev.modalites,
+      }));
+
+      // "modalites" est dérivé de public_vise, pas d'un champ direct du même nom
+      // renvoyé par la fonction : on l'exclut de la liste "non trouvés" à part.
+      const nonTrouves = (data.champs_non_trouves as string[]).filter((c) => c !== "public_vise");
+      if (!champs.public_vise) nonTrouves.push("modalites");
+      setChampsNonTrouves(nonTrouves);
+      setTarifDetecte(typeof data.tarif_detecte === "number" ? data.tarif_detecte : null);
+      setAnalyseFaite(true);
+
+      toast({
+        title: "✅ Document(s) analysé(s)",
+        description: "Le formulaire a été pré-rempli — relisez chaque champ avant de valider.",
+      });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const nextStep = () => {
     if (currentStep === 1) {
       if (!formData.titre) {
@@ -140,7 +255,7 @@ const FormationCreation = () => {
 
     setIsLoading(true);
 
-    const { error } = await supabase.from("formations").insert({
+    const { data: nouvelleFormation, error } = await supabase.from("formations").insert({
       organisme_id: organismeId,
       titre: formData.titre,
       objectifs: formData.objectifs || null,
@@ -152,18 +267,53 @@ const FormationCreation = () => {
       montant_ht: formData.montant_ht ? parseFloat(formData.montant_ht) : null,
       document_mode: formData.document_mode,
       statut,
-    });
+    }).select("id").single();
 
-    setIsLoading(false);
-
-    if (error) {
+    if (error || !nouvelleFormation) {
+      setIsLoading(false);
       toast({
         title: "Erreur",
-        description: error.message,
+        description: error?.message,
         variant: "destructive",
       });
       return;
     }
+
+    // Si un ou des PDF ont servi à pré-remplir le formulaire (prototype
+    // Baptiste), on les rattache maintenant à la formation qui vient d'être
+    // créée — même convention de chemin/bucket que l'upload manuel dans
+    // FormationDetail.tsx (formations/{id}/{type}/{type}-{timestamp}.pdf),
+    // pour que "Voir le support/programme" fonctionne à l'identique ensuite.
+    const documentsAUploader: { file: File; type: "support" | "programme" }[] = [];
+    if (programmeFile) documentsAUploader.push({ file: programmeFile, type: "programme" });
+    if (supportFile) documentsAUploader.push({ file: supportFile, type: "support" });
+
+    for (const { file, type } of documentsAUploader) {
+      const path = `formations/${nouvelleFormation.id}/${type}/${type}-${Date.now()}.pdf`;
+      const bucket = type === "support" ? SUPPORT_BUCKET : "documents-qualiopi";
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .upload(path, file, { contentType: "application/pdf", cacheControl: "3600" });
+
+      if (upErr) {
+        // Non bloquant : la formation est déjà créée, le formateur pourra
+        // ré-uploader le document manuellement depuis sa fiche.
+        toast({ title: "Formation créée, mais l'archivage d'un document a échoué", description: upErr.message, variant: "destructive" });
+        continue;
+      }
+
+      const url = type === "support" ? path : (supabase.storage.from(bucket).getPublicUrl(path).data?.publicUrl || "");
+      await supabase.from("documents_formation").insert({
+        formation_id: nouvelleFormation.id,
+        type,
+        nom_fichier: file.name,
+        url,
+        genere_par: "manuel",
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    setIsLoading(false);
 
     toast({
       title: "Formation créée",
@@ -253,6 +403,82 @@ const FormationCreation = () => {
                   <div className="space-y-6">
                     <h2 className="text-xl font-semibold mb-4">Informations générales</h2>
 
+                    <div className="rounded-md border border-dashed border-exsenco-blue/40 bg-blue-50/40 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-exsenco-blue font-medium">
+                        <Sparkles className="h-4 w-4" />
+                        Créer à partir d'un document (optionnel)
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Déposez votre programme (et votre support si vous l'avez déjà) au format PDF : les champs ci-dessous seront pré-remplis automatiquement. Rien n'est enregistré sans que vous ayez relu et validé.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <input
+                            ref={programmeFileRef}
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => setProgrammeFile(e.target.files?.[0] || null)}
+                          />
+                          <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={() => programmeFileRef.current?.click()}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            {programmeFile ? programmeFile.name : "Programme (PDF)"}
+                          </Button>
+                          {programmeFile && (
+                            <button type="button" className="text-xs text-gray-400 hover:text-red-500 mt-1" onClick={() => setProgrammeFile(null)}>
+                              <X className="h-3 w-3 inline" /> retirer
+                            </button>
+                          )}
+                        </div>
+                        <div>
+                          <input
+                            ref={supportFileRef}
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => setSupportFile(e.target.files?.[0] || null)}
+                          />
+                          <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={() => supportFileRef.current?.click()}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            {supportFile ? supportFile.name : "Support (PDF, optionnel)"}
+                          </Button>
+                          {supportFile && (
+                            <button type="button" className="text-xs text-gray-400 hover:text-red-500 mt-1" onClick={() => setSupportFile(null)}>
+                              <X className="h-3 w-3 inline" /> retirer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={(!programmeFile && !supportFile) || analyzing}
+                        onClick={handleAnalyserDocuments}
+                      >
+                        {analyzing ? (
+                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Analyse en cours...</>
+                        ) : (
+                          <><Sparkles className="h-4 w-4 mr-2" /> Analyser le(s) document(s)</>
+                        )}
+                      </Button>
+
+                      {analyseFaite && (
+                        <div className="text-sm bg-white border border-amber-300 rounded-md p-3 mt-2">
+                          <p className="font-medium text-amber-700">Relisez les champs pré-remplis avant de continuer.</p>
+                          {champsNonTrouves.length > 0 && (
+                            <p className="text-gray-600 mt-1">
+                              Non trouvés dans le document, à compléter vous-même : {champsNonTrouves.map((c) => LIBELLES_CHAMPS[c] || c).join(", ")}.
+                            </p>
+                          )}
+                          <p className="text-gray-600 mt-1">
+                            Le tarif n'est jamais rempli automatiquement — vous le saisirez vous-même à l'étape suivante{tarifDetecte !== null ? ` (un montant de ${tarifDetecte} € a été repéré dans le document, à vérifier)` : ""}.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="titre">Titre de la formation <span className="text-red-500">*</span></Label>
                       <Input
@@ -316,6 +542,11 @@ const FormationCreation = () => {
                           onChange={handleChange}
                           placeholder="ex: 1500 € net de taxes"
                         />
+                        {tarifDetecte !== null && (
+                          <p className="text-xs text-amber-600">
+                            💡 {tarifDetecte} € repéré dans le document analysé — à vérifier, jamais rempli automatiquement.
+                          </p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
