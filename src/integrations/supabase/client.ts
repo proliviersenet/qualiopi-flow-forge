@@ -15,9 +15,18 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY |
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Demande Olivier (23/09, sécurité) : une session ne doit plus survivre à la
+// fermeture du navigateur/onglet sans déconnexion explicite (formateur ET
+// client) — utile notamment sur poste partagé. sessionStorage remplace
+// localStorage : la session survit toujours aux rechargements/navigations
+// DANS le même onglet (persistSession reste true), mais disparaît dès que
+// l'onglet/le navigateur est fermé, sans action supplémentaire à coder.
+// Revers assumé : ouvrir l'appli dans un NOUVEL onglet ne partage plus la
+// session d'un onglet déjà connecté (chaque onglet redemande une connexion),
+// contrairement au comportement précédent avec localStorage.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: sessionStorage,
     persistSession: true,
     autoRefreshToken: true,
   }

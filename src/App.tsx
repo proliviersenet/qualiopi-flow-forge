@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Index from "./pages/Index";
@@ -84,6 +86,52 @@ const MfaGuard = () => {
   return null;
 };
 
+// Demande Olivier (23/09, sécurité) : déconnexion automatique après 5 min
+// sans la moindre action, côté formateur ET côté client — un seul garde
+// global (même principe que MfaGuard ci-dessus) puisque le besoin est
+// identique quel que soit l'espace : la session existe ou non, peu importe
+// le rôle derrière. La fermeture d'onglet/navigateur sans déconnexion
+// explicite est couverte séparément par le passage en sessionStorage dans
+// integrations/supabase/client.ts.
+const DELAI_INACTIVITE_MS = 5 * 60 * 1000;
+
+const InactivityGuard = () => {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const deconnecterPourInactivite = async () => {
+      await supabase.auth.signOut();
+      toast({
+        title: "Déconnecté pour inactivité",
+        description: "Aucune activité détectée depuis 5 minutes — reconnectez-vous pour continuer.",
+      });
+      navigate("/", { replace: true });
+    };
+
+    const resetTimer = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(deconnecterPourInactivite, DELAI_INACTIVITE_MS);
+    };
+
+    const evenementsActivite = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    evenementsActivite.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      evenementsActivite.forEach((evt) => window.removeEventListener(evt, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -97,6 +145,7 @@ const App = () => (
         <ErrorBoundary>
           <BrowserRouter>
             <MfaGuard />
+            <InactivityGuard />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
