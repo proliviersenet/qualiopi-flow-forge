@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
           .from("organismes")
           .select("id, raison_sociale, nda, siret, email_contact")
           .order("created_at", { ascending: false })
-          .limit(200);
+          .limit(2000);
         if (error) throw error;
 
         const ids = (organismes ?? []).map((o: { id: string }) => o.id);
@@ -108,7 +108,7 @@ Deno.serve(async (req: Request) => {
           .from("clients")
           .select("id, raison_sociale, contact_email, organisme_id")
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(2000);
         if (error) throw error;
 
         const orgIds = Array.from(new Set((clients ?? []).map((c: { organisme_id: string }) => c.organisme_id)));
@@ -130,12 +130,15 @@ Deno.serve(async (req: Request) => {
       }
 
       if (type === "formations") {
+        // Vue "tout voir" (demande Olivier du 04/10) : plus de filtre sur le
+        // statut — avant, seules les formations "publie" remontaient ici, ce
+        // qui cachait les brouillons. L'Edge Function renvoie déjà le statut
+        // par formation, affiché côté front (badge).
         const { data: formations, error } = await admin
           .from("formations")
           .select("id, titre, statut, organisme_id")
-          .eq("statut", "publie")
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(2000);
         if (error) throw error;
 
         const orgIds = Array.from(new Set((formations ?? []).map((f: { organisme_id: string }) => f.organisme_id)));
@@ -157,19 +160,27 @@ Deno.serve(async (req: Request) => {
       }
 
       if (type === "sessions_periode") {
+        // "toutes" (demande Olivier du 04/10, vue "tout voir") : pas de borne
+        // de date du tout, pour retrouver une session même ancienne ou très
+        // future sans avoir à deviner la bonne période.
+        const toutesPeriodes = periodeBody === "toutes";
         const p: Periode = (["mois", "trimestre", "semestre", "annee"] as const).includes(periodeBody) ? periodeBody : "mois";
-        const refDate = reference_date ? new Date(reference_date) : new Date();
-        const nbMois = moisParPeriode(p);
-        const debut = debutPeriode(refDate, p);
-        const fin = ajouterMois(debut, nbMois);
 
-        const { data: sessions, error } = await admin
+        let requete = admin
           .from("sessions")
           .select("id, date_debut, statut, formation_id, client_id")
-          .gte("date_debut", debut.toISOString())
-          .lt("date_debut", fin.toISOString())
           .order("date_debut", { ascending: false })
-          .limit(300);
+          .limit(2000);
+
+        if (!toutesPeriodes) {
+          const refDate = reference_date ? new Date(reference_date) : new Date();
+          const nbMois = moisParPeriode(p);
+          const debut = debutPeriode(refDate, p);
+          const fin = ajouterMois(debut, nbMois);
+          requete = requete.gte("date_debut", debut.toISOString()).lt("date_debut", fin.toISOString());
+        }
+
+        const { data: sessions, error } = await requete;
         if (error) throw error;
 
         const formationIds = Array.from(new Set((sessions ?? []).map((s: { formation_id: string }) => s.formation_id)));
@@ -220,7 +231,7 @@ Deno.serve(async (req: Request) => {
           .from("journal_modifications")
           .select("id, table_source, operation, enregistrement_id, ancien_contenu, nouveau_contenu, utilisateur_id, modifie_le")
           .order("modifie_le", { ascending: false })
-          .limit(150);
+          .limit(500);
         if (error) throw error;
 
         const userIds = Array.from(new Set((entrees ?? []).map((e: { utilisateur_id: string | null }) => e.utilisateur_id).filter((id): id is string => !!id)));
