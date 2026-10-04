@@ -31,10 +31,10 @@ const DOCS_SESSION = [
 ] as const;
 
 const LABEL_VUE: Record<string, string> = {
-  formateurs: "Formateurs inscrits",
-  clients: "Clients (tous formateurs)",
-  formations: "Formations disponibles",
-  sessions: "Sessions démarrées",
+  formateurs: "Tous les formateurs inscrits",
+  clients: "Tous les clients (tous formateurs)",
+  formations: "Toutes les formations (tous statuts)",
+  sessions: "Sessions de formation",
   journal: "Journal d'activité (dernières modifications)",
 };
 const LABEL_PERIODE_VUE: Record<string, string> = {
@@ -42,7 +42,20 @@ const LABEL_PERIODE_VUE: Record<string, string> = {
   trimestre: "ce trimestre",
   semestre: "ce semestre",
   annee: "cette année",
+  toutes: "toutes périodes",
 };
+
+// Demande Olivier (04/10) : accès à "tout" depuis l'Explorateur SAV, sans
+// repasser par le tableau de bord à chaque fois pour changer de vue — les
+// boutons ci-dessous déclenchent le même mécanisme que les cartes KPI
+// cliquables (navigate avec ?vue=...), juste accessible en permanence ici.
+const ONGLETS_VUE: { value: string; label: string }[] = [
+  { value: "formateurs", label: "🏢 Formateurs" },
+  { value: "clients", label: "👥 Clients" },
+  { value: "formations", label: "🎓 Formations" },
+  { value: "sessions", label: "📅 Sessions" },
+  { value: "journal", label: "🕵️ Journal" },
+];
 
 const MOTIFS_RELANCE = [
   { value: "livret", label: "Livret d'accueil" },
@@ -275,7 +288,21 @@ const SuperAdminExplorer = () => {
             <h1 className="text-2xl font-bold" style={{ color: "#25245e" }}>🔎 Explorateur SAV</h1>
             <Link to="/superadmin"><Button variant="outline" size="sm">← Tableau de bord</Button></Link>
           </div>
-          <p className="text-sm text-gray-500 mb-6">Cherche un organisme (nom, NDA, SIRET) pour intervenir sur ses sessions à sa place.</p>
+          <p className="text-sm text-gray-500 mb-4">Cherche un organisme (nom, NDA, SIRET) pour intervenir sur ses sessions à sa place, ou parcours l'ensemble de la plateforme ci-dessous.</p>
+
+          <div className="flex flex-wrap gap-2 mb-6">
+            {ONGLETS_VUE.map(o => (
+              <Button
+                key={o.value}
+                size="sm"
+                variant={vue === o.value ? "default" : "outline"}
+                style={vue === o.value ? { background: "#25245e", color: "#fff" } : undefined}
+                onClick={() => navigate(o.value === "sessions" ? `/superadmin/explorer?vue=sessions&periode=${periodeVue}` : `/superadmin/explorer?vue=${o.value}`)}
+              >
+                {o.label}
+              </Button>
+            ))}
+          </div>
 
           <Card className="mb-6">
             <CardContent className="pt-5">
@@ -301,12 +328,26 @@ const SuperAdminExplorer = () => {
           </Card>
 
           {vue && (
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <p className="text-sm text-gray-500">
-                Vue depuis le tableau de bord : <strong>{LABEL_VUE[vue] || vue}</strong>
+                <strong>{LABEL_VUE[vue] || vue}</strong>
                 {vue === "sessions" && <> — {LABEL_PERIODE_VUE[periodeVue] || periodeVue}</>}
               </p>
-              <Link to="/superadmin/explorer"><Button variant="ghost" size="sm">✕ Fermer la vue</Button></Link>
+              <div className="flex items-center gap-2">
+                {vue === "sessions" && (
+                  <Select value={periodeVue} onValueChange={v => navigate(`/superadmin/explorer?vue=sessions&periode=${v}`)}>
+                    <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mois">Ce mois-ci</SelectItem>
+                      <SelectItem value="trimestre">Ce trimestre</SelectItem>
+                      <SelectItem value="semestre">Ce semestre</SelectItem>
+                      <SelectItem value="annee">Cette année</SelectItem>
+                      <SelectItem value="toutes">Toutes périodes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <Link to="/superadmin/explorer"><Button variant="ghost" size="sm">✕ Fermer la vue</Button></Link>
+              </div>
             </div>
           )}
 
@@ -329,12 +370,12 @@ const SuperAdminExplorer = () => {
 
           {formationsListe && !listeLoading && (
             <Card className="mb-6">
-              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🎓 Formations publiées ({formationsListe.length})</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🎓 Formations — tous statuts ({formationsListe.length})</CardTitle></CardHeader>
               <CardContent className="space-y-1 max-h-[28rem] overflow-y-auto">
                 {formationsListe.length === 0 && <p className="text-sm text-gray-400">Aucune formation.</p>}
                 {formationsListe.map(f => (
                   <button key={f.id} onClick={() => ouvrirOrganisme(f.organisme_id)} className="w-full text-left flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                    <span className="text-sm text-gray-700">{f.titre}</span>
+                    <span className="text-sm text-gray-700">{f.titre} <Badge variant="outline" className="ml-1 text-xs">{f.statut}</Badge></span>
                     <span className="text-xs text-gray-400">via {f.organisme_nom}</span>
                   </button>
                 ))}
@@ -344,9 +385,9 @@ const SuperAdminExplorer = () => {
 
           {sessionsListe && !listeLoading && (
             <Card className="mb-6">
-              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>📅 Sessions démarrées ({sessionsListe.length})</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>📅 Sessions ({sessionsListe.length})</CardTitle></CardHeader>
               <CardContent className="space-y-1 max-h-[28rem] overflow-y-auto">
-                {sessionsListe.length === 0 && <p className="text-sm text-gray-400">Aucune session sur cette période.</p>}
+                {sessionsListe.length === 0 && <p className="text-sm text-gray-400">Aucune session {periodeVue === "toutes" ? "" : "sur cette période"}.</p>}
                 {sessionsListe.map(s => (
                   <button key={s.id} onClick={() => ouvrirSession(s.id)} className={`w-full text-left flex items-center justify-between p-2 rounded hover:bg-gray-50 ${sessionId === s.id ? "bg-gray-50" : ""}`}>
                     <span className="text-sm text-gray-700">{s.formation_titre} — {s.client_nom} <span className="text-xs text-gray-400">({s.organisme_nom})</span></span>
@@ -359,7 +400,7 @@ const SuperAdminExplorer = () => {
 
           {journalListe && !listeLoading && (
             <Card className="mb-6">
-              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🕵️ Journal d'activité — 150 dernières modifications</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base" style={{ color: "#25245e" }}>🕵️ Journal d'activité — 500 dernières modifications</CardTitle></CardHeader>
               <CardContent className="space-y-1 max-h-[32rem] overflow-y-auto">
                 {journalListe.length === 0 && <p className="text-sm text-gray-400">Aucune modification enregistrée pour l'instant.</p>}
                 {journalListe.map(j => (
