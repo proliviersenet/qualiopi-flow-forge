@@ -40,17 +40,40 @@ serve(async (req) => {
 
     // Télécharger le support et le programme (PDF) uploadés pour cette formation,
     // pour que Claude analyse leur contenu réel plutôt que les seuls champs texte.
+    // Fix 22/09 : cette fonction devinait un chemin fixe
+    // (formations/{id}/{type}/{type}.pdf) qui ne correspond PAS au nom réellement
+    // utilisé à l'upload (FormationDetail.tsx écrit
+    // formations/{id}/{type}/{type}-{timestamp}.pdf, un nom différent à chaque
+    // ré-upload) — la génération de trame échouait donc systématiquement avec
+    // "PDF introuvable" même quand le support/programme AVAIT bien été uploadé.
+    // On lit maintenant le chemin réel depuis documents_formation.url, seule
+    // source fiable, au lieu de le deviner.
     const telechargerPdf = async (type: "support" | "programme") => {
-      const path = `formations/${formation_id}/${type}/${type}.pdf`;
-      const { data, error } = await supabase.storage.from("documents-qualiopi").download(path);
-      if (error || !data) {
-        throw new Error(
-          `${type === "support" ? "Le support pédagogique" : "Le programme détaillé"} (PDF) est introuvable. ` +
-          `Uploadez-le au format PDF depuis la fiche formation avant de générer la trame.`
-        );
+      const introuvable = () => new Error(
+        `${type === "support" ? "Le support pédagogique" : "Le programme détaillé"} (PDF) est introuvable. ` +
+        `Uploadez-le au format PDF depuis la fiche formation avant de générer la trame.`
+      );
+
+      const { data: doc } = await supabase
+        .from("documents_formation")
+        .select("url")
+        .eq("formation_id", formation_id)
+        .eq("type", type)
+        .is("session_id", null)
+        .maybeSingle();
+      if (!doc?.url) throw introuvable();
+
+      // Support : url = chemin dans le bucket privé "documents-qualiopi-support".
+      // Programme : url = URL publique complète dans le bucket "documents-qualiopi".
+      if (type === "support") {
+        const { data, error } = await supabase.storage.from("documents-qualiopi-support").download(doc.url);
+        if (error || !data) throw introuvable();
+        return base64Encode(await data.arrayBuffer());
+      } else {
+        const res = await fetch(doc.url);
+        if (!res.ok) throw introuvable();
+        return base64Encode(await res.arrayBuffer());
       }
-      const buffer = await data.arrayBuffer();
-      return base64Encode(buffer);
     };
 
     const [supportBase64, programmeBase64] = await Promise.all([

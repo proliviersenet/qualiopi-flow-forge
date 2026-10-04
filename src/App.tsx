@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Index from "./pages/Index";
@@ -84,6 +86,99 @@ const MfaGuard = () => {
   return null;
 };
 
+// Demande Olivier (23/09, sécurité) : déconnexion automatique après 5 min
+// sans la moindre action, côté formateur ET côté client — un seul garde
+// global (même principe que MfaGuard ci-dessus) puisque le besoin est
+// identique quel que soit l'espace : la session existe ou non, peu importe
+// le rôle derrière. La fermeture d'onglet/navigateur sans déconnexion
+// explicite est couverte séparément par le passage en sessionStorage dans
+// integrations/supabase/client.ts.
+//
+// Bug remonté par Olivier (04/10) : en quittant l'onglet QualioFlex (ex.
+// taper une recherche dans la barre d'adresse) puis en y revenant plus de
+// 5 min après, la session était toujours active. Cause : un simple
+// setTimeout ne tourne QUE tant que la page QualioFlex est chargée dans
+// l'onglet — dès qu'on navigue ailleurs dans ce même onglet, le JS (et donc
+// le minuteur) est entièrement déchargé et ne peut plus se déclencher, même
+// si on revient ensuite sur QualioFlex. On stocke donc en plus un horodatage
+// de dernière activité dans sessionStorage (survit à la navigation dans le
+// même onglet, disparaît à sa fermeture comme le reste de la session) et on
+// le vérifie à chaque remontage ET à chaque fois que l'onglet redevient
+// visible, pour rattraper une inactivité qui s'est écoulée hors-page.
+const DELAI_INACTIVITE_MS = 5 * 60 * 1000;
+const CLE_DERNIERE_ACTIVITE = "qf_derniere_activite";
+
+const InactivityGuard = () => {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const deconnecterPourInactivite = async () => {
+      try { sessionStorage.removeItem(CLE_DERNIERE_ACTIVITE); } catch { /* sessionStorage indisponible : on ignore */ }
+      await supabase.auth.signOut();
+      toast({
+        title: "Déconnecté pour inactivité",
+        description: "Aucune activité détectée depuis 5 minutes — reconnectez-vous pour continuer.",
+      });
+      navigate("/", { replace: true });
+    };
+
+    const enregistrerActivite = () => {
+      try { sessionStorage.setItem(CLE_DERNIERE_ACTIVITE, String(Date.now())); } catch { /* sessionStorage indisponible : on ignore */ }
+    };
+
+    const resetTimer = () => {
+      enregistrerActivite();
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(deconnecterPourInactivite, DELAI_INACTIVITE_MS);
+    };
+
+    // Rattrape l'inactivité écoulée pendant que l'onglet n'affichait pas
+    // QualioFlex (navigation ailleurs dans le même onglet, mise en veille de
+    // l'ordinateur, onglet resté en arrière-plan) : si le délai est déjà
+    // dépassé au moment où on revérifie, on déconnecte immédiatement au lieu
+    // d'attendre un minuteur qui n'a jamais pu tourner.
+    const verifierInactiviteEcoulee = () => {
+      let derniere: number | null = null;
+      try {
+        const brut = sessionStorage.getItem(CLE_DERNIERE_ACTIVITE);
+        derniere = brut ? Number(brut) : null;
+      } catch { /* sessionStorage indisponible : on ignore, pas de rattrapage possible */ }
+
+      if (derniere && Date.now() - derniere >= DELAI_INACTIVITE_MS) {
+        deconnecterPourInactivite();
+      } else {
+        resetTimer();
+      }
+    };
+
+    const evenementsActivite = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    evenementsActivite.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+
+    const surVisibilite = () => {
+      if (document.visibilityState === "visible") verifierInactiviteEcoulee();
+    };
+    document.addEventListener("visibilitychange", surVisibilite);
+    window.addEventListener("focus", verifierInactiviteEcoulee);
+
+    verifierInactiviteEcoulee();
+
+    return () => {
+      evenementsActivite.forEach((evt) => window.removeEventListener(evt, resetTimer));
+      document.removeEventListener("visibilitychange", surVisibilite);
+      window.removeEventListener("focus", verifierInactiviteEcoulee);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -97,6 +192,7 @@ const App = () => (
         <ErrorBoundary>
           <BrowserRouter>
             <MfaGuard />
+            <InactivityGuard />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
