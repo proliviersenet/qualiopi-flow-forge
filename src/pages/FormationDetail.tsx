@@ -10,7 +10,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { EVAL_TYPES } from "@/lib/documentTypes";
+import { EVAL_TYPES, QcmQuestion, estQuestionQcmValide } from "@/lib/documentTypes";
 
 // Correctif audit juillet 2026 : le support pédagogique est stocké dans un bucket
 // Storage PRIVÉ dédié (le bucket "documents-qualiopi" reste public pour le
@@ -72,10 +72,12 @@ const FormationDetail = () => {
   const [savingCompetences, setSavingCompetences] = useState(false);
   const [generatingDevisGenerique, setGeneratingDevisGenerique] = useState(false);
   const [competencesSaved, setCompetencesSaved] = useState(false);
-  const [evalQuestions, setEvalQuestions] = useState<Record<string, string[]>>({ chaud: [], formateur: [], froid: [] });
-  const [evalGenerating, setEvalGenerating] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
-  const [evalSaving, setEvalSaving] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
-  const [evalSaved, setEvalSaved] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false });
+  // evalQuestions : chaud/formateur/froid = string[] (affirmations notées 0-4).
+  // acquis (indicateur 33) = QcmQuestion[] (QCM noté) — cf. src/lib/documentTypes.ts.
+  const [evalQuestions, setEvalQuestions] = useState<Record<string, (string | QcmQuestion)[]>>({ chaud: [], formateur: [], froid: [], acquis: [] });
+  const [evalGenerating, setEvalGenerating] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false, acquis: false });
+  const [evalSaving, setEvalSaving] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false, acquis: false });
+  const [evalSaved, setEvalSaved] = useState<Record<string, boolean>>({ chaud: false, formateur: false, froid: false, acquis: false });
 
   // Le support pédagogique est stocké dans un bucket privé dédié
   // (SUPPORT_BUCKET) — aucune URL publique n'est générée pour lui.
@@ -345,6 +347,17 @@ const FormationDetail = () => {
 
   const sauverEvaluation = async (type: string) => {
     if (!id) return;
+    if (type === "acquis") {
+      const items = evalQuestions.acquis || [];
+      if (items.length === 0 || !items.every(estQuestionQcmValide)) {
+        toast({
+          title: "QCM incomplet",
+          description: "Chaque question doit avoir un texte et 4 options toutes remplies avant d'enregistrer.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     setEvalSaving(prev => ({ ...prev, [type]: true }));
     const { error } = await supabase.from("evaluation_questions").upsert({
       formation_id: id,
@@ -395,8 +408,43 @@ const FormationDetail = () => {
   };
 
   const ajouterEvalItem = (type: string) => {
-    setEvalQuestions(prev => ({ ...prev, [type]: [...(prev[type] || []), ""] }));
+    const nouvelItem: string | QcmQuestion = type === "acquis"
+      ? { texte: "", options: ["", "", "", ""], reponse_correcte: 0 }
+      : "";
+    setEvalQuestions(prev => ({ ...prev, [type]: [...(prev[type] || []), nouvelItem] }));
     setEvalSaved(prev => ({ ...prev, [type]: false }));
+  };
+
+  // Édition QCM (type "acquis" uniquement) : texte de la question, texte d'une
+  // option, ou désignation de la bonne réponse. Séparé de modifierEvalItem (qui
+  // reste pour les 3 types string[]) car la forme de l'item diffère.
+  const modifierEvalQcmTexte = (index: number, texte: string) => {
+    setEvalQuestions(prev => ({
+      ...prev,
+      acquis: (prev.acquis || []).map((q, i) => (i === index && typeof q !== "string") ? { ...q, texte } : q),
+    }));
+    setEvalSaved(prev => ({ ...prev, acquis: false }));
+  };
+
+  const modifierEvalQcmOption = (index: number, optionIndex: number, valeur: string) => {
+    setEvalQuestions(prev => ({
+      ...prev,
+      acquis: (prev.acquis || []).map((q, i) => {
+        if (i !== index || typeof q === "string") return q;
+        const options = [...q.options];
+        options[optionIndex] = valeur;
+        return { ...q, options };
+      }),
+    }));
+    setEvalSaved(prev => ({ ...prev, acquis: false }));
+  };
+
+  const modifierEvalQcmCorrecte = (index: number, optionIndex: number) => {
+    setEvalQuestions(prev => ({
+      ...prev,
+      acquis: (prev.acquis || []).map((q, i) => (i === index && typeof q !== "string") ? { ...q, reponse_correcte: optionIndex } : q),
+    }));
+    setEvalSaved(prev => ({ ...prev, acquis: false }));
   };
 
   const handleLogout = async () => {
@@ -458,9 +506,9 @@ const FormationDetail = () => {
         .select("type, questions")
         .eq("formation_id", id);
       if (evalRows && evalRows.length > 0) {
-        const qMap: Record<string, string[]> = {};
+        const qMap: Record<string, (string | QcmQuestion)[]> = {};
         const savedMap: Record<string, boolean> = {};
-        (evalRows as { type: string; questions: string[] }[]).forEach((r) => {
+        (evalRows as { type: string; questions: (string | QcmQuestion)[] }[]).forEach((r) => {
           qMap[r.type] = r.questions || [];
           savedMap[r.type] = true;
         });
@@ -748,7 +796,7 @@ const FormationDetail = () => {
             <Card>
               <CardContent className="pt-5">
                 <h3 className="font-semibold text-gray-700 mb-1">📊 Évaluations</h3>
-                <p className="text-xs text-gray-400 mb-4">Questionnaires envoyés aux stagiaires : à chaud (fin de formation), du formateur, et à froid (J+90).</p>
+                <p className="text-xs text-gray-400 mb-4">Questionnaires envoyés aux stagiaires : à chaud (fin de formation), du formateur, à froid (J+90), et évaluation des acquis (QCM noté, indicateur 33).</p>
                 <div className="space-y-6">
                   {EVAL_TYPES.map((et, idx) => (
                     <div key={et.key} className={idx > 0 ? "border-t border-gray-100 pt-5" : ""}>
@@ -782,10 +830,55 @@ const FormationDetail = () => {
 
                       {(evalQuestions[et.key]?.length || 0) === 0 ? (
                         <p className="text-sm text-gray-400">Aucune question générée pour le moment.</p>
+                      ) : et.key === "acquis" ? (
+                        <div>
+                          <div className="space-y-4">
+                            {(evalQuestions.acquis as QcmQuestion[]).map((q, i) => (
+                              <div key={i} className="border border-gray-100 rounded-lg p-3">
+                                <div className="flex gap-2 items-center mb-2">
+                                  <Input
+                                    value={q.texte ?? ""}
+                                    onChange={e => modifierEvalQcmTexte(i, e.target.value)}
+                                    placeholder={`Question ${i + 1}`}
+                                    className="text-sm h-8 font-medium"
+                                  />
+                                  <Button size="sm" variant="outline" className="h-8 px-2 text-red-500 border-red-200 hover:bg-red-50 shrink-0" onClick={() => supprimerEvalItem("acquis", i)}>✕</Button>
+                                </div>
+                                <div className="space-y-1.5 pl-2">
+                                  {(q.options ?? ["", "", "", ""]).map((opt, oi) => (
+                                    <div key={oi} className="flex gap-2 items-center">
+                                      <button
+                                        type="button"
+                                        title="Marquer comme bonne réponse"
+                                        onClick={() => modifierEvalQcmCorrecte(i, oi)}
+                                        className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center text-[10px] ${q.reponse_correcte === oi ? "bg-green-500 border-green-500 text-white" : "border-gray-300 text-transparent"}`}
+                                      >
+                                        ✓
+                                      </button>
+                                      <Input
+                                        value={opt}
+                                        onChange={e => modifierEvalQcmOption(i, oi, e.target.value)}
+                                        placeholder={`Option ${oi + 1}`}
+                                        className="text-sm h-7"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1 pl-2">Cliquez sur le rond ✓ pour désigner la bonne réponse.</p>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 items-center mt-3">
+                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => ajouterEvalItem("acquis")}>+ Ajouter une question</Button>
+                            <Button size="sm" disabled={evalSaving.acquis || evalSaved.acquis} style={{ background: evalSaved.acquis ? "#9ca3af" : "#f2901e", color: "#fff" }} className="font-bold h-7 text-xs" onClick={() => sauverEvaluation("acquis")}>
+                              {evalSaving.acquis ? "Enregistrement..." : evalSaved.acquis ? "✓ Déjà enregistré" : "Enregistrer"}
+                            </Button>
+                          </div>
+                        </div>
                       ) : (
                         <div>
                           <div className="space-y-2">
-                            {evalQuestions[et.key].map((q, i) => (
+                            {(evalQuestions[et.key] as string[]).map((q, i) => (
                               <div key={i} className="flex gap-2 items-center">
                                 <Input value={q} onChange={e => modifierEvalItem(et.key, i, e.target.value)} className="text-sm h-8" />
                                 <Button size="sm" variant="outline" className="h-8 px-2 text-red-500 border-red-200 hover:bg-red-50" onClick={() => supprimerEvalItem(et.key, i)}>✕</Button>

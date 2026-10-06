@@ -13,6 +13,7 @@ import {
   ResponsiveContainer, Tooltip,
 } from "recharts";
 import { EVAL_TYPES } from "@/lib/documentTypes";
+import type { EvalType } from "@/lib/documentTypes";
 
 // Tick personnalisé pour l'axe des catégories (compétences/objectifs) du graphique à
 // barres avant/après/à froid : découpe les libellés longs (rédigés en phrases) sur
@@ -71,12 +72,19 @@ interface Stagiaire {
   doc_evaluation_formateur?: string | null;
   doc_evaluation_froid?: string | null;
   doc_evaluation_froid_envoye_le?: string | null;
+  doc_evaluation_acquis?: string | null;
+  doc_evaluation_acquis_envoye_le?: string | null;
   token_evaluation_chaud?: string | null;
   token_evaluation_formateur?: string | null;
   token_evaluation_froid?: string | null;
+  token_evaluation_acquis?: string | null;
   reponses_evaluation_chaud?: { notes?: Record<string, number>; commentaire?: string | null } | null;
   reponses_evaluation_formateur?: { notes?: Record<string, number>; commentaire?: string | null } | null;
   reponses_evaluation_froid?: { notes?: Record<string, number>; commentaire?: string | null } | null;
+  // "acquis" (indicateur 33) : pas de notes/commentaire — reponses = choix du
+  // stagiaire par index de question, score = % de bonnes réponses (0-100).
+  reponses_evaluation_acquis?: { reponses?: Record<string, number> } | null;
+  score_evaluation_acquis?: number | null;
   formation_titre?: string;
   consentement_email?: boolean | null;
   consentement_email_date?: string | null;
@@ -144,6 +152,7 @@ const motifs = [
   { value: `evaluation_${EVAL_TYPES[1].key}`, label: EVAL_TYPES[1].label },
   { value: "attestation", label: "Attestation de fin de formation" },
   { value: `evaluation_${EVAL_TYPES[2].key}`, label: EVAL_TYPES[2].label },
+  { value: `evaluation_${EVAL_TYPES[3].key}`, label: EVAL_TYPES[3].label },
 ];
 
 // Chantier 3 (audit du 13/08, suite du correctif du 01/08 sur declencher-flow-session
@@ -172,6 +181,7 @@ const MOTIF_TOKEN_CONFIG: Record<string, { tokenField: keyof Stagiaire; path: st
   evaluation_chaud: { tokenField: "token_evaluation_chaud", path: "evaluation" },
   evaluation_formateur: { tokenField: "token_evaluation_formateur", path: "evaluation" },
   evaluation_froid: { tokenField: "token_evaluation_froid", path: "evaluation" },
+  evaluation_acquis: { tokenField: "token_evaluation_acquis", path: "evaluation" },
   attestation: { tokenField: "token_attestation", path: "attestation" },
 };
 
@@ -363,7 +373,7 @@ const StagiairesList = ({
   // ce stagiaire, puis copie le lien /evaluation/:token dans le presse-papiers.
   // Le token est réutilisé s'il existe déjà (pas de régénération à chaque clic,
   // sinon un lien déjà envoyé deviendrait invalide).
-  const genererLienEvaluation = async (s: Stagiaire, type: "chaud" | "formateur" | "froid") => {
+  const genererLienEvaluation = async (s: Stagiaire, type: EvalType) => {
     const tokenField = `token_evaluation_${type}` as keyof Stagiaire;
     let token = s[tokenField] as string | null | undefined;
     if (!token) {
@@ -381,10 +391,30 @@ const StagiairesList = ({
     }
   };
 
-  const voirReponsesEvaluation = (s: Stagiaire, type: "chaud" | "formateur" | "froid") => {
+  const voirReponsesEvaluation = (s: Stagiaire, type: EvalType) => {
+    const libelleType = EVAL_TYPES_LIST.find(et => et.key === type)?.label || "Évaluation";
+
+    // "acquis" (indicateur 33) : forme différente (QCM noté, pas de notes 0-4) —
+    // on affiche le score obtenu plutôt qu'un tableau de notes.
+    if (type === "acquis") {
+      const reponses = s.reponses_evaluation_acquis;
+      if (!reponses) return;
+      const score = s.score_evaluation_acquis;
+      const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Réponses — ${s.prenom} ${s.nom}</title>
+        <style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a2e;text-align:center;} h1{color:#25245e;font-size:16pt;} .score{font-size:36pt;font-weight:bold;color:#f2901e;margin:20px 0;}</style>
+        </head><body>
+        <h1>${libelleType}</h1>
+        <p>${s.prenom} ${s.nom}</p>
+        <p class="score">${score ?? "—"}%</p>
+        <p>de bonnes réponses</p>
+        </body></html>`;
+      const win = window.open("", "_blank");
+      if (win) { win.document.write(html); win.document.close(); }
+      return;
+    }
+
     const reponses = s[`reponses_evaluation_${type}` as keyof Stagiaire] as { notes?: Record<string, number>; commentaire?: string | null } | null | undefined;
     if (!reponses) return;
-    const libelleType = EVAL_TYPES_LIST.find(et => et.key === type)?.label || "Évaluation";
     const ligne = (libelle: string, note: number | undefined) =>
       `<tr><td style="padding:6px 10px;border:1px solid #eee;">${libelle}</td><td style="padding:6px 10px;border:1px solid #eee;text-align:center;font-weight:bold;">${note ?? "—"} / 4</td></tr>`;
     const rows = Object.entries(reponses.notes || {}).map(([k, v]) => ligne(k, v)).join("");
@@ -1058,6 +1088,15 @@ const StagiairesList = ({
         <span>🔥 Éval. à chaud complétée : {stagiaires.filter(s => s.doc_evaluation_chaud === "signe").length}/{stagiaires.length}</span>
         <span>🧑‍🏫 Éval. formateur complétée : {stagiaires.filter(s => s.doc_evaluation_formateur === "signe").length}/{stagiaires.length}</span>
         <span>📈 Éval. à froid complétée : {stagiaires.filter(s => s.doc_evaluation_froid === "signe").length}/{stagiaires.length}</span>
+        <span>
+          🎯 Éval. des acquis complétée : {stagiaires.filter(s => s.doc_evaluation_acquis === "signe").length}/{stagiaires.length}
+          {(() => {
+            const scores = stagiaires.map(s => s.score_evaluation_acquis).filter((v): v is number => typeof v === "number");
+            if (scores.length === 0) return null;
+            const moyenne = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+            return <> — moyenne {moyenne}%</>;
+          })()}
+        </span>
       </div>
       <p className="mt-1 text-[10px] text-gray-400">
         Opt-in ✉️/📱 : ✓ accepté · ✗ refusé · – pas encore répondu (consentement RGPD recueilli sur le questionnaire de positionnement)
