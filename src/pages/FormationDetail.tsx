@@ -213,6 +213,45 @@ const FormationDetail = () => {
     }
   }, [documents.support, documents.programme, documents.trame_pedagogique, generatingTrame]);
 
+  // Auto-génération des compétences + des 4 évaluations (retour terrain Olivier,
+  // 08/10/2026) : jusqu'ici seule la trame se lançait seule dès l'upload de
+  // support+programme — il fallait ensuite cliquer "Générer par Claude" pour les
+  // compétences puis pour chacune des 4 évaluations. On déclenche maintenant tout
+  // en parallèle dès que support+programme sont présents, sur le même principe que
+  // la trame ci-dessus. La SAUVEGARDE reste volontairement manuelle (bouton
+  // "Enregistrer" existant sur chaque bloc) : le formateur garde la main pour
+  // relire, corriger et valider avant que ça ne devienne la version utilisée en
+  // session — "le formateur n'a plus qu'à contrôler, valider et enregistrer".
+  const competencesAutoTriggeredRef = useRef(false);
+  const evalAutoTriggeredRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!documents.support || !documents.programme) return;
+
+    if (
+      !competencesSaved &&
+      competences.length === 0 &&
+      !generatingCompetences &&
+      !competencesAutoTriggeredRef.current
+    ) {
+      competencesAutoTriggeredRef.current = true;
+      genererCompetences();
+    }
+
+    EVAL_TYPES.forEach(({ key }) => {
+      if (
+        !evalSaved[key] &&
+        (evalQuestions[key] || []).length === 0 &&
+        !evalGenerating[key] &&
+        !evalAutoTriggeredRef.current[key]
+      ) {
+        evalAutoTriggeredRef.current[key] = true;
+        genererEvaluation(key);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documents.support, documents.programme, competencesSaved, competences.length, generatingCompetences, evalSaved, evalQuestions, evalGenerating]);
+
   const genererCompetences = async () => {
     if (!id) return;
     setGeneratingCompetences(true);
