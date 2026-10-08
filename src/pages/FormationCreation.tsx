@@ -69,6 +69,15 @@ const FormationCreation = () => {
     modalites: "",
     prerequis: "",
     document_mode: "auto",
+    // Tarification automatique par stagiaire (retour terrain Olivier, 08/10/2026) :
+    // ces 4 champs sont optionnels et coexistent avec le "Tarif" en texte libre
+    // ci-dessus. S'ils sont renseignés, le montant d'un devis peut être calculé
+    // automatiquement (nb de stagiaires × tarif_stagiaire_jour × nb_jours),
+    // plafonné à tarif_max — voir ClientDetail.tsx et generer-devis/index.ts.
+    tarif_stagiaire_jour: "",
+    nb_jours: "",
+    tarif_max: "",
+    nb_stagiaires_max: "",
   });
 
   // Prototype "création par upload de document" (piste remontée par Baptiste
@@ -265,6 +274,10 @@ const FormationCreation = () => {
       duree: formData.duree || null,
       tarif: formData.tarif || null,
       montant_ht: formData.montant_ht ? parseFloat(formData.montant_ht) : null,
+      tarif_stagiaire_jour: formData.tarif_stagiaire_jour ? parseFloat(formData.tarif_stagiaire_jour) : null,
+      nb_jours: formData.nb_jours ? parseFloat(formData.nb_jours) : null,
+      tarif_max: formData.tarif_max ? parseFloat(formData.tarif_max) : null,
+      nb_stagiaires_max: formData.nb_stagiaires_max ? parseInt(formData.nb_stagiaires_max, 10) : null,
       document_mode: formData.document_mode,
       statut,
     }).select("id").single();
@@ -565,6 +578,71 @@ const FormationCreation = () => {
                       </div>
                     </div>
 
+                    <div className="border border-dashed border-gray-300 rounded-md p-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Tarification automatique par stagiaire (optionnel)</p>
+                        <p className="text-xs text-gray-400">
+                          Si ces champs sont renseignés, le montant d'un devis pourra être calculé automatiquement
+                          (nombre de stagiaires × tarif/jour/stagiaire × nombre de jours, plafonné au tarif maximum).
+                          Vous pourrez toujours corriger ce montant avant de valider un devis.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="nb_jours">Nombre de jours</Label>
+                          <Input
+                            id="nb_jours"
+                            name="nb_jours"
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={formData.nb_jours}
+                            onChange={handleChange}
+                            placeholder="ex: 2"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="tarif_stagiaire_jour">Tarif par stagiaire et par jour (€)</Label>
+                          <Input
+                            id="tarif_stagiaire_jour"
+                            name="tarif_stagiaire_jour"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formData.tarif_stagiaire_jour}
+                            onChange={handleChange}
+                            placeholder="ex: 150"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="tarif_max">Tarif maximum pour l'ensemble de la formation (€)</Label>
+                          <Input
+                            id="tarif_max"
+                            name="tarif_max"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formData.tarif_max}
+                            onChange={handleChange}
+                            placeholder="ex: 2500"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nb_stagiaires_max">Nombre de stagiaires maximum accepté</Label>
+                          <Input
+                            id="nb_stagiaires_max"
+                            name="nb_stagiaires_max"
+                            type="number"
+                            step="1"
+                            min="0"
+                            value={formData.nb_stagiaires_max}
+                            onChange={handleChange}
+                            placeholder="ex: 12"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="modalites">Modalités</Label>
                       <Textarea
@@ -642,6 +720,18 @@ const FormationCreation = () => {
                           </div>
                         )}
                       </div>
+
+                      {(formData.tarif_stagiaire_jour || formData.nb_jours || formData.tarif_max || formData.nb_stagiaires_max) && (
+                        <div>
+                          <h3 className="font-medium text-gray-700">Tarification automatique</h3>
+                          <p className="text-sm">
+                            {formData.tarif_stagiaire_jour && `${formData.tarif_stagiaire_jour} €/stagiaire/jour`}
+                            {formData.nb_jours && ` — ${formData.nb_jours} jour(s)`}
+                            {formData.tarif_max && ` — plafond ${formData.tarif_max} €`}
+                            {formData.nb_stagiaires_max && ` — max ${formData.nb_stagiaires_max} stagiaires`}
+                          </p>
+                        </div>
+                      )}
 
                       {formData.modalites && (
                         <div>

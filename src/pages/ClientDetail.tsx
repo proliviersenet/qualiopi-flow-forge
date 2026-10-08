@@ -40,6 +40,11 @@ interface Formation {
   titre: string;
   duree: string;
   statut: string;
+  tarif: string | null;
+  tarif_stagiaire_jour: number | null;
+  nb_jours: number | null;
+  tarif_max: number | null;
+  nb_stagiaires_max: number | null;
 }
 
 interface Session {
@@ -50,7 +55,12 @@ interface Session {
   lieu: string | null;
   lien_visio: string | null;
   statut: string;
-  formation?: { titre: string; duree: string; document_mode?: string };
+  nb_stagiaires_estime: number | null;
+  montant_devis: number | null;
+  formation?: {
+    titre: string; duree: string; document_mode?: string; tarif?: string | null;
+    tarif_stagiaire_jour?: number | null; nb_jours?: number | null; tarif_max?: number | null; nb_stagiaires_max?: number | null;
+  };
 }
 
 interface SousTraitance {
@@ -133,6 +143,74 @@ const ClientDetail = () => {
   const [dateFin, setDateFin] = useState("");
   const [lieu, setLieu] = useState("");
   const [lienVisio, setLienVisio] = useState("");
+  // Nombre de stagiaires estimé, saisi à l'affectation (retour terrain Olivier,
+  // 08/10/2026) — sert à pré-remplir le calcul automatique du devis plus tard,
+  // mais reste une estimation modifiable à tout moment lors de la génération du devis.
+  const [nbStagiairesEstime, setNbStagiairesEstime] = useState("");
+
+  // Dialog "Générer un devis" — capture/ajuste le nombre de stagiaires et le
+  // montant total (calculé automatiquement si la formation a une tarification
+  // par stagiaire/jour, mais toujours modifiable : c'est le formateur qui
+  // valide le montant final avant génération).
+  const [devisDialogSession, setDevisDialogSession] = useState<Session | null>(null);
+  const [devisNbStagiaires, setDevisNbStagiaires] = useState("");
+  const [devisMontant, setDevisMontant] = useState("");
+  const [devisMontantModifieManuellement, setDevisMontantModifieManuellement] = useState(false);
+
+  // Calcule le montant total à partir de la tarification par stagiaire/jour de la
+  // formation, plafonné à tarif_max si renseigné. Retourne null si les champs
+  // nécessaires (tarif/jour et nb de jours) ne sont pas renseignés sur la formation.
+  const calculerMontantAuto = (formation: Session["formation"], nbStagiaires: string): number | null => {
+    const tarifJour = formation?.tarif_stagiaire_jour;
+    const nbJours = formation?.nb_jours;
+    const nb = parseInt(nbStagiaires, 10);
+    if (!tarifJour || !nbJours || !nb || nb <= 0) return null;
+    let montant = tarifJour * nbJours * nb;
+    if (formation?.tarif_max && montant > formation.tarif_max) montant = formation.tarif_max;
+    return Math.round(montant * 100) / 100;
+  };
+
+  const ouvrirDialogDevis = (session: Session) => {
+    const nbInitial = session.nb_stagiaires_estime != null ? String(session.nb_stagiaires_estime) : "";
+    setDevisDialogSession(session);
+    setDevisNbStagiaires(nbInitial);
+    const auto = calculerMontantAuto(session.formation, nbInitial);
+    setDevisMontant(
+      session.montant_devis != null ? String(session.montant_devis) : auto != null ? String(auto) : ""
+    );
+    setDevisMontantModifieManuellement(false);
+  };
+
+  const changerNbStagiairesDevis = (value: string) => {
+    setDevisNbStagiaires(value);
+    if (!devisMontantModifieManuellement && devisDialogSession) {
+      const auto = calculerMontantAuto(devisDialogSession.formation, value);
+      setDevisMontant(auto != null ? String(auto) : "");
+    }
+  };
+
+  const confirmerDevis = async () => {
+    if (!devisDialogSession) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        nb_stagiaires_estime: devisNbStagiaires ? parseInt(devisNbStagiaires, 10) : null,
+        montant_devis: devisMontant ? parseFloat(devisMontant) : null,
+      })
+      .eq("id", devisDialogSession.id);
+    setSaving(false);
+
+    if (error) {
+      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const sessionId = devisDialogSession.id;
+    setDevisDialogSession(null);
+    await genererDocumentSession(sessionId, "devis", "generer-devis");
+    await fetchSessions(id!);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -142,7 +220,7 @@ const ClientDetail = () => {
   const fetchSessions = async (clientId: string) => {
     const { data } = await supabase
       .from("sessions")
-      .select("*, formation:formation_id(titre, duree, document_mode)")
+      .select("*, formation:formation_id(titre, duree, document_mode, tarif, tarif_stagiaire_jour, nb_jours, tarif_max, nb_stagiaires_max)")
       .eq("client_id", clientId)
       .order("date_debut", { ascending: false });
     const sessionsData = (data as Session[]) || [];
@@ -574,7 +652,7 @@ const ClientDetail = () => {
         // Charger les formations publiées du formateur
         const { data: formationsData } = await supabase
           .from("formations")
-          .select("id, titre, duree, statut")
+          .select("id, titre, duree, statut, tarif, tarif_stagiaire_jour, nb_jours, tarif_max, nb_stagiaires_max")
           .eq("organisme_id", profile.organisme_id)
           .eq("statut", "publie")
           .order("titre");
@@ -610,6 +688,7 @@ const ClientDetail = () => {
         date_fin: dateFin || null,
         lieu: lieu || null,
         lien_visio: lienVisio || null,
+        nb_stagiaires_estime: nbStagiairesEstime ? parseInt(nbStagiairesEstime, 10) : null,
         statut: "planifiee",
       })
       .select("id")
@@ -623,7 +702,7 @@ const ClientDetail = () => {
 
     toast({ title: "✅ Formation affectée", description: "La session a été créée. Le client peut maintenant importer ses stagiaires." });
     setDialogOpen(false);
-    setSelectedFormation(""); setDateDebut(""); setDateFin(""); setLieu(""); setLienVisio("");
+    setSelectedFormation(""); setDateDebut(""); setDateFin(""); setLieu(""); setLienVisio(""); setNbStagiairesEstime("");
     await fetchSessions(id!);
 
     // Correctif bug audit du 31/07 : prévenir le client par email qu'une session
@@ -836,7 +915,7 @@ const ClientDetail = () => {
                                     </>
                                   ) : (
                                     <Button size="sm" variant="outline" disabled={enCours}
-                                      onClick={() => genererDocumentSession(session.id, type, fn)}>
+                                      onClick={() => type === "devis" ? ouvrirDialogDevis(session) : genererDocumentSession(session.id, type, fn)}>
                                       {enCours ? "Génération..." : html ? "Regénérer" : "Générer"}
                                     </Button>
                                   )}
@@ -1105,6 +1184,29 @@ const ClientDetail = () => {
               <Label>Lien visio (optionnel)</Label>
               <Input value={lienVisio} onChange={e => setLienVisio(e.target.value)} placeholder="https://meet.google.com/..." />
             </div>
+
+            <div className="space-y-2">
+              <Label>Nombre de stagiaires (estimatif)</Label>
+              <Input
+                type="number" min="1" step="1"
+                value={nbStagiairesEstime}
+                onChange={e => setNbStagiairesEstime(e.target.value)}
+                placeholder="ex: 8"
+              />
+              {(() => {
+                const formation = formations.find(f => f.id === selectedFormation);
+                if (!formation) return null;
+                const auto = calculerMontantAuto(formation, nbStagiairesEstime);
+                if (auto == null) return null;
+                return (
+                  <p className="text-xs text-gray-500">
+                    💡 Estimation du tarif total : {auto.toFixed(2)} €
+                    {formation.tarif_max && auto === formation.tarif_max ? " (plafonné au tarif max)" : ""}
+                    {" "}— ajustable lors de la génération du devis.
+                  </p>
+                );
+              })()}
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
@@ -1116,6 +1218,56 @@ const ClientDetail = () => {
               className="font-bold"
             >
               {saving ? "Création..." : "Affecter la formation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog génération devis — nombre de stagiaires + montant, calculé
+          automatiquement si la formation a une tarification par stagiaire/jour,
+          mais toujours modifiable : le formateur valide le montant final avant
+          génération (retour terrain Olivier, 08/10/2026). */}
+      <Dialog open={!!devisDialogSession} onOpenChange={(open) => { if (!open) setDevisDialogSession(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: "#25245e" }}>Générer le devis</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nombre de stagiaires</Label>
+              <Input
+                type="number" min="1" step="1"
+                value={devisNbStagiaires}
+                onChange={e => changerNbStagiairesDevis(e.target.value)}
+                placeholder="ex: 8"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Montant total du devis (€)</Label>
+              <Input
+                type="number" min="0" step="0.01"
+                value={devisMontant}
+                onChange={e => { setDevisMontant(e.target.value); setDevisMontantModifieManuellement(true); }}
+                placeholder="ex: 1200"
+              />
+              <p className="text-xs text-gray-400">
+                {devisDialogSession?.formation?.tarif_stagiaire_jour && devisDialogSession?.formation?.nb_jours
+                  ? "Calculé automatiquement à partir de la tarification de la formation — modifiez-le si besoin, c'est ce montant qui apparaîtra sur le devis."
+                  : "Aucune tarification automatique n'est renseignée sur cette formation — saisissez le montant total à afficher sur le devis (laissez vide pour reprendre le champ \"Tarif\" texte de la formation)."}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDevisDialogSession(null)}>Annuler</Button>
+            <Button
+              onClick={confirmerDevis}
+              disabled={saving}
+              style={{ background: "#f2901e", color: "#fff" }}
+              className="font-bold"
+            >
+              {saving ? "Génération..." : "Générer le devis"}
             </Button>
           </DialogFooter>
         </DialogContent>
