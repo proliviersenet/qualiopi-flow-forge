@@ -12,7 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, nom, organisme_id, siret, siren, adresse, token } = await req.json();
+    // site_url (optionnel, retour terrain Olivier 08/10/2026) : même correctif que
+    // sur envoyer-invitation — le lien "voir la fiche client" envoyé au formateur
+    // était codé en dur sur la prod. Le frontend transmet son origine ; à défaut
+    // on retombe sur qualioflex.fr.
+    const { email, password, nom, organisme_id, siret, siren, adresse, token, site_url } = await req.json();
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     if (!email || !password || !organisme_id || !token) {
       return new Response(
@@ -126,7 +133,7 @@ serve(async (req) => {
 
       if (emailFormateur) {
         const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-        const lienFicheClient = `https://qualioflex.fr/clients/${newClient?.id}`;
+        const lienFicheClient = `${base}/clients/${newClient?.id}`;
 
         const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",

@@ -97,6 +97,7 @@ const InvitationClient = () => {
           siren: siren.replace(/\s/g, ""),
           adresse: entreprise.adresse,
           token,
+          site_url: window.location.origin,
         },
       });
 

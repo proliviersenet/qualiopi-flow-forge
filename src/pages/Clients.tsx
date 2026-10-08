@@ -95,6 +95,7 @@ const Clients = () => {
         organisme_id: organismeId,
         organisme_nom: organismeNom,
         formateur_nom: session?.user?.user_metadata?.nom_complet || user?.name || "Votre formateur",
+        site_url: window.location.origin,
       },
     });
     setInviting(false);
@@ -127,6 +128,7 @@ const Clients = () => {
         organisme_nom: organismeNom,
         formateur_nom: session?.user?.user_metadata?.nom_complet || user?.name || "Votre formateur",
         client_id: client.id,
+        site_url: window.location.origin,
       },
     });
     setInvitingClientId(null);

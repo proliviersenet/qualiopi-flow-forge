@@ -18,7 +18,18 @@ serve(async (req) => {
     // creer-compte-client mette à jour cette ligne existante au lieu d'en créer
     // une seconde en doublon. Laissé vide, le comportement historique (nouvelle
     // fiche créée à l'acceptation) est inchangé.
-    const { email, organisme_id, organisme_nom, formateur_nom, client_id } = await req.json();
+    //
+    // site_url (optionnel, retour terrain Olivier 08/10/2026) : le lien envoyé
+    // par email était codé en dur sur "https://qualioflex.fr" (la prod). Testé
+    // depuis staging, ce lien amenait donc le client sur la PROD, dont la base
+    // ne connaît pas le token créé en staging → "Lien invalide ou expiré". Le
+    // frontend transmet maintenant sa propre origine (window.location.origin)
+    // pour que le lien pointe vers le bon environnement ; si absent, on
+    // retombe sur qualioflex.fr pour ne rien changer aux appelants existants.
+    const { email, organisme_id, organisme_nom, formateur_nom, client_id, site_url } = await req.json();
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     if (!email || !organisme_id) {
       return new Response(
@@ -71,7 +82,7 @@ serve(async (req) => {
       token = invitation.token;
     }
 
-    const lienInvitation = `https://qualioflex.fr/invitation/${token}`;
+    const lienInvitation = `${base}/invitation/${token}`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 
     // Envoi de l'email via Resend
