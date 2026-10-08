@@ -131,6 +131,7 @@ const FormationDetail = () => {
       .select("id")
       .eq("formation_id", id)
       .eq("type", type)
+      .is("session_id", null)
       .maybeSingle();
 
     const docPayload = {
@@ -480,10 +481,16 @@ const FormationDetail = () => {
 
       setFormation(data as Formation);
 
+      // .is("session_id", null) : documents_formation sert aussi à des documents
+      // rattachés à une session précise (hors périmètre de cette fiche formation).
+      // Sans ce filtre, une éventuelle ligne par session du même "type" pouvait
+      // écraser la ligne formation-level dans docsMap (support/programme/trame
+      // semblant alors "manquants" au rechargement — retour terrain 07/10/2026).
       const { data: docs } = await supabase
         .from("documents_formation")
         .select("type, url, contenu_html, nom_fichier")
-        .eq("formation_id", id);
+        .eq("formation_id", id)
+        .is("session_id", null);
       if (docs) {
         const docsMap: Record<string, string> = {};
         docs.forEach((d: Record<string, string>) => { docsMap[d.type] = d.url || d.contenu_html || ""; });
