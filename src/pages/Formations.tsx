@@ -156,7 +156,7 @@ const Formations = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-900">Mes formations</h1>
             <Link to="/formations/creation">
-              <Button className="btn-cta font-bold">
+              <Button className="btn-cta font-bold" data-onboarding="creer-formation">
                 + Créer une formation
               </Button>
             </Link>
@@ -193,7 +193,7 @@ const Formations = () => {
               <p className="text-lg font-medium text-gray-700 mb-2">Aucune formation pour l'instant</p>
               <p className="text-gray-500 mb-6">Créez votre première formation pour commencer à gérer vos sessions.</p>
               <Link to="/formations/creation">
-                <Button className="btn-cta font-bold">Créer ma première formation</Button>
+                <Button className="btn-cta font-bold" data-onboarding="creer-formation">Créer ma première formation</Button>
               </Link>
             </Card>
           ) : (

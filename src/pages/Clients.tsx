@@ -204,7 +204,7 @@ const Clients = () => {
               <Button variant="outline" onClick={() => { setShowInviteForm(!showInviteForm); setShowForm(false); }}>
                 ✉️ Inviter un client
               </Button>
-              <Button className="btn-cta font-bold" onClick={() => { setShowForm(!showForm); setShowInviteForm(false); }}>
+              <Button className="btn-cta font-bold" data-onboarding="inviter-client" onClick={() => { setShowForm(!showForm); setShowInviteForm(false); }}>
                 + Ajouter un client
               </Button>
             </div>
@@ -271,7 +271,7 @@ const Clients = () => {
               <p className="text-4xl mb-4">🏢</p>
               <p className="text-lg font-medium text-gray-700 mb-2">Aucun client pour l'instant</p>
               <p className="text-gray-500 mb-6">Ajoutez vos premiers clients pour les associer à vos sessions de formation.</p>
-              <Button className="btn-cta font-bold" onClick={() => setShowForm(true)}>Ajouter mon premier client</Button>
+              <Button className="btn-cta font-bold" data-onboarding="inviter-client" onClick={() => setShowForm(true)}>Ajouter mon premier client</Button>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

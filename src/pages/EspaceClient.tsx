@@ -506,7 +506,7 @@ const EspaceClient = () => {
                             : "";
                           if (value && isInlineHtml) {
                             return (
-                              <button key={key} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left" title={key === "convention" && conventionStatut ? conventionStatutLabel(conventionStatut) : undefined}>
+                              <button key={key} data-onboarding={key === "convention" ? "client-convention" : undefined} onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(value); win.document.close(); } }} className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 hover:underline text-left" title={key === "convention" && conventionStatut ? conventionStatutLabel(conventionStatut) : undefined}>
                                 <span>📎</span>
                                 <span>{label}{conventionBadge}</span>
                                 <span className="ml-auto">↗</span>
@@ -598,7 +598,7 @@ const EspaceClient = () => {
                             if (file) handleFileUpload(session.id, file);
                           }}
                         />
-                        <label htmlFor={`upload-${session.id}`}>
+                        <label htmlFor={`upload-${session.id}`} data-onboarding="client-stagiaires-import">
                           <Button
                             asChild
                             variant={hasStag ? "outline" : "default"}

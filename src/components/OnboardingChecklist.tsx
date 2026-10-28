@@ -1,25 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, Check, Circle, Info } from "lucide-react";
 import { useSeenHint } from "@/hooks/useSeenHint";
+import { loadFormateurItems, loadClientItems, type ChecklistItem } from "@/lib/onboardingSteps";
 import qualiosAvatar from "@/assets/qualios.png";
 
-interface ChecklistItem {
-  label: string;
-  href: string;
-  /** Étape purement informative (pas de suivi de complétion — pas de coche). */
-  info?: boolean;
-  done: boolean;
-}
-
 // Checklist de bienvenue affichée automatiquement à la 1ère connexion (formateur
-// ou client), présentée par Qualios. Les cases se cochent toutes seules au fur et
-// à mesure que l'utilisateur avance réellement (profil complété, logo chargé,
-// 1ère formation créée...) — ce n'est pas juste un diaporama figé. Une fois vue
-// une 1ère fois, elle reste accessible via la petite bulle "?" en bas à gauche.
+// ou client), présentée par Qualios : une vue d'ensemble de toutes les étapes et
+// de la progression. Les cases se cochent toutes seules au fur et à mesure que
+// l'utilisateur avance réellement (profil complété, logo chargé, 1ère formation
+// créée...) — ce n'est pas juste un diaporama figé. Une fois vue une 1ère fois,
+// elle reste accessible via la petite bulle "?" en bas à gauche.
+//
+// Chantier onboarding pas-à-pas : en complément de cette vue d'ensemble, des
+// bulles contextuelles (OnboardingSpotlight, montée séparément dans App.tsx)
+// pointent en direct, une à la fois, l'élément exact à utiliser sur chaque
+// écran — les deux partagent la même logique de progression (src/lib/
+// onboardingSteps.ts) pour ne jamais se désynchroniser.
 const OnboardingChecklist = () => {
   const { user } = useAuth();
   const role: "formateur" | "client" | null = user
@@ -28,73 +27,6 @@ const OnboardingChecklist = () => {
   const [items, setItems] = useState<ChecklistItem[] | null>(null);
   const [open, setOpen] = useState(false);
   const { seen, markSeen } = useSeenHint(role ? "onboarding_tour" : null);
-
-  const loadFormateurItems = useCallback(async (userId: string): Promise<ChecklistItem[] | null> => {
-    const { data: profile } = await supabase.from("profiles").select("organisme_id").eq("id", userId).single();
-    if (!profile?.organisme_id) return null;
-    const orgId = profile.organisme_id;
-
-    const [{ data: org }, { count: nbFormations }, { count: nbClients }, { data: bpfHint }] = await Promise.all([
-      supabase.from("organismes").select("siret, nda, raison_sociale, adresse, logo_url").eq("id", orgId).single(),
-      supabase.from("formations").select("*", { count: "exact", head: true }).eq("organisme_id", orgId),
-      supabase.from("clients").select("*", { count: "exact", head: true }).eq("organisme_id", orgId),
-      supabase.from("ui_hints_seen").select("hint_key").eq("user_id", userId).eq("hint_key", "bpf_intro").maybeSingle(),
-    ]);
-
-    return [
-      {
-        label: "Compléter le profil de ton organisme (raison sociale, SIRET, NDA, adresse)",
-        href: "/profile",
-        done: !!(org?.siret && org?.nda && org?.raison_sociale && org?.adresse),
-      },
-      { label: "Charger le logo de ton organisme", href: "/profile", done: !!org?.logo_url },
-      { label: "Créer ta première formation", href: "/formations/creation", done: (nbFormations ?? 0) > 0 },
-      { label: "Inviter ton premier client", href: "/clients", done: (nbClients ?? 0) > 0 },
-      { label: "Découvrir le module BPF (déclaration annuelle DREETS)", href: "/bpf", done: !!bpfHint },
-    ];
-  }, []);
-
-  const loadClientItems = useCallback(async (email: string): Promise<ChecklistItem[] | null> => {
-    const { data: client } = await supabase.from("clients").select("id").eq("contact_email", email).single();
-    if (!client?.id) return null;
-
-    const { data: sessions } = await supabase.from("sessions").select("id").eq("client_id", client.id);
-    const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id);
-
-    let hasStagiaires = false;
-    let hasSignedConvention = false;
-
-    if (sessionIds.length > 0) {
-      const { count } = await supabase
-        .from("stagiaires")
-        .select("*", { count: "exact", head: true })
-        .in("session_id", sessionIds);
-      hasStagiaires = (count ?? 0) > 0;
-
-      const { data: docs } = await supabase
-        .from("documents_formation")
-        .select("id")
-        .eq("type", "convention")
-        .in("session_id", sessionIds);
-      const docIds = (docs ?? []).map((d: { id: string }) => d.id);
-
-      if (docIds.length > 0) {
-        const { data: sigs } = await supabase
-          .from("signatures")
-          .select("statut")
-          .in("document_id", docIds)
-          .eq("statut", "signe");
-        hasSignedConvention = (sigs?.length ?? 0) > 0;
-      }
-    }
-
-    return [
-      { label: "Découvrir tes sessions de formation dans ton espace client", href: "/espace-client", done: sessionIds.length > 0 },
-      { label: "Signer la convention de formation envoyée par ton formateur", href: "/espace-client", done: hasSignedConvention },
-      { label: "Importer la liste de tes stagiaires (prénom, nom, mobile, email)", href: "/espace-client", done: hasStagiaires },
-      { label: "Retrouver l'émargement, les évaluations et l'attestation en fin de formation", href: "/espace-client", info: true, done: false },
-    ];
-  }, []);
 
   // La session vient du contexte d'authentification partagé (AuthContext) — une
   // seule vérification pour toute l'appli — plutôt que d'un appel indépendant ici.
@@ -110,7 +42,7 @@ const OnboardingChecklist = () => {
 
     load();
     return () => { cancelled = true; };
-  }, [user, loadFormateurItems, loadClientItems]);
+  }, [user]);
 
   // Ouverture automatique, une seule fois, dès que le contenu est prêt.
   useEffect(() => {
@@ -147,7 +79,7 @@ const OnboardingChecklist = () => {
           </DialogHeader>
 
           <p className="text-sm text-gray-600 -mt-2">
-            Je suis Qualios 🪽 — voici les premières étapes pour bien démarrer :
+            Je suis Qualios 🪽 — voici les premières étapes pour bien démarrer. Je te montrerai aussi en direct, sur chaque écran, où cliquer :
           </p>
 
           <ul className="space-y-2.5 mt-1">

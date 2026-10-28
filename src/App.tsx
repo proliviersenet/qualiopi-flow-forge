@@ -53,6 +53,7 @@ import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
 import ChatbotWidget from "./components/ChatbotWidget";
 import OnboardingChecklist from "./components/OnboardingChecklist";
+import OnboardingSpotlight from "./components/OnboardingSpotlight";
 import ErrorBoundary from "./components/ErrorBoundary";
 import GlobalErrorLogger from "./components/GlobalErrorLogger";
 import SignalerBugButton from "./components/SignalerBugButton";
@@ -193,6 +194,11 @@ const App = () => (
           <BrowserRouter>
             <MfaGuard />
             <InactivityGuard />
+            {/* Utilise useLocation (bulles pas-à-pas déclenchées par la page
+                courante) : doit impérativement rester à l'intérieur du
+                BrowserRouter, contrairement à OnboardingChecklist ci-dessus
+                qui n'en a pas besoin. */}
+            <OnboardingSpotlight />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
