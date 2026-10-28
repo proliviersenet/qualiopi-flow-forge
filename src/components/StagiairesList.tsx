@@ -287,7 +287,7 @@ const StagiairesList = ({
     }
     setGeneratingAttestation(stagiaire.id);
     const { data, error } = await supabase.functions.invoke("generer-attestation", {
-      body: { stagiaire_id: stagiaire.id },
+      body: { stagiaire_id: stagiaire.id, site_url: window.location.origin },
     });
     setGeneratingAttestation(null);
 
@@ -630,6 +630,7 @@ const StagiairesList = ({
           canal,
           envoye_par,
           stagiaire_id: stagiaire.id,
+          site_url: window.location.origin,
           ...(lien ? { lien } : {}),
         },
       });

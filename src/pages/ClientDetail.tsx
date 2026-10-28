@@ -711,7 +711,7 @@ const ClientDetail = () => {
     // déjà créée avec succès), mais on avertit le formateur si l'envoi échoue
     // (ex : email de contact manquant) car sinon le client ne serait jamais notifié.
     const { data: notifData, error: notifError } = await supabase.functions.invoke("notifier-affectation-session", {
-      body: { session_id: newSession.id },
+      body: { session_id: newSession.id, site_url: window.location.origin },
     });
     if (notifError || notifData?.error) {
       console.error("Erreur notification email affectation session:", notifError || notifData?.error);

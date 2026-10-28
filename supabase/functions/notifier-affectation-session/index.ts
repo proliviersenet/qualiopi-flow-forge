@@ -21,7 +21,7 @@ serve(async (req) => {
   }
 
   try {
-    const { session_id } = await req.json();
+    const { session_id, site_url } = await req.json();
 
     if (!session_id) {
       return new Response(
@@ -29,6 +29,10 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     // Client Supabase avec service role pour bypasser RLS
     const supabase = createClient(
@@ -84,7 +88,7 @@ serve(async (req) => {
     }
     const lieuTexte = (s.lieu as string) ? ` (${s.lieu as string})` : "";
 
-    const lienEspaceClient = "https://qualioflex.fr/espace-client";
+    const lienEspaceClient = `${base}/espace-client`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 
     // Envoi de l'email via Resend

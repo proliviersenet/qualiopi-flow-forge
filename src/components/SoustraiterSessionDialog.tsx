@@ -66,7 +66,7 @@ const SoustraiterSessionDialog = ({
     setAssigning(f.organisme_id);
     try {
       const { data, error } = await supabase.functions.invoke("assigner-soustraitance", {
-        body: { session_id: sessionId, mode: "existing", organisme_sous_traitant_id: f.organisme_id, formateur_profile_id: f.formateur_profile_id },
+        body: { session_id: sessionId, mode: "existing", organisme_sous_traitant_id: f.organisme_id, formateur_profile_id: f.formateur_profile_id, site_url: window.location.origin },
       });
       if (error || data?.error) throw new Error(data?.error || (error ? await extractFunctionErrorMessage(error) : "Erreur d'assignation."));
       toast({ title: "✅ Sous-traitant assigné", description: `${f.formateur_nom} a été notifié par email.` });
@@ -88,7 +88,7 @@ const SoustraiterSessionDialog = ({
     setInviting(true);
     try {
       const { data, error } = await supabase.functions.invoke("assigner-soustraitance", {
-        body: { session_id: sessionId, mode: "invite", email: inviteEmail.trim() },
+        body: { session_id: sessionId, mode: "invite", email: inviteEmail.trim(), site_url: window.location.origin },
       });
       if (error || data?.error) throw new Error(data?.error || (error ? await extractFunctionErrorMessage(error) : "Erreur d'invitation."));
       toast({

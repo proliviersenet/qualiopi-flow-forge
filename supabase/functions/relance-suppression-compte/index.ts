@@ -9,6 +9,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+// Correctif beta-test (28/10/2026) : fonction déclenchée par un cron, sans
+// appelant front — on lit SITE_URL (défini sur staging ; absent en prod, qui
+// garde qualioflex.fr par défaut) plutôt que de coder en dur le domaine prod.
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
 
 const ADMIN_EMAIL = "olivier@exsenco.fr";
 const FENETRE_JOURS = 30;
@@ -192,7 +196,7 @@ Deno.serve(async (req: Request) => {
             </p>
             <table cellpadding="0" cellspacing="0">
               <tr><td style="background:#f2901e;border-radius:6px;">
-                <a href="https://qualioflex.fr/admin/suppressions" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Ouvrir la page d'administration →</a>
+                <a href="${SITE_URL}/admin/suppressions" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Ouvrir la page d'administration →</a>
               </td></tr>
             </table>
           `

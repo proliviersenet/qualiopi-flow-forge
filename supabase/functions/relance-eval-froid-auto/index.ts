@@ -6,6 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
+// Correctif beta-test (28/10/2026) : fonction déclenchée par un cron, sans
+// appelant front — on lit SITE_URL (défini sur staging ; absent en prod, qui
+// garde qualioflex.fr par défaut) plutôt que de coder en dur le domaine prod.
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
+
 // Chantier 4 : envoi automatique quotidien de l'évaluation à froid (J+90).
 // Cette fonction n'est PAS appelée par le frontend : elle est déclenchée
 // une fois par jour par un cron Postgres (pg_cron + pg_net) configuré dans
@@ -87,7 +92,7 @@ serve(async (req) => {
         }
       }
 
-      const lien = `https://qualioflex.fr/evaluation/${token}`;
+      const lien = `${SITE_URL}/evaluation/${token}`;
       const titre = s.sessions?.formations?.titre ?? "votre formation";
       const prenom = s.prenom ?? "";
       const nom = s.nom ?? "";

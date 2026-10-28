@@ -329,7 +329,7 @@ const EspaceClient = () => {
       try {
         const { data: flowData, error: flowError } = await supabase.functions.invoke(
           "declencher-flow-session",
-          { body: { session_id: sessionId, stagiaire_ids: stagiaireIds } }
+          { body: { session_id: sessionId, stagiaire_ids: stagiaireIds, site_url: window.location.origin } }
         );
 
         if (flowError || (flowData as Record<string, unknown> | null)?.error) {

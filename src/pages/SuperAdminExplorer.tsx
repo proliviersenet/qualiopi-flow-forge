@@ -249,7 +249,7 @@ const SuperAdminExplorer = () => {
 
   const regenererAttestation = async (stagiaireId: string) => {
     setActionDoc(`attestation-${stagiaireId}`);
-    const { data, error } = await supabase.functions.invoke("generer-attestation", { body: { stagiaire_id: stagiaireId } });
+    const { data, error } = await supabase.functions.invoke("generer-attestation", { body: { stagiaire_id: stagiaireId, site_url: window.location.origin } });
     setActionDoc(null);
     if (error || data?.error) { toast({ title: "Erreur génération", description: msg(error, data), variant: "destructive" }); return; }
     toast({ title: "✅ Attestation régénérée" });
@@ -262,6 +262,7 @@ const SuperAdminExplorer = () => {
       body: {
         prenom: s.prenom, nom: s.nom, email: s.email, telephone: s.telephone,
         formation_titre: sessionDetail?.formations?.titre || "", motif, canal: "les_deux",
+        site_url: window.location.origin,
       },
     });
     setActionDoc(null);
