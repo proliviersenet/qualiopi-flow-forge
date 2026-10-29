@@ -28,7 +28,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { session_id, stagiaire_ids } = await req.json();
+    const { session_id, stagiaire_ids, site_url } = await req.json();
 
     if (!session_id || typeof session_id !== "string") {
       return new Response(JSON.stringify({ error: "session_id requis" }), {
@@ -36,6 +36,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
     if (!Array.isArray(stagiaire_ids) || stagiaire_ids.length === 0) {
       return new Response(JSON.stringify({ error: "stagiaire_ids requis (tableau non vide)" }), {
         status: 400,
@@ -131,8 +135,8 @@ serve(async (req) => {
           token = (s.token_livret as string | null) || crypto.randomUUID();
         }
         const lien =
-          motif === "questionnaire_avant" ? `https://qualioflex.fr/positionnement/${token}`
-          : motif === "livret" ? `https://qualioflex.fr/livret/${token}`
+          motif === "questionnaire_avant" ? `${base}/positionnement/${token}`
+          : motif === "livret" ? `${base}/livret/${token}`
           : undefined;
 
         try {

@@ -6,14 +6,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TYPES = ["chaud", "formateur", "froid"] as const;
+const TYPES = ["chaud", "formateur", "froid", "acquis"] as const;
 type EvalType = typeof TYPES[number];
 
 const LABELS: Record<EvalType, string> = {
   chaud: "Évaluation à chaud",
   formateur: "Évaluation du formateur",
   froid: "Évaluation à froid",
+  acquis: "Évaluation des acquis",
 };
+
+// "acquis" (indicateur 33, V10, 05/10/2026) : QCM noté, pas une notation de ressenti.
+// Forme stockée dans evaluation_questions.questions pour ce type : voir
+// src/lib/documentTypes.ts (QcmQuestion) côté front, dupliquée ici (pas de bundling
+// commun entre Edge Functions Deno et le code React de ce projet).
+interface QcmQuestion {
+  texte: string;
+  options: string[];
+  reponse_correcte: number;
+}
 
 // Edge Function publique (pas d'authentification) : même principe que
 // positionnement-public — le token, généré côté formateur (StagiairesList.tsx)
@@ -39,13 +50,14 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 1) On cherche d'abord côté stagiaires (3 types possibles).
+    // 1) On cherche d'abord côté stagiaires (4 types possibles).
     let stagiaire: Record<string, unknown> | null = null;
     let type: EvalType | null = null;
     for (const t of TYPES) {
+      const champsScore = t === "acquis" ? ", score_evaluation_acquis" : "";
       const { data } = await supabase
         .from("stagiaires")
-        .select(`id, prenom, nom, session_id, doc_evaluation_${t}, reponses_evaluation_${t}`)
+        .select(`id, prenom, nom, session_id, doc_evaluation_${t}, reponses_evaluation_${t}${champsScore}`)
         .eq(`token_evaluation_${t}`, token)
         .maybeSingle();
       if (data) {
@@ -102,18 +114,48 @@ serve(async (req) => {
         throw new Error("Merci de répondre au questionnaire avant d'envoyer.");
       }
 
+      // "acquis" (indicateur 33) : ce n'est pas du déclaratif — on note le QCM
+      // côté serveur à partir des bonnes réponses stockées (jamais envoyées au
+      // client avant soumission, cf. action "get" plus bas), puis on renvoie le
+      // score et le corrigé pour que le stagiaire voie immédiatement ses résultats.
+      let resultatAcquis: { score: number; corrections: { texte: string; bonne_reponse: number; reponse_stagiaire: number | null; correct: boolean }[] } | null = null;
+      if (stagiaire && type === "acquis") {
+        const { data: qRow } = await supabase
+          .from("evaluation_questions")
+          .select("questions")
+          .eq("formation_id", formationId)
+          .eq("type", "acquis")
+          .maybeSingle();
+        const questionsCorrigees = (qRow?.questions || []) as QcmQuestion[];
+        if (questionsCorrigees.length === 0) throw new Error("Questionnaire introuvable, contactez votre formateur.");
+        const reponsesStagiaire = (reponses as { reponses?: Record<string, number> }).reponses || {};
+        let nbCorrect = 0;
+        const corrections = questionsCorrigees.map((q, i) => {
+          const choisi = reponsesStagiaire[String(i)];
+          const correct = choisi === q.reponse_correcte;
+          if (correct) nbCorrect++;
+          return { texte: q.texte, bonne_reponse: q.reponse_correcte, reponse_stagiaire: choisi ?? null, correct };
+        });
+        const score = Math.round((nbCorrect / questionsCorrigees.length) * 100);
+        resultatAcquis = { score, corrections };
+      }
+
       if (stagiaire) {
         const docStatusField = `doc_evaluation_${type}`;
         const reponsesField = `reponses_evaluation_${type}`;
         if (stagiaire[docStatusField] === "signe") {
           throw new Error("Ce questionnaire a déjà été complété. Merci !");
         }
+        const updatePayload: Record<string, unknown> = {
+          [docStatusField]: "signe",
+          [reponsesField]: resultatAcquis
+            ? { reponses: (reponses as { reponses?: Record<string, number> }).reponses, score: resultatAcquis.score, submitted_at: new Date().toISOString() }
+            : { ...reponses, submitted_at: new Date().toISOString() },
+        };
+        if (resultatAcquis) updatePayload.score_evaluation_acquis = resultatAcquis.score;
         const { error: updErr } = await supabase
           .from("stagiaires")
-          .update({
-            [docStatusField]: "signe",
-            [reponsesField]: { ...reponses, submitted_at: new Date().toISOString() },
-          })
+          .update(updatePayload)
           .eq("id", stagiaire.id);
         if (updErr) throw new Error("Erreur enregistrement : " + updErr.message);
       } else if (evalClient) {
@@ -131,7 +173,10 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({
+          success: true,
+          ...(resultatAcquis ? { score: resultatAcquis.score, corrections: resultatAcquis.corrections } : {}),
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -148,18 +193,25 @@ serve(async (req) => {
       ? stagiaire[`doc_evaluation_${type}`] === "signe"
       : evalClient?.statut === "signe";
 
+    // "acquis" : on ne renvoie JAMAIS reponse_correcte avant soumission, sinon le
+    // stagiaire pourrait inspecter la réponse réseau et voir les bonnes réponses.
+    const questionsRenvoyees = type === "acquis"
+      ? ((q?.questions || []) as QcmQuestion[]).map((qq) => ({ texte: qq.texte, options: qq.options }))
+      : (q?.questions || []);
+
     return new Response(
       JSON.stringify({
         success: true,
         type,
         titre_questionnaire: LABELS[type],
         deja_complete: dejaComplete,
+        score_deja_obtenu: type === "acquis" && dejaComplete ? (stagiaire?.score_evaluation_acquis ?? null) : undefined,
         destinataire_prenom: destinatairePrenom,
         destinataire_nom: destinataireNom,
         formation_titre: (formationInfo?.titre as string) || "",
         organisme_raison_sociale: org.raison_sociale || "",
         organisme_logo_url: org.logo_url || "",
-        questions: q?.questions || [],
+        questions: questionsRenvoyees,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

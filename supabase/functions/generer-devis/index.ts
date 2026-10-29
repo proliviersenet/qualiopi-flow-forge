@@ -37,6 +37,7 @@ serve(async (req) => {
       .from("sessions")
       .select(`
         id, formation_id, client_id, date_debut, date_fin, lieu,
+        nb_stagiaires_estime, montant_devis,
         formation:formation_id ( titre, objectifs, programme, duree, tarif, organismes ( raison_sociale, nda, siret, adresse, telephone, email_contact, logo_url ) ),
         client:client_id ( raison_sociale, adresse, contact_nom, contact_email )
       `)
@@ -73,8 +74,19 @@ serve(async (req) => {
       console.error("generer-devis: échec appel Claude, fallback utilisé:", aiErr);
     }
 
-    const tarif = String(formation?.tarif || "").trim();
-    const nb = nbStagiaires ?? 0;
+    // Retour terrain Olivier (08/10/2026) : si le formateur a saisi et validé un
+    // montant (via le nouveau dialogue "Générer le devis" côté ClientDetail.tsx,
+    // calculé automatiquement depuis la tarification par stagiaire/jour de la
+    // formation puis toujours ajustable), ce montant prévaut sur le "Tarif" en
+    // texte libre historique — qui reste le fallback pour les formations/sessions
+    // n'utilisant pas la tarification automatique.
+    const montantValide = s.montant_devis != null ? Number(s.montant_devis) : null;
+    const tarif = montantValide != null
+      ? `${montantValide.toFixed(2)} €`
+      : String(formation?.tarif || "").trim();
+    // Nombre de stagiaires réellement importés en priorité ; à défaut, l'estimation
+    // saisie par le formateur à l'affectation ou à la génération du devis.
+    const nb = (nbStagiaires && nbStagiaires > 0) ? nbStagiaires : (Number(s.nb_stagiaires_estime) || 0);
     const dateDevis = new Date().toLocaleDateString("fr-FR");
     const numeroDevis = `DEV-${session_id.slice(0, 8).toUpperCase()}`;
 

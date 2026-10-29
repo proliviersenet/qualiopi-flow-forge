@@ -6,6 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
+// Correctif beta-test (28/10/2026) : cette fonction est déclenchée par un cron,
+// sans appelant front capable de fournir l'origine courante — on lit donc la
+// variable SITE_URL (définie sur le projet staging ; absente en prod, qui garde
+// qualioflex.fr par défaut) plutôt que de coder en dur le domaine de prod.
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
+
 // Chantier 5 : relance automatique J+2 puis alerte "documents manquants" J+5,
 // pour les documents qui nécessitent une action du stagiaire (signature /
 // complétion) et qui restent "envoyé" sans passer à "signé" après un délai.
@@ -193,8 +199,8 @@ serve(async (req) => {
         // client (voir commentaire directLink sur DOC_TYPES). Autres types :
         // lien token comme avant.
         const lien = dt.directLink
-          ? `https://qualioflex.fr/${dt.path}`
-          : (token ? `https://qualioflex.fr/${dt.path}/${token}` : null);
+          ? `${SITE_URL}/${dt.path}`
+          : (token ? `${SITE_URL}/${dt.path}/${token}` : null);
         const verbe = dt.verbe ?? "compléter";
         const participe = dt.participe ?? "complété";
 

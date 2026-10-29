@@ -24,9 +24,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { stagiaire_id } = await req.json();
+    const { stagiaire_id, site_url } = await req.json();
     console.log("generer-attestation: démarrage pour stagiaire_id =", stagiaire_id);
     if (!stagiaire_id) throw new Error("stagiaire_id requis");
+
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -214,7 +218,7 @@ serve(async (req) => {
       const hasEmail = st.consentement_email === true && !!st.email_pro;
       const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
       if (hasEmail && BREVO_API_KEY) {
-        const lien = `https://qualioflex.fr/attestation/${tokenAttestation}`;
+        const lien = `${base}/attestation/${tokenAttestation}`;
         const emailHtml = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">

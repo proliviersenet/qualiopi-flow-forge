@@ -12,7 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, nom, organisme_id, siret, siren, adresse, token } = await req.json();
+    // site_url (optionnel, retour terrain Olivier 08/10/2026) : même correctif que
+    // sur envoyer-invitation — le lien "voir la fiche client" envoyé au formateur
+    // était codé en dur sur la prod. Le frontend transmet son origine ; à défaut
+    // on retombe sur qualioflex.fr.
+    const { email, password, nom, organisme_id, siret, siren, adresse, token, site_url } = await req.json();
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     if (!email || !password || !organisme_id || !token) {
       return new Response(
@@ -76,26 +83,33 @@ serve(async (req) => {
       userId = authData.user.id;
     }
 
-    // 3. Créer le client en base
-    const { data: newClient, error: clientError } = await supabase
-      .from("clients")
-      .insert({
-        organisme_id,
-        siret: siret || null,
-        siren: siren || null,
-        raison_sociale: nom,
-        adresse: adresse || null,
-        contact_email: email,
-      })
-      .select("id")
-      .single();
+    // 3. Créer OU mettre à jour le client en base.
+    // Retour terrain Olivier (08/10/2026) : quand l'invitation porte un client_id
+    // (fiche déjà créée manuellement par le formateur via "+ Ajouter un client"),
+    // on met à jour CETTE ligne existante au lieu d'en insérer une seconde — sans
+    // ce garde-fou, le client qui finalise son compte se serait retrouvé avec une
+    // fiche en double (celle du formateur, orpheline, et une nouvelle), et toute
+    // session déjà affectée à la fiche d'origine aurait pointé vers le mauvais
+    // client_id.
+    const clientPayload = {
+      organisme_id,
+      siret: siret || null,
+      siren: siren || null,
+      raison_sociale: nom,
+      adresse: adresse || null,
+      contact_email: email,
+    };
+
+    const { data: newClient, error: clientError } = invitation.client_id
+      ? await supabase.from("clients").update(clientPayload).eq("id", invitation.client_id).select("id").single()
+      : await supabase.from("clients").insert(clientPayload).select("id").single();
 
     if (clientError) {
-      console.error("Erreur insert client:", JSON.stringify(clientError));
+      console.error("Erreur création/mise à jour client:", JSON.stringify(clientError));
       throw new Error(`Erreur création client: ${clientError.message}`);
     }
 
-    console.log("Client créé avec succès pour:", email);
+    console.log("Client créé/mis à jour avec succès pour:", email);
 
     // 3bis. Correctif bug audit du 31/07 : prévenir le formateur par email que
     // son client vient de finaliser la création de son compte — jusqu'ici
@@ -119,7 +133,7 @@ serve(async (req) => {
 
       if (emailFormateur) {
         const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-        const lienFicheClient = `https://qualioflex.fr/clients/${newClient?.id}`;
+        const lienFicheClient = `${base}/clients/${newClient?.id}`;
 
         const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",

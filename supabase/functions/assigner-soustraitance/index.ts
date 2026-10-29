@@ -57,7 +57,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { session_id, mode, organisme_sous_traitant_id, formateur_profile_id, email } = await req.json();
+    const { session_id, mode, organisme_sous_traitant_id, formateur_profile_id, email, site_url } = await req.json();
 
     if (!session_id || !mode) {
       return new Response(
@@ -65,6 +65,10 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -154,7 +158,7 @@ serve(async (req) => {
           </p>
           <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QualioFlex (Tableau de bord → Sessions en sous-traitance).</p>
           <table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
-            <a href="https://qualioflex.fr/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
+            <a href="${base}/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
           </td></tr></table>` + piedEmail
         );
       }
@@ -199,7 +203,7 @@ serve(async (req) => {
             `<p style="color:#555;line-height:1.6;"><strong>${nomDemandeur}</strong> vous confie l'animation de la session <strong>${formation.titre}</strong>.</p>
             <p style="color:#555;line-height:1.6;">Elle est désormais visible dans votre espace QualioFlex (Tableau de bord → Sessions en sous-traitance).</p>
             <table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
-              <a href="https://qualioflex.fr/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
+              <a href="${base}/dashboard" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon tableau de bord →</a>
             </td></tr></table>` + piedEmail
           );
         }
@@ -219,7 +223,7 @@ serve(async (req) => {
         .single();
       if (insErr) throw insErr;
 
-      const lienInvitation = `https://qualioflex.fr/register?st=${inserted.token}`;
+      const lienInvitation = `${base}/register?st=${inserted.token}`;
       await envoyerEmailResend(
         RESEND_API_KEY,
         email,

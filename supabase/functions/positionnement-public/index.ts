@@ -15,8 +15,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { action, token, competences_notes, objectifs_notes, consentement_email, consentement_sms } = await req.json();
+    const { action, token, competences_notes, objectifs_notes, consentement_email, consentement_sms, site_url } = await req.json();
     if (!token) throw new Error("token requis");
+
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -141,7 +145,7 @@ serve(async (req) => {
                 canal: "les_deux",
                 envoye_par: "system_positionnement_avant",
                 stagiaire_id: s.id,
-                lien: `https://qualioflex.fr/emargement/${tokenEmargement}`,
+                lien: `${base}/emargement/${tokenEmargement}`,
               },
             });
             if (relanceErr) console.error("positionnement-public: échec notification émargement:", relanceErr.message);

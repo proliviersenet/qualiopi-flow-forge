@@ -12,7 +12,24 @@ serve(async (req) => {
   }
 
   try {
-    const { email, organisme_id, organisme_nom, formateur_nom } = await req.json();
+    // client_id (optionnel, retour terrain Olivier 08/10/2026) : quand l'invitation
+    // est envoyée pour une fiche client DÉJÀ créée manuellement par le formateur
+    // (Clients.tsx, "+ Ajouter un client"), on le transmet pour que
+    // creer-compte-client mette à jour cette ligne existante au lieu d'en créer
+    // une seconde en doublon. Laissé vide, le comportement historique (nouvelle
+    // fiche créée à l'acceptation) est inchangé.
+    //
+    // site_url (optionnel, retour terrain Olivier 08/10/2026) : le lien envoyé
+    // par email était codé en dur sur "https://qualioflex.fr" (la prod). Testé
+    // depuis staging, ce lien amenait donc le client sur la PROD, dont la base
+    // ne connaît pas le token créé en staging → "Lien invalide ou expiré". Le
+    // frontend transmet maintenant sa propre origine (window.location.origin)
+    // pour que le lien pointe vers le bon environnement ; si absent, on
+    // retombe sur qualioflex.fr pour ne rien changer aux appelants existants.
+    const { email, organisme_id, organisme_nom, formateur_nom, client_id, site_url } = await req.json();
+    const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
+      ? site_url.replace(/\/$/, "")
+      : "https://qualioflex.fr";
 
     if (!email || !organisme_id) {
       return new Response(
@@ -30,7 +47,7 @@ serve(async (req) => {
     // Vérifier si une invitation en attente existe déjà pour cet email + organisme
     const { data: existing } = await supabase
       .from("invitations_clients")
-      .select("id, token, expires_at")
+      .select("id, token, expires_at, client_id")
       .eq("email", email)
       .eq("organisme_id", organisme_id)
       .eq("statut", "en_attente")
@@ -40,8 +57,14 @@ serve(async (req) => {
     let token: string;
 
     if (existing) {
-      // Réutiliser le token existant
+      // Réutiliser le token existant — si cette invitation réutilisée n'avait pas
+      // encore de client_id (ex: ancienne invitation "libre") et qu'on en reçoit
+      // un maintenant, on la relie pour que creer-compte-client mette bien à jour
+      // la fiche existante plutôt que d'en recréer une.
       token = existing.token;
+      if (client_id && !existing.client_id) {
+        await supabase.from("invitations_clients").update({ client_id }).eq("id", existing.id);
+      }
     } else {
       // Créer une nouvelle invitation
       const { data: invitation, error: invitError } = await supabase
@@ -50,6 +73,7 @@ serve(async (req) => {
           organisme_id,
           email,
           statut: "en_attente",
+          client_id: client_id || null,
         })
         .select("token")
         .single();
@@ -58,7 +82,7 @@ serve(async (req) => {
       token = invitation.token;
     }
 
-    const lienInvitation = `https://qualioflex.fr/invitation/${token}`;
+    const lienInvitation = `${base}/invitation/${token}`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 
     // Envoi de l'email via Resend

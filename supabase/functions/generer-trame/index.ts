@@ -225,19 +225,43 @@ Retourne UNIQUEMENT le HTML du tableau (pas de markdown, pas de balises html/bod
 </body>
 </html>`;
 
-    // Sauvegarder en base
-    const { error: docErr } = await supabase
+    // Sauvegarder en base.
+    // Bug corrigé (07/10/2026, retour terrain Olivier) : .upsert(onConflict:
+    // "formation_id,type") échouait silencieusement ici — documents_formation
+    // n'a PAS d'index unique sur (formation_id, type) (seulement sa clé primaire
+    // id), donc Postgres rejette la cible ON CONFLICT. L'erreur était seulement
+    // loggée (console.error), jamais renvoyée au front : la fonction répondait
+    // quand même success:true avec le contenu_html, affiché immédiatement côté
+    // formateur — mais RIEN n'était persisté. Au rechargement de la page, la
+    // trame avait donc "disparu". Même classe de bug que celui déjà corrigé sur
+    // uploadDocument() dans FormationDetail.tsx (cf. son commentaire) — select
+    // puis insert/update explicite ici aussi, au lieu d'un upsert qui suppose un
+    // index inexistant.
+    const { data: existingTrame } = await supabase
       .from("documents_formation")
-      .upsert({
-        formation_id,
-        type: "trame_pedagogique",
-        nom_fichier: `Trame_pedagogique_${titre.replace(/[^a-zA-Z0-9]/g, "_")}.html`,
-        genere_par: "auto",
-        contenu_html: contenuHTML,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "formation_id,type" });
+      .select("id")
+      .eq("formation_id", formation_id)
+      .eq("type", "trame_pedagogique")
+      .is("session_id", null)
+      .maybeSingle();
 
-    if (docErr) console.error("Erreur sauvegarde trame:", docErr.message);
+    const tramePayload = {
+      formation_id,
+      type: "trame_pedagogique",
+      nom_fichier: `Trame_pedagogique_${titre.replace(/[^a-zA-Z0-9]/g, "_")}.html`,
+      genere_par: "auto",
+      contenu_html: contenuHTML,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: docErr } = existingTrame
+      ? await supabase.from("documents_formation").update(tramePayload).eq("id", existingTrame.id)
+      : await supabase.from("documents_formation").insert(tramePayload);
+
+    if (docErr) {
+      console.error("Erreur sauvegarde trame:", docErr.message);
+      throw new Error("La trame a été générée mais n'a pas pu être sauvegardée : " + docErr.message);
+    }
 
     return new Response(
       JSON.stringify({ success: true, contenu_html: contenuHTML }),

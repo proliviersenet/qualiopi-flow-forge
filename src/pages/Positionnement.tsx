@@ -85,6 +85,7 @@ const Positionnement = () => {
         token, action: "submit",
         competences_notes: competencesNotes, objectifs_notes: objectifsNotes,
         consentement_email: consentEmail, consentement_sms: consentSms,
+        site_url: window.location.origin,
       },
     });
     setSubmitting(false);

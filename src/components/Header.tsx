@@ -92,7 +92,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
               <Link to="/documents" className="text-gray-700 hover:text-exsenco-blue font-medium">
                 Documents
               </Link>
-              <Link to="/bpf" className="text-gray-700 hover:text-exsenco-blue font-medium">
+              <Link to="/bpf" className="text-gray-700 hover:text-exsenco-blue font-medium" data-onboarding="bpf-nav">
                 BPF
               </Link>
               <Link to="/notations-formateur" className="text-gray-700 hover:text-exsenco-blue font-medium">
@@ -229,6 +229,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
               to="/bpf"
               className="text-gray-700 hover:text-exsenco-blue font-medium py-2 px-4 rounded hover:bg-gray-50"
               onClick={() => setShowMobileMenu(false)}
+              data-onboarding="bpf-nav"
             >
               BPF
             </Link>

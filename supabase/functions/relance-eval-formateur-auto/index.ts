@@ -6,6 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
+// Correctif beta-test (28/10/2026) : fonction déclenchée par un cron, sans
+// appelant front — on lit SITE_URL (défini sur staging ; absent en prod, qui
+// garde qualioflex.fr par défaut) plutôt que de coder en dur le domaine prod.
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
+
 // Module de notation des formateurs (juillet 2026) — envoi AUTOMATIQUE de
 // l'évaluation du formateur à la fin de la formation, pour les STAGIAIRES et
 // pour les CLIENTS. Appelée une fois par jour par un cron Postgres (même
@@ -124,7 +129,7 @@ serve(async (req) => {
 
       const token = (s.token_evaluation_formateur as string | null) ?? crypto.randomUUID();
       const titre = s.sessions?.formations?.titre ?? "votre formation";
-      const lien = `https://qualioflex.fr/evaluation/${token}`;
+      const lien = `${SITE_URL}/evaluation/${token}`;
       const ok = await envoyerEmail(
         s.email_pro, `${s.prenom} ${s.nom}`,
         `[QualioFlex] Évaluez votre formateur — ${titre}`,
@@ -198,7 +203,7 @@ serve(async (req) => {
         }
 
         const nomContact = c.contact_nom || c.raison_sociale || "Bonjour";
-        const lien = `https://qualioflex.fr/evaluation/${evalRow.token}`;
+        const lien = `${SITE_URL}/evaluation/${evalRow.token}`;
 
         if (evalRow.statut === "a_envoyer") {
           const ok = await envoyerEmail(

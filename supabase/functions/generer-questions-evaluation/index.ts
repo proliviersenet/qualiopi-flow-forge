@@ -19,11 +19,18 @@ const stripHtml = (html: string) => {
     .trim();
 };
 
-// Un seul générateur pour les 3 questionnaires d'évaluation (chaud / formateur /
-// froid) — le "type" reçu détermine uniquement la consigne donnée à Claude et la
-// ligne (formation_id, type) ciblée dans evaluation_questions. Même principe de
-// notation 0 (pas du tout) à 4 (tout à fait) que le questionnaire de positionnement,
-// pour que le front puisse réutiliser le même composant de notation partout.
+// Un seul générateur pour les 4 questionnaires d'évaluation (chaud / formateur /
+// froid / acquis) — le "type" reçu détermine uniquement la consigne donnée à Claude et
+// la ligne (formation_id, type) ciblée dans evaluation_questions. Pour chaud/formateur/
+// froid : notation 0 (pas du tout) à 4 (tout à fait), questions = string[], même principe
+// que le questionnaire de positionnement.
+// "acquis" (référentiel V10, indicateur 33, ajouté 05/10/2026) est structurellement
+// différent : ce n'est pas une notation de ressenti mais un QCM à bonnes/mauvaises
+// réponses qui mesure ce que le stagiaire a réellement retenu. Claude doit donc renvoyer
+// une forme JSON différente (questions = {texte, options[4], reponse_correcte}[]) — voir
+// parsing dédié plus bas. Forme partagée avec src/lib/documentTypes.ts (QcmQuestion),
+// dupliquée ici volontairement : les Edge Functions Deno ne partagent pas d'imports avec
+// le code React (pas de bundling commun dans ce projet).
 const CONSIGNES: Record<string, string> = {
   chaud: `Génère les questions d'un questionnaire de SATISFACTION "À CHAUD", rempli par le stagiaire juste après la fin de la formation (standard Qualiopi).
 Couvre les thèmes suivants (une question par thème, formulée comme une affirmation que le stagiaire note de 0 à 4) :
@@ -51,6 +58,16 @@ Couvre les thèmes suivants (une question par thème, formulée comme une affirm
 - Autonomie acquise sur les sujets traités
 - Recommandation de la formation à un collègue
 Génère entre 5 et 8 questions au total, adaptées au contenu réel de CETTE formation (pas génériques).`,
+  acquis: `Génère un QCM d'ÉVALUATION DES ACQUIS (indicateur 33 du référentiel Qualiopi V10), rempli par le stagiaire juste après la formation. Contrairement aux autres questionnaires, il ne s'agit PAS de ressenti/satisfaction : ce sont de VRAIES questions de connaissances qui vérifient ce que le stagiaire a retenu du contenu réellement enseigné.
+Règles strictes :
+- Base-toi UNIQUEMENT sur les objectifs pédagogiques et le contenu réel de CETTE formation (trame pédagogique si fournie, sinon objectifs/programme) — ne pose jamais une question sur une notion qui n'apparaît pas explicitement dans ces sources.
+- Chaque question a EXACTEMENT 4 options de réponse, une seule correcte.
+- Les 3 mauvaises réponses doivent être plausibles (pas absurdes), pour que le QCM mesure vraiment la compréhension.
+- Formulations claires, une question = une notion.
+- Génère entre 8 et 12 questions, couvrant les différents objectifs pédagogiques de la formation (pas tout sur un seul thème).
+Réponds UNIQUEMENT avec un JSON valide de cette forme exacte, sans texte autour, sans markdown :
+{"questions": [{"texte": "...", "options": ["...", "...", "...", "..."], "reponse_correcte": 0}]}
+"reponse_correcte" est l'index (0 à 3) de la bonne réponse dans le tableau "options".`,
 };
 
 serve(async (req) => {
@@ -60,7 +77,8 @@ serve(async (req) => {
     const { formation_id, type } = await req.json();
     console.log("generer-questions-evaluation: démarrage pour formation_id =", formation_id, "type =", type);
     if (!formation_id) throw new Error("formation_id requis");
-    if (!type || !CONSIGNES[type]) throw new Error("type invalide (attendu: chaud, formateur ou froid)");
+    if (!type || !CONSIGNES[type]) throw new Error("type invalide (attendu: chaud, formateur, froid ou acquis)");
+    const estAcquis = type === "acquis";
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -104,13 +122,13 @@ Formation :
 - Objectifs pédagogiques (texte formateur) : ${f.objectifs || "non précisés"}
 - Programme (texte formateur) : ${f.programme || "non précisé"}
 - Modalités : ${f.modalites || "non précisées"}
-
+${estAcquis ? "" : `
 Consignes de formulation :
 - Chaque question est une affirmation courte (une ligne), en français, sans numérotation, que le stagiaire note de 0 à 4.
 - Formulations concrètes et adaptées au contenu réel de cette formation, pas génériques.
 
 Réponds UNIQUEMENT avec un JSON valide de cette forme exacte, sans texte autour, sans markdown :
-{"questions": ["...", "..."]}`;
+{"questions": ["...", "..."]}`}`;
 
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -121,7 +139,7 @@ Réponds UNIQUEMENT avec un JSON valide de cette forme exacte, sans texte autour
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: estAcquis ? 3500 : 2000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -135,7 +153,7 @@ Réponds UNIQUEMENT avec un JSON valide de cette forme exacte, sans texte autour
     const claudeData = await claudeRes.json();
     const rawText = (claudeData.content?.[0]?.text || "").trim();
 
-    let parsed: { questions?: string[] };
+    let parsed: { questions?: unknown[] };
     try {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
@@ -144,8 +162,26 @@ Réponds UNIQUEMENT avec un JSON valide de cette forme exacte, sans texte autour
       throw new Error("Réponse de Claude illisible, réessayez.");
     }
 
-    // Filet de sécurité : jamais plus de 9 questions, quel que soit le type.
-    const questions = (Array.isArray(parsed.questions) ? parsed.questions : []).slice(0, 9);
+    const brut = Array.isArray(parsed.questions) ? parsed.questions : [];
+    let questions: unknown[];
+    if (estAcquis) {
+      // Forme QCM — on filtre tout objet mal formé plutôt que de planter : une
+      // question générée avec une forme invalide ne doit pas faire échouer tout le
+      // lot (même logique défensive que le reste du fichier).
+      const estValide = (q: unknown): q is { texte: string; options: string[]; reponse_correcte: number } => {
+        if (!q || typeof q !== "object") return false;
+        const c = q as Record<string, unknown>;
+        return (
+          typeof c.texte === "string" && c.texte.trim() !== "" &&
+          Array.isArray(c.options) && c.options.length === 4 && c.options.every((o) => typeof o === "string" && (o as string).trim() !== "") &&
+          typeof c.reponse_correcte === "number" && c.reponse_correcte >= 0 && c.reponse_correcte <= 3
+        );
+      };
+      questions = brut.filter(estValide).slice(0, 12);
+    } else {
+      // Filet de sécurité : jamais plus de 9 questions pour les types satisfaction.
+      questions = (brut as string[]).filter((q) => typeof q === "string" && q.trim() !== "").slice(0, 9);
+    }
     if (questions.length === 0) throw new Error("Aucune question générée, réessayez.");
 
     // unique(formation_id, type) est un vrai index unique (pas partiel) : l'upsert

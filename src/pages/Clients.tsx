@@ -17,6 +17,7 @@ interface Client {
   contact_email: string;
   adresse: string;
   created_at: string;
+  onboarding_complete: boolean | null;
 }
 
 const Clients = () => {
@@ -39,6 +40,10 @@ const Clients = () => {
   const [inviting, setInviting] = useState(false);
   const [organismeId, setOrganismeId] = useState<string | null>(null);
   const [organismeNom, setOrganismeNom] = useState("");
+  // Retour terrain Olivier (08/10/2026) : "Envoyer l'invitation" sur une fiche
+  // client déjà créée (manuellement, ou dont le mail n'est jamais parti) —
+  // invitingClientId = id du client en cours d'envoi, pour l'état du bouton.
+  const [invitingClientId, setInvitingClientId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -90,6 +95,7 @@ const Clients = () => {
         organisme_id: organismeId,
         organisme_nom: organismeNom,
         formateur_nom: session?.user?.user_metadata?.nom_complet || user?.name || "Votre formateur",
+        site_url: window.location.origin,
       },
     });
     setInviting(false);
@@ -99,6 +105,38 @@ const Clients = () => {
     toast({ title: "Invitation envoyée ✅", description: `Un email a été envoyé à ${inviteEmail}` });
     setInviteEmail("");
     setShowInviteForm(false);
+  };
+
+  // Retour terrain Olivier (08/10/2026) : envoie/renvoie l'invitation pour une
+  // fiche client EXISTANTE (créée manuellement via "+ Ajouter un client", ou dont
+  // l'email d'invitation n'est jamais parti). On transmet client_id pour que
+  // creer-compte-client mette à jour cette fiche au lieu d'en créer une seconde en
+  // doublon à l'acceptation — voir migration 20261008010000 et les edge functions
+  // envoyer-invitation / creer-compte-client.
+  const envoyerInvitationPourClient = async (client: Client) => {
+    if (!client.contact_email) {
+      toast({ title: "Email manquant", description: "Renseignez d'abord un email de contact sur cette fiche.", variant: "destructive" });
+      return;
+    }
+    if (!organismeId) return;
+    setInvitingClientId(client.id);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("envoyer-invitation", {
+      body: {
+        email: client.contact_email,
+        organisme_id: organismeId,
+        organisme_nom: organismeNom,
+        formateur_nom: session?.user?.user_metadata?.nom_complet || user?.name || "Votre formateur",
+        client_id: client.id,
+        site_url: window.location.origin,
+      },
+    });
+    setInvitingClientId(null);
+    if (error || data?.error) {
+      toast({ title: "Erreur", description: error?.message || data?.error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Invitation envoyée ✅", description: `Un email a été envoyé à ${client.contact_email}` });
   };
 
   const fetchSiret = async () => {
@@ -131,8 +169,22 @@ const Clients = () => {
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
     setClients(prev => [data, ...prev]);
     setShowForm(false);
+    const emailSaisi = formData.contact_email;
     setFormData({ siret: "", raison_sociale: "", adresse: "", contact_nom: "", contact_email: "" });
-    toast({ title: "Client ajouté", description: formData.raison_sociale });
+
+    // Retour terrain Olivier (08/10/2026) : "le client reçoit automatiquement un
+    // mail l'invitant à se connecter" — jusqu'ici "Ajouter un client" créait
+    // seulement la fiche en base, sans jamais envoyer cet email (seul le bouton
+    // séparé "✉️ Inviter un client" le faisait). On déclenche maintenant
+    // l'invitation automatiquement dès qu'un email de contact est renseigné, liée
+    // à cette fiche (client_id) pour que le client qui l'accepte vienne compléter
+    // CETTE fiche plutôt que d'en créer une seconde en double.
+    if (emailSaisi) {
+      toast({ title: "Client ajouté ✅", description: `Envoi de l'invitation à ${emailSaisi}...` });
+      await envoyerInvitationPourClient({ ...(data as Client), contact_email: emailSaisi });
+    } else {
+      toast({ title: "Client ajouté", description: formData.raison_sociale });
+    }
   };
 
   const filtres = clients.filter(c =>
@@ -152,7 +204,7 @@ const Clients = () => {
               <Button variant="outline" onClick={() => { setShowInviteForm(!showInviteForm); setShowForm(false); }}>
                 ✉️ Inviter un client
               </Button>
-              <Button className="btn-cta font-bold" onClick={() => { setShowForm(!showForm); setShowInviteForm(false); }}>
+              <Button className="btn-cta font-bold" data-onboarding="inviter-client" onClick={() => { setShowForm(!showForm); setShowInviteForm(false); }}>
                 + Ajouter un client
               </Button>
             </div>
@@ -219,7 +271,7 @@ const Clients = () => {
               <p className="text-4xl mb-4">🏢</p>
               <p className="text-lg font-medium text-gray-700 mb-2">Aucun client pour l'instant</p>
               <p className="text-gray-500 mb-6">Ajoutez vos premiers clients pour les associer à vos sessions de formation.</p>
-              <Button className="btn-cta font-bold" onClick={() => setShowForm(true)}>Ajouter mon premier client</Button>
+              <Button className="btn-cta font-bold" data-onboarding="inviter-client" onClick={() => setShowForm(true)}>Ajouter mon premier client</Button>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -237,7 +289,21 @@ const Clients = () => {
                     </div>
                     {client.adresse && <p className="text-xs text-gray-500 mb-2">📍 {client.adresse}</p>}
                     {client.contact_nom && <p className="text-xs text-gray-500 mb-1">👤 {client.contact_nom}</p>}
-                    {client.contact_email && <p className="text-xs text-gray-500 mb-3">✉️ {client.contact_email}</p>}
+                    {client.contact_email && <p className="text-xs text-gray-500 mb-1">✉️ {client.contact_email}</p>}
+                    {client.contact_email && (
+                      client.onboarding_complete ? (
+                        <p className="text-xs text-green-600 mb-3">✓ Espace client créé</p>
+                      ) : (
+                        <Button
+                          size="sm" variant="outline"
+                          className="w-full mb-3 text-xs"
+                          disabled={invitingClientId === client.id}
+                          onClick={() => envoyerInvitationPourClient(client)}
+                        >
+                          {invitingClientId === client.id ? "Envoi..." : "✉️ Envoyer l'invitation (accès espace client)"}
+                        </Button>
+                      )
+                    )}
                     <Link to={`/clients/${client.id}`}>
                       <Button size="sm" className="w-full font-bold" style={{ background: "#25245e", color: "#fff" }}>
                         Voir la fiche →

@@ -264,7 +264,7 @@ const Profile = () => {
 
           {/* Infos organisme */}
           {organismeId && (
-            <Card>
+            <Card data-onboarding="profil-infos">
               <CardHeader>
                 <CardTitle className="text-lg" style={{ color: "#25245e" }}>
                   Mon organisme de formation
@@ -364,7 +364,7 @@ const Profile = () => {
                   </div>
 
                   {/* Logo */}
-                  <div className="space-y-2 md:col-span-2">
+                  <div className="space-y-2 md:col-span-2" data-onboarding="profil-logo">
                     <Label>Logo de l'organisme</Label>
                     <p className="text-xs text-gray-400">Sera intégré automatiquement dans tous les documents générés (PNG, JPG, WebP, SVG)</p>
                     <div className="flex items-center gap-4">
