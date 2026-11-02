@@ -11,15 +11,21 @@ import HelpPopup from "@/components/HelpPopup";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Page "Pré-audit Qualiopi" — auto-diagnostic de conformité aux 32 indicateurs
+// Page "Pré-audit Qualiopi" — auto-diagnostic de conformité basé sur des
+// contrôles internes QualioFlex couvrant une large partie des indicateurs
 // du référentiel national qualité, calculé à partir des vraies données de
 // l'organisme (formations, sessions, stagiaires, documents). Contrairement à un
 // vrai audit Certifopac, ce n'est pas une preuve de conformité opposable : les
 // indicateurs sans source de donnée fiable dans QualioFlex (qualification des
-// formateurs, réclamations, financement...) sont honnêtement marqués
+// formateurs, réclamations, financement, évaluation des contenus par les
+// apprentis — indicateur 33 du référentiel V10...) sont honnêtement marqués
 // "à vérifier manuellement" plutôt que masqués ou faussement validés.
 // Déclenche l'edge function lancer-preaudit, qui écrit aussi dans
 // checklist_items (lu par l'onglet "Conformité Qualiopi" du Dashboard).
+//
+// Mise à jour 01/11/2026 (voir docs/VEILLE_QUALIOPI.md) : ne plus annoncer de
+// nombre figé d'"indicateurs" ici — la liste interne ne reproduit pas
+// exactement, ni exhaustivement, les indicateurs officiels du référentiel.
 
 type Statut = "conforme" | "nc_majeure" | "nc_mineure" | "a_verifier" | "non_applicable";
 
@@ -162,7 +168,7 @@ const PreAudit = () => {
         <div className="container mx-auto px-4 max-w-4xl">
           <h1 className="text-2xl font-bold mb-1" style={{ color: "#25245e" }}>🧪 Pré-audit Qualiopi</h1>
           <p className="text-sm text-gray-500 mb-1">
-            Auto-diagnostic de conformité aux 32 indicateurs du référentiel national qualité, calculé sur vos données réelles.
+            Auto-diagnostic de conformité aux indicateurs du référentiel national qualité, calculé sur vos données réelles.
           </p>
           {referentiel && (
             <p className="text-xs text-gray-400 mb-6">
