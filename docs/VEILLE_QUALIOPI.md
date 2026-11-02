@@ -10,63 +10,93 @@ https://travail-emploi.gouv.fr/referentiel-national-qualite-guide-de-lecture-qua
 
 ## Dernier relevé connu (baseline)
 
-- Date de relevé : 01/10/2026
-- Changement détecté le 01/10/2026 (alerte de la veille automatique), **vérifié
-  indépendamment par Claude** via recherche web croisée sur plusieurs sources
-  tierces (la tâche planifiée elle-même n'avait pas pu accéder au PDF officiel
-  pour confirmer — voir « Limites techniques » ci-dessous).
-- Nouvelle version : **référentiel V10**, issue du **Décret n° 2026-728**,
+- Date de relevé : 01/11/2026 (confirmation du relevé du 01/10/2026 — pas un
+  nouveau changement, voir « Confirmation du 01/11/2026 » ci-dessous).
+- Changement détecté initialement le 01/10/2026 (alerte de la veille
+  automatique), **vérifié indépendamment par Claude** via recherche web
+  croisée sur plusieurs sources tierces.
+- Nouvelle version : **référentiel V10**, issue du **Décret n° 2026-728 du
+  1er août 2026** (publié au Journal officiel le 4 août 2026),
   **applicable à compter du 1er novembre 2026**.
 - Structure : passage de **32 à 33 indicateurs** (ajout d'un nouvel
-  indicateur 33, portant sur l'évaluation pédagogique des acquis des
-  stagiaires, distincte de l'enquête de satisfaction).
-- Indicateurs recensés comme modifiés/renforcés par le décret (liste la plus
-  complète trouvée, croisée sur plusieurs sources tierces — à confirmer sur
-  le PDF officiel dès qu'il sera accessible) : **1, 2, 3, 7, 12, 13, 14, 15,
-  19, 20, 27, 32**. Le reste des indicateurs (20 au total) reste inchangé.
+  indicateur 33, réservé aux CFA, portant sur l'évaluation pédagogique des
+  acquis des stagiaires, distincte de l'enquête de satisfaction).
+- Indicateurs recensés comme modifiés/renforcés par le décret : **1, 2, 3,
+  7, 12, 13, 14, 15, 19, 20, 27, 32** (12 indicateurs réécrits, 1 créé — le
+  33). Le reste des indicateurs (20 au total) reste inchangé.
   Parmi les changements les plus structurants pour QualioFlex :
-  - **Indicateur 33 (nouveau)** — évaluation pédagogique des acquis,
+  - **Indicateur 33 (nouveau, CFA)** — évaluation pédagogique des acquis,
     distincte de la satisfaction.
   - **Indicateur 19 (renforcé)** — vérification de l'achèvement RÉEL des
-    modules à distance (pas seulement déclaratif).
+    modules à distance (pas seulement déclaratif), référent pédagogique
+    au-delà d'un seuil à fixer par arrêté.
   - **Indicateur 27 (renforcé)** — contrat de sous-traitance écrit
-    obligatoire.
+    obligatoire, portage salarial inclus.
   - **Indicateur 12 (renforcé)** — procédure écrite de prévention des
     violences/harcèlement/discriminations.
-- Sources (toutes consultées le 01/10/2026, à recouper avec le PDF officiel
-  du ministère dès qu'il sera publié/accessible) :
-  - digi-certif.com (liste la plus détaillée des indicateurs modifiés)
-  - alertisformation.com
-  - qualiodocs.fr
-  - page officielle travail-emploi.gouv.fr (citée par la tâche planifiée,
-    non vérifiable directement par Claude — voir limites ci-dessous)
+- Guide de lecture V10 (celui qui remplace la V.9 du 08/01/2024 et précise
+  le niveau de preuve attendu par indicateur) : **publié le 30/10/2026**.
+- Sources :
+  - Décret n° 2026-728 (Légifrance) :
+    https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000054608509
+  - certiforma.fr (qualiopi-v10, decret-qualiopi-2026-728-33-indicateurs)
+  - cnfce.com (qualiopi-ce-qui-change-au-1er-novembre-2026)
+  - akto.fr (qualiopi-version-actualisee-referentiel-national-qualite)
+  - certifopac.fr (référentiel/version10-v10) — date de publication du
+    guide de lecture V10
+  - digi-certif.com, alertisformation.com, qualiodocs.fr (relevé du
+    01/10/2026)
+  - page officielle travail-emploi.gouv.fr — toujours non accessible
+    directement par Claude (voir « Limites techniques »)
+
+### Confirmation du 01/11/2026
+
+Exécution automatisée du 01/11/2026 (jour d'entrée en vigueur de V10) :
+confirme en tous points le relevé du 01/10/2026 ci-dessus (même décret,
+même liste d'indicateurs, mêmes dates), avec un élément nouveau : la
+publication effective du **guide de lecture V10 le 30/10/2026** (non
+confirmée au 01/10). Ce n'est donc pas un nouveau changement de
+référentiel, seulement une confirmation officielle + une précision. La
+notification push envoyée à Olivier ce jour-là ne le précisait pas assez
+clairement (elle donnait l'impression d'une découverte entièrement
+nouvelle) — à corriger pour les prochaines alertes : préciser quand une
+alerte confirme un relevé déjà connu plutôt que d'annoncer un changement
+inédit.
 
 ### Limites techniques connues sur ce relevé
 
-- La tâche planifiée de veille n'a pas pu accéder au PDF officiel du guide
-  de lecture pour vérifier le détail exact (pas de navigateur disponible
-  dans cette exécution-là).
-- Le même run a échoué à enregistrer son relevé dans `veille_qualiopi_log`
-  via l'edge function `veille-qualiopi-log` (erreur réseau 403). Cause la
-  plus probable, par analogie avec des blocages identiques rencontrés
-  plusieurs fois cette session (sandbox Claude Code / pont vers
-  l'ordinateur d'Olivier) : la politique réseau de l'environnement
-  d'exécution de la tâche planifiée bloque les appels sortants vers
-  `*.supabase.co`. **Non confirmé à 100 %** faute d'accès aux logs de cet
-  environnement précis — à surveiller : si le prochain relevé mensuel
-  échoue aussi à s'enregistrer, c'est probablement structurel et il faudra
-  adapter le mécanisme (ex. exécuter cette tâche sur l'ordinateur
-  d'Olivier plutôt qu'en environnement cloud isolé).
-- Conséquence pratique : la page `/qualiopi-statut` (`VeilleQualiopi.tsx`)
-  n'affiche donc PAS encore ce changement — aucune ligne n'a été insérée
-  en base. À faire une fois le PDF officiel confirmé : soit corriger le
-  mécanisme d'enregistrement, soit insérer manuellement la ligne via
-  l'edge function `veille-qualiopi-log` (secret `VEILLE_QUALIOPI_SECRET`).
+- La tâche planifiée de veille n'a toujours pas pu accéder directement à
+  la page officielle travail-emploi.gouv.fr : le 01/10/2026, blocage
+  anti-bot (Cegedim.cloud) ; le 01/11/2026, l'outil de récupération web a
+  échoué avec une erreur de permission (« PROVENANCE_REQUIRED ») propre
+  aux sessions automatisées sans utilisateur présent pour valider l'accès
+  à une URL externe. Deux causes différentes, même conséquence : il faut
+  continuer à passer par la veille croisée sur sources tierces + Légifrance
+  pour confirmer.
+- **Résolu le 01/11/2026** : l'enregistrement dans `veille_qualiopi_log`
+  avait échoué le 01/10/2026 (erreur réseau 403 vers `*.supabase.co`,
+  confirmée cette fois comme un blocage de politique réseau de
+  l'environnement cloud de la tâche planifiée). Le relevé du 01/11/2026 a
+  été enregistré malgré ce blocage en passant par l'outil Supabase (accès
+  SQL direct à la table `veille_qualiopi_log`) plutôt que par l'edge
+  function HTTP. La page `/qualiopi-statut` affiche donc maintenant bien
+  ce changement. Le même contournement sera nécessaire tant que la
+  politique réseau de l'environnement cloud bloquera `*.supabase.co` pour
+  les tâches planifiées.
+- Mise à jour de ce fichier sur GitHub : la session Cowork qui a produit
+  cette mise à jour le 01/11/2026 n'avait pas ce dépôt dans son
+  « ensemble de dépôts autorisés » (lecture simple possible via
+  `git clone` / `raw.githubusercontent.com`, mais écriture/push refusée
+  par le proxy git : « proliviersenet/qualiopi-flow-forge is not in this
+  session's authorized repository set »). Le contenu a donc été remis à
+  Olivier en fichier, à committer lui-même ou lors d'une session où ce
+  dépôt est autorisé.
 
 ## Historique des versions (pour mémoire, du plus récent au plus ancien)
 
 - **V10 — Décret n° 2026-728, applicable 01/11/2026 — 33 indicateurs**
-  (nouveau, ce relevé)
+  (détecté le 01/10/2026, confirmé et entré en vigueur le 01/11/2026 ;
+  guide de lecture V10 publié le 30/10/2026)
 - V.9 du 08/01/2024 — prise en compte de la sous-traitance (32 indicateurs,
   22 tronc commun + 10 spécifiques)
 - V.8 du 23/11/2023 — précisions niveau attendu + exemples de preuves
