@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
+ 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
-
+ 
 // Correctif beta-test (28/10/2026) : fonction déclenchée par un cron, sans
 // appelant front — on lit SITE_URL (défini sur staging ; absent en prod, qui
 // garde qualioflex.fr par défaut) plutôt que de coder en dur le domaine prod.
 const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
-
+ 
 // Module de notation des formateurs (juillet 2026) — envoi AUTOMATIQUE de
 // l'évaluation du formateur à la fin de la formation, pour les STAGIAIRES et
 // pour les CLIENTS. Appelée une fois par jour par un cron Postgres (même
@@ -31,9 +31,24 @@ const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/
 // Fenêtre de sécurité : on ne traite que les sessions dont la date de fin
 // est comprise entre J-7 et J, pour éviter un envoi rétroactif massif sur
 // tout l'historique lors du premier déploiement.
+//
+// Correctifs du 04/11/2026 (Olivier — "tout ce qui peut être automatisé doit
+// l'être") :
+//  1) verify_jwt était passé à `true` sur cette fonction alors que TOUTES les
+//     autres fonctions déclenchées par pg_cron (relance-eval-froid-auto,
+//     relance-documents-auto, alerte-avant-formation, etc.) sont déployées en
+//     `verify_jwt: false` — logique, puisque pg_cron/pg_net n'envoie aucun
+//     header d'authentification Supabase (seulement x-cron-secret, voir plus
+//     bas). Avec verify_jwt actif, la passerelle Supabase pouvait rejeter
+//     l'appel du cron avant même que le code ci-dessous ne s'exécute. Remis à
+//     `false` au déploiement pour être cohérent avec le reste du système.
+//  2) Comme pour relance-eval-froid-auto (voir son correctif du même jour) :
+//     on vérifie désormais que les questions "formateur" sont bien
+//     configurées dans evaluation_questions avant d'envoyer un lien, pour ne
+//     pas faire tomber le stagiaire ou le client sur un formulaire vide.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
+ 
   try {
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
     const provided = req.headers.get("x-cron-secret") ?? "";
@@ -43,23 +58,40 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
+ 
     const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
     if (!BREVO_API_KEY) throw new Error("BREVO_API_KEY manquant");
-
+ 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-
+ 
     const resultats: Record<string, unknown>[] = [];
     const aujourdhui = new Date();
     const borneBasse = new Date();
     borneBasse.setDate(borneBasse.getDate() - 7);
     const borneBasseStr = borneBasse.toISOString().slice(0, 10);
     const aujourdhuiStr = aujourdhui.toISOString().slice(0, 10);
-
+ 
+    // Questions "formateur" configurées pour une formation donnée (mise en
+    // cache simple par formation_id pour éviter de refaire la requête à
+    // chaque stagiaire/client d'une même session).
+    const cacheQuestionsFormateur = new Map<string, boolean>();
+    const aDesQuestionsFormateur = async (formationId: string): Promise<boolean> => {
+      if (cacheQuestionsFormateur.has(formationId)) return cacheQuestionsFormateur.get(formationId)!;
+      const { data: questionsRow } = await supabase
+        .from("evaluation_questions")
+        .select("questions")
+        .eq("formation_id", formationId)
+        .eq("type", "formateur")
+        .maybeSingle();
+      const ok = Array.isArray(questionsRow?.questions) && questionsRow.questions.length > 0;
+      cacheQuestionsFormateur.set(formationId, ok);
+      return ok;
+    };
+ 
     const envoyerEmail = async (email: string, nom: string, sujet: string, html: string) => {
       const r = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -73,7 +105,7 @@ serve(async (req) => {
       });
       return r.ok;
     };
-
+ 
     const emailEvaluation = (prenom: string, nom: string, titre: string, lien: string) => `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#25245e;padding:20px 30px;border-radius:8px 8px 0 0;">
@@ -98,7 +130,7 @@ serve(async (req) => {
     <p style="font-size:11px;color:#aaa;margin-top:20px;">QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin</p>
   </div>
 </body></html>`;
-
+ 
     // -------------------------------------------------------------------
     // A) STAGIAIRES — envoi initial
     // -------------------------------------------------------------------
@@ -110,15 +142,15 @@ serve(async (req) => {
         sessions:session_id ( date_fin, formation_id, formations:formation_id ( titre ) )
       `)
       .is("doc_evaluation_formateur", null);
-
+ 
     if (sErr) throw new Error("Requête stagiaires : " + sErr.message);
-
+ 
     // deno-lint-ignore no-explicit-any
     const stagiairesATraiter = (stagiairesCandidats ?? []).filter((s: any) => {
       const dateFin = s.sessions?.date_fin;
       return dateFin && dateFin <= aujourdhuiStr && dateFin >= borneBasseStr;
     });
-
+ 
     // deno-lint-ignore no-explicit-any
     for (const s of stagiairesATraiter as any[]) {
       const hasEmail = s.consentement_email === true && !!s.email_pro;
@@ -126,7 +158,19 @@ serve(async (req) => {
         resultats.push({ type: "stagiaire", id: s.id, statut: "ignore_sans_consentement" });
         continue;
       }
-
+ 
+      const formationIdStagiaire = s.sessions?.formation_id as string | undefined;
+      if (formationIdStagiaire && !(await aDesQuestionsFormateur(formationIdStagiaire))) {
+        resultats.push({
+          type: "stagiaire",
+          id: s.id,
+          statut: "ignore_questions_formateur_non_configurees",
+          formation_id: formationIdStagiaire,
+          formation_titre: s.sessions?.formations?.titre ?? null,
+        });
+        continue;
+      }
+ 
       const token = (s.token_evaluation_formateur as string | null) ?? crypto.randomUUID();
       const titre = s.sessions?.formations?.titre ?? "votre formation";
       const lien = `${SITE_URL}/evaluation/${token}`;
@@ -135,7 +179,7 @@ serve(async (req) => {
         `[QualioFlex] Évaluez votre formateur — ${titre}`,
         emailEvaluation(s.prenom ?? "", s.nom ?? "", titre, lien),
       );
-
+ 
       if (ok) {
         await supabase.from("stagiaires").update({
           token_evaluation_formateur: token,
@@ -147,7 +191,7 @@ serve(async (req) => {
         resultats.push({ type: "stagiaire", id: s.id, statut: "erreur_envoi" });
       }
     }
-
+ 
     // -------------------------------------------------------------------
     // B) CLIENTS — envoi initial + relance J+2 + alerte J+5
     // -------------------------------------------------------------------
@@ -156,23 +200,25 @@ serve(async (req) => {
       .select("id, date_fin, formation_id, formations:formation_id ( titre, organismes ( email_contact, raison_sociale ) )")
       .gte("date_fin", borneBasseStr)
       .lte("date_fin", aujourdhuiStr);
-
+ 
     if (sessErr) throw new Error("Requête sessions : " + sessErr.message);
-
+ 
     for (const sess of (sessionsRecentes ?? []) as Record<string, unknown>[]) {
       const sessionId = sess.id as string;
+      const formationIdSession = sess.formation_id as string | undefined;
       const { data: stagiairesSession } = await supabase
         .from("stagiaires")
         .select("client_id")
         .eq("session_id", sessionId)
         .not("client_id", "is", null);
-
+ 
       const clientIds = Array.from(new Set((stagiairesSession ?? []).map((s: Record<string, unknown>) => s.client_id as string)));
       if (clientIds.length === 0) continue;
-
+ 
       const formation = sess.formations as Record<string, unknown> | null;
       const titre = (formation?.titre as string) ?? "la formation";
-
+      const questionsFormateurOk = formationIdSession ? await aDesQuestionsFormateur(formationIdSession) : false;
+ 
       for (const clientId of clientIds) {
         const { data: clientData } = await supabase
           .from("clients")
@@ -181,7 +227,7 @@ serve(async (req) => {
           .maybeSingle();
         const c = clientData as Record<string, string> | null;
         if (!c?.contact_email) continue;
-
+ 
         let evalRow: Record<string, unknown> | null = null;
         const { data: existing } = await supabase
           .from("evaluations_formateur_clients")
@@ -190,8 +236,12 @@ serve(async (req) => {
           .eq("client_id", clientId)
           .maybeSingle();
         evalRow = existing as Record<string, unknown> | null;
-
+ 
         if (!evalRow) {
+          if (!questionsFormateurOk) {
+            resultats.push({ type: "client", client_id: clientId, statut: "ignore_questions_formateur_non_configurees", formation_id: formationIdSession });
+            continue;
+          }
           const token = crypto.randomUUID();
           const { data: inserted, error: insErr } = await supabase
             .from("evaluations_formateur_clients")
@@ -201,10 +251,10 @@ serve(async (req) => {
           if (insErr) { resultats.push({ type: "client", client_id: clientId, statut: "erreur_creation" }); continue; }
           evalRow = inserted as Record<string, unknown>;
         }
-
+ 
         const nomContact = c.contact_nom || c.raison_sociale || "Bonjour";
         const lien = `${SITE_URL}/evaluation/${evalRow.token}`;
-
+ 
         if (evalRow.statut === "a_envoyer") {
           const ok = await envoyerEmail(
             c.contact_email, nomContact,
@@ -219,7 +269,7 @@ serve(async (req) => {
           }
           continue;
         }
-
+ 
         if (evalRow.statut === "envoye" && evalRow.envoye_le) {
           const jours = Math.floor((aujourdhui.getTime() - new Date(evalRow.envoye_le as string).getTime()) / (1000 * 60 * 60 * 24));
           if (jours >= 5 && !evalRow.alerte_envoyee) {
@@ -243,7 +293,7 @@ serve(async (req) => {
         }
       }
     }
-
+ 
     return new Response(
       JSON.stringify({ success: true, total_actions: resultats.length, resultats }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -256,3 +306,4 @@ serve(async (req) => {
     });
   }
 });
+ 
