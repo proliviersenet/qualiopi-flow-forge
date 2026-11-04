@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
  
@@ -9,19 +10,32 @@ const corsHeaders = {
 const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
  
 // Nouvelle fonction du 04/11/2026 (demande Olivier — "tout ce qui peut être
-// automatisé doit l'être"). Voir relance-eval-chaud-auto pour le contexte
-// complet : cette fonction fait la même chose pour l'évaluation des acquis
-// (indicateur 33 du référentiel V10, QCM noté automatiquement côté serveur
-// par evaluation-public — voir son commentaire sur QcmQuestion). On envoie
-// le lien automatiquement à la fin de la session, sur le même principe que
-// relance-eval-froid-auto / relance-eval-formateur-auto / relance-eval-chaud-auto :
-// cron Postgres quotidien (pg_cron + pg_net), protégé par le secret partagé
-// x-cron-secret, déployée en verify_jwt: false.
+// automatisé doit l'être", suite au constat fait sur la formation "test crea
+// form" : seule l'évaluation à froid partait automatiquement, alors que
+// l'évaluation à chaud, l'évaluation du formateur et l'évaluation des acquis
+// restaient 100% manuelles, déclenchées uniquement par le bouton "Relancer"
+// de StagiairesList.tsx).
 //
-// Fenêtre de sécurité J-7 → J, et vérification préalable que les questions
-// "acquis" sont configurées dans evaluation_questions pour cette formation —
-// mêmes raisons que pour relance-eval-chaud-auto / relance-eval-froid-auto
-// (éviter d'envoyer un lien vers un questionnaire vide).
+// Cette fonction envoie AUTOMATIQUEMENT le lien de l'évaluation à chaud (le
+// stagiaire note la formation elle-même, à ne pas confondre avec
+// l'évaluation DU FORMATEUR) dès la fin de la session. Même principe que
+// relance-eval-froid-auto et relance-eval-formateur-auto : cron Postgres
+// quotidien (pg_cron + pg_net), protégé par le secret partagé x-cron-secret,
+// déployée en verify_jwt: false (le cron n'envoie aucun header
+// d'authentification Supabase).
+//
+// Fenêtre de sécurité : comme relance-eval-formateur-auto, on ne traite que
+// les sessions dont la date de fin est comprise entre J-7 et J, pour éviter
+// un envoi rétroactif massif sur tout l'historique lors du premier
+// déploiement. Une session déjà terminée depuis plus de 7 jours (par
+// exemple une ancienne session de test) ne sera donc jamais relancée
+// automatiquement par cette fonction ; seul le bouton manuel "Relancer"
+// permet alors de l'envoyer.
+//
+// Avant d'envoyer, on vérifie — comme pour relance-eval-froid-auto (voir son
+// correctif du même jour) — que le formateur a bien configuré les questions
+// "chaud" dans evaluation_questions pour cette formation, pour ne pas faire
+// tomber le stagiaire sur un formulaire vide.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
  
@@ -76,10 +90,10 @@ serve(async (req) => {
   <div style="background:#fff;border:1px solid #eee;padding:30px;border-radius:0 0 8px 8px;">
     <p>Bonjour <strong>${prenom}${nom ? " " + nom : ""}</strong>,</p>
     <p>La formation <strong>"${titre}"</strong> vient de se terminer.</p>
-    <p>👉 Merci de compléter le questionnaire d'évaluation des acquis : quelques questions pour vérifier les compétences acquises durant la formation. Vous verrez votre score tout de suite après l'avoir envoyé.</p>
+    <p>👉 Merci de prendre quelques minutes pour donner votre avis à chaud sur cette formation : votre retour compte beaucoup pour nous.</p>
     <div style="text-align:center;margin:30px 0;">
       <a href="${lien}" style="background:#f2901e;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;">
-        Accéder au questionnaire →
+        Donner mon avis →
       </a>
     </div>
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
@@ -94,10 +108,10 @@ serve(async (req) => {
       .from("stagiaires")
       .select(`
         id, nom, prenom, email_pro, telephone, consentement_email, consentement_sms,
-        doc_evaluation_acquis, token_evaluation_acquis, session_id,
+        doc_evaluation_chaud, token_evaluation_chaud, session_id,
         sessions:session_id ( date_fin, formation_id, formations:formation_id ( titre ) )
       `)
-      .is("doc_evaluation_acquis", null);
+      .is("doc_evaluation_chaud", null);
  
     if (sErr) throw new Error("Requête stagiaires : " + sErr.message);
  
@@ -121,13 +135,13 @@ serve(async (req) => {
           .from("evaluation_questions")
           .select("questions")
           .eq("formation_id", formationId)
-          .eq("type", "acquis")
+          .eq("type", "chaud")
           .maybeSingle();
         const nbQuestions = Array.isArray(questionsRow?.questions) ? questionsRow.questions.length : 0;
         if (nbQuestions === 0) {
           resultats.push({
             stagiaire_id: s.id,
-            statut: "ignore_questions_acquis_non_configurees",
+            statut: "ignore_questions_chaud_non_configurees",
             formation_id: formationId,
             formation_titre: s.sessions?.formations?.titre ?? null,
           });
@@ -135,20 +149,20 @@ serve(async (req) => {
         }
       }
  
-      const token = (s.token_evaluation_acquis as string | null) ?? crypto.randomUUID();
+      const token = (s.token_evaluation_chaud as string | null) ?? crypto.randomUUID();
       const titre = s.sessions?.formations?.titre ?? "votre formation";
       const lien = `${SITE_URL}/evaluation/${token}`;
       const ok = await envoyerEmail(
         s.email_pro, `${s.prenom} ${s.nom}`,
-        `[QualioFlex] Évaluation des acquis — ${titre}`,
+        `[QualioFlex] Votre avis sur la formation — ${titre}`,
         emailEvaluation(s.prenom ?? "", s.nom ?? "", titre, lien),
       );
  
       if (ok) {
         await supabase.from("stagiaires").update({
-          token_evaluation_acquis: token,
-          doc_evaluation_acquis: "envoye",
-          doc_evaluation_acquis_envoye_le: new Date().toISOString(),
+          token_evaluation_chaud: token,
+          doc_evaluation_chaud: "envoye",
+          doc_evaluation_chaud_envoye_le: new Date().toISOString(),
         }).eq("id", s.id);
         resultats.push({ stagiaire_id: s.id, statut: "envoye" });
       } else {
