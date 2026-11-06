@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -192,6 +193,18 @@ const StagiairesList = ({
   canal = "les_deux",
   formationTitre = "",
   showSynthese = false,
+  // Correctif du 04/11/2026 (retour terrain Olivier : l'import Excel de la liste
+  // des stagiaires n'existait QUE côté client, dans EspaceClient.tsx — le
+  // formateur n'avait aucun moyen d'importer un fichier, uniquement l'ajout un
+  // par un). On ajoute ici la même capacité de téléchargement du template +
+  // import Excel, mais en ADDITIF (jamais de delete préalable, contrairement à
+  // la version client qui remplace toute la liste) pour ne pas effacer des
+  // stagiaires déjà saisis à la main côté formateur ("sans rien casser"). Ce
+  // prop est opt-in et vaut false par défaut : le comportement du composant
+  // chez le client (EspaceClient.tsx, qui gère déjà son propre import "replace")
+  // reste strictement inchangé ; seul ClientDetail.tsx (fiche formateur) active
+  // ce prop.
+  permettreImportExcel = false,
 }: {
   sessionId: string;
   canRelance?: boolean;
@@ -199,6 +212,7 @@ const StagiairesList = ({
   canal?: "email" | "sms" | "les_deux";
   formationTitre?: string;
   showSynthese?: boolean;
+  permettreImportExcel?: boolean;
 }) => {
   const { toast } = useToast();
   const [stagiaires, setStagiaires] = useState<Stagiaire[]>([]);
@@ -208,6 +222,12 @@ const StagiairesList = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [editForm, setEditForm] = useState({ nom: "", prenom: "", email_pro: "", telephone: "" });
   const [saving, setSaving] = useState(false);
+  // Import Excel côté formateur (voir permettreImportExcel) : état du fichier en
+  // cours de traitement, et référence pour réinitialiser l'input file après usage
+  // (un même fichier ne redéclenche pas onChange si le navigateur voit la même
+  // valeur — cf. même pattern dans EspaceClient.tsx).
+  const [importingExcel, setImportingExcel] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Attestations déjà générées, par stagiaire (stagiaire_id -> contenu_html). Document
   // individuel (contrairement au livret/émargement/devis qui sont propres à la session).
   const [attestations, setAttestations] = useState<Record<string, string>>({});
@@ -543,14 +563,14 @@ const StagiairesList = ({
     }
     setSaving(true);
     const { data: session } = await supabase.from("sessions").select("client_id").eq("id", sessionId).single();
-    const { error } = await supabase.from("stagiaires").insert({
+    const { data: inserted, error } = await supabase.from("stagiaires").insert({
       session_id: sessionId,
       client_id: (session as Record<string, string>)?.client_id || null,
       nom: editForm.nom,
       prenom: editForm.prenom,
       email_pro: editForm.email_pro,
       telephone: normalizePhone(editForm.telephone),
-    });
+    }).select("id").single();
     setSaving(false);
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
     setShowAddForm(false);
@@ -558,6 +578,218 @@ const StagiairesList = ({
     toast({ title: "Stagiaire ajouté" });
     const { data } = await supabase.from("stagiaires").select("*").eq("session_id", sessionId).order("nom");
     setStagiaires((data as Stagiaire[]) || []);
+
+    // Correctif du 04/11/2026 (retour d'Olivier : "rien ne part tout seul" quand
+    // un stagiaire est ajouté manuellement côté formateur) : jusqu'ici, seul
+    // l'import Excel côté client (EspaceClient.tsx) déclenchait l'envoi du livret
+    // d'accueil et du questionnaire de positionnement avant formation, via
+    // declencher-flow-session. Un stagiaire ajouté ici à la main ne recevait donc
+    // jamais ces documents automatiquement. On appelle désormais la même Edge
+    // Function, avec le même principe : un échec d'envoi n'annule jamais la
+    // création du stagiaire, on informe juste du résultat réel.
+    const newStagiaireId = (inserted as { id: string } | null)?.id;
+    if (newStagiaireId) {
+      try {
+        const { data: flowData, error: flowError } = await supabase.functions.invoke(
+          "declencher-flow-session",
+          { body: { session_id: sessionId, stagiaire_ids: [newStagiaireId], site_url: window.location.origin } }
+        );
+        if (flowError || (flowData as Record<string, unknown> | null)?.error) {
+          const errMsg = (flowError as { message?: string } | null)?.message
+            || (flowData as Record<string, unknown> | null)?.error
+            || "Erreur inconnue";
+          throw new Error(String(errMsg));
+        }
+        const resultats = ((flowData as Record<string, unknown> | null)?.resultats ?? []) as { success: boolean }[];
+        const nbOk = resultats.filter((r) => r.success).length;
+        if (resultats.length > 0 && nbOk === 0) {
+          toast({
+            title: "⚠️ Livret et questionnaire non envoyés",
+            description: "Vérifiez l'email/téléphone de ce stagiaire ou relancez-le manuellement.",
+            variant: "destructive",
+          });
+        }
+      } catch (flowErr) {
+        const flowMsg = flowErr instanceof Error ? flowErr.message : "Erreur inconnue";
+        toast({
+          title: "⚠️ Flow documentaire non déclenché",
+          description: `Le stagiaire a bien été ajouté, mais l'envoi automatique du livret et du questionnaire a échoué (${flowMsg}). Relancez-le manuellement.`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Même template que celui proposé côté client dans EspaceClient.tsx
+  // (downloadTemplate) : on garde exactement les mêmes 4 colonnes pour qu'un
+  // même fichier rempli par le client ou le formateur soit toujours accepté
+  // des deux côtés.
+  const telechargerTemplateExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["prenom", "nom", "mobile", "mail"],
+      ["Marie", "Dupont", "0612345678", "marie.dupont@entreprise.fr"],
+      ["Jean", "Martin", "0698765432", "jean.martin@entreprise.fr"],
+    ]);
+    const mobileCol = ["C2", "C3"];
+    mobileCol.forEach((cell) => {
+      if (ws[cell]) {
+        ws[cell].t = "s";
+        ws[cell].z = "@";
+      }
+    });
+    ws["!cols"] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws, "Stagiaires");
+    XLSX.writeFile(wb, "template_stagiaires_qualioflex.xlsx");
+  };
+
+  // Correctif du 04/11/2026 : import Excel côté formateur. Contrairement à la
+  // version client (EspaceClient.tsx::handleFileUpload) qui REMPLACE toute la
+  // liste des stagiaires de la session (delete puis insert), celle-ci est
+  // ADDITIVE : elle vient uniquement ajouter les lignes du fichier à la liste
+  // existante, sans jamais supprimer un stagiaire déjà présent (ajouté à la
+  // main ou importé précédemment) — cohérent avec le fait que le formateur
+  // peut déjà ajouter un stagiaire à la fois via "+ Ajouter un stagiaire".
+  const importerFichierExcel = async (file: File) => {
+    if (!file) return;
+    setImportingExcel(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false }) as Record<string, string>[];
+
+      if (rows.length === 0) {
+        toast({ title: "Fichier vide", description: "Aucune ligne trouvée.", variant: "destructive" });
+        return;
+      }
+
+      const firstRow = rows[0];
+      const keys = Object.keys(firstRow).map((k) => k.toLowerCase().trim());
+      const required = ["prenom", "nom", "mobile", "mail"];
+      const missing = required.filter((col) => !keys.some((k) => k === col || k === col.replace("e", "é")));
+      if (missing.length > 0) {
+        toast({
+          title: "Format incorrect",
+          description: `Colonnes manquantes : ${missing.join(", ")}. Téléchargez le template QualioFlex pour utiliser le bon format.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const getCol = (row: Record<string, string>, name: string) => {
+        const key = Object.keys(row).find((k) => k.toLowerCase().trim() === name);
+        return key ? String(row[key]).trim() : "";
+      };
+
+      const nouveauxStagiaires: { nom: string; prenom: string; email_pro: string; telephone: string }[] = [];
+      const errors: string[] = [];
+      rows.forEach((row, i) => {
+        const prenom = getCol(row, "prenom");
+        const nom = getCol(row, "nom");
+        const email_pro = getCol(row, "mail");
+        let telephone = getCol(row, "mobile").replace(/\s/g, "");
+        if (telephone.length === 9 && !telephone.startsWith("0")) telephone = "0" + telephone;
+
+        if (!prenom && !nom && !email_pro) return;
+        if (!prenom || !nom) {
+          errors.push(`Ligne ${i + 2} : prénom ou nom manquant`);
+          return;
+        }
+        nouveauxStagiaires.push({ nom, prenom, email_pro, telephone });
+      });
+
+      if (errors.length > 0) {
+        toast({
+          title: `${errors.length} ligne(s) ignorée(s)`,
+          description: errors.slice(0, 3).join(" | "),
+          variant: "destructive",
+        });
+      }
+
+      if (nouveauxStagiaires.length === 0) {
+        toast({
+          title: "Aucun stagiaire valide",
+          description: "Vérifiez que le fichier contient des données et utilise le bon format.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: session } = await supabase.from("sessions").select("client_id").eq("id", sessionId).single();
+      const clientId = (session as Record<string, string>)?.client_id || null;
+
+      const { data: insertedRows, error: insertError } = await supabase.from("stagiaires").insert(
+        nouveauxStagiaires.map((s) => ({
+          session_id: sessionId,
+          client_id: clientId,
+          nom: s.nom,
+          prenom: s.prenom,
+          email_pro: s.email_pro,
+          telephone: s.telephone,
+        }))
+      ).select("id");
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: `✅ ${nouveauxStagiaires.length} stagiaire(s) importé(s)`,
+        description: "Envoi du livret d'accueil et du questionnaire de positionnement en cours...",
+      });
+
+      const { data } = await supabase.from("stagiaires").select("*").eq("session_id", sessionId).order("nom");
+      setStagiaires((data as Stagiaire[]) || []);
+
+      const nouveauxIds = (insertedRows ?? []).map((r) => (r as { id: string }).id);
+      if (nouveauxIds.length > 0) {
+        try {
+          const { data: flowData, error: flowError } = await supabase.functions.invoke(
+            "declencher-flow-session",
+            { body: { session_id: sessionId, stagiaire_ids: nouveauxIds, site_url: window.location.origin } }
+          );
+          if (flowError || (flowData as Record<string, unknown> | null)?.error) {
+            const errMsg = (flowError as { message?: string } | null)?.message
+              || (flowData as Record<string, unknown> | null)?.error
+              || "Erreur inconnue";
+            throw new Error(String(errMsg));
+          }
+          const resultats = ((flowData as Record<string, unknown> | null)?.resultats ?? []) as { success: boolean }[];
+          const nbOk = resultats.filter((r) => r.success).length;
+          const nbTotal = resultats.length;
+          if (nbTotal === 0) {
+            toast({
+              title: "⚠️ Aucun envoi effectué",
+              description: "Aucun stagiaire importé ne dispose d'un email ou d'un téléphone pour recevoir le livret et le questionnaire.",
+              variant: "destructive",
+            });
+          } else if (nbOk < nbTotal) {
+            toast({
+              title: "⚠️ Flow documentaire partiellement envoyé",
+              description: `Livret et questionnaire envoyés pour ${nbOk}/${nbTotal} envoi(s). Vérifiez les coordonnées des stagiaires concernés ou relancez-les manuellement.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "📩 Flow documentaire déclenché",
+              description: `Livret d'accueil et questionnaire de positionnement envoyés (${nbOk}/${nbTotal}).`,
+            });
+          }
+        } catch (flowErr) {
+          const flowMsg = flowErr instanceof Error ? flowErr.message : "Erreur inconnue";
+          toast({
+            title: "⚠️ Flow documentaire non déclenché",
+            description: `Les stagiaires ont bien été importés, mais l'envoi automatique du livret et du questionnaire a échoué (${flowMsg}). Relancez-les manuellement.`,
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+      toast({ title: "Erreur import", description: msg, variant: "destructive" });
+    } finally {
+      setImportingExcel(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleRelance = async (stagiaire: Stagiaire, motif: string) => {
@@ -676,9 +908,34 @@ const StagiairesList = ({
           👥 Stagiaires ({stagiaires.length})
         </p>
         {canRelance && (
-          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setShowAddForm(true); setEditForm({ nom: "", prenom: "", email_pro: "", telephone: "" }); }}>
-            + Ajouter un stagiaire
-          </Button>
+          <div className="flex gap-2 flex-wrap justify-end">
+            {permettreImportExcel && (
+              <>
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={telechargerTemplateExcel}>
+                  📥 Template Excel
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  id={`import-excel-formateur-${sessionId}`}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) importerFichierExcel(file);
+                  }}
+                />
+                <label htmlFor={`import-excel-formateur-${sessionId}`}>
+                  <Button asChild size="sm" variant="outline" disabled={importingExcel} className="text-xs h-7 cursor-pointer">
+                    <span>{importingExcel ? "Import en cours..." : "📤 Importer un fichier Excel"}</span>
+                  </Button>
+                </label>
+              </>
+            )}
+            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setShowAddForm(true); setEditForm({ nom: "", prenom: "", email_pro: "", telephone: "" }); }}>
+              + Ajouter un stagiaire
+            </Button>
+          </div>
         )}
       </div>
 
