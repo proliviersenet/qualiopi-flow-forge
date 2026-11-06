@@ -189,6 +189,9 @@ const SessionSousTraitee = () => {
                 canal="les_deux"
                 formationTitre={session.formation?.titre || ""}
                 showSynthese={true}
+                // Correctif du 04/11/2026 : même raison que ClientDetail.tsx — page
+                // formateur (ici le sous-traitant), import Excel additif activé.
+                permettreImportExcel={true}
               />
             </>
           )}
