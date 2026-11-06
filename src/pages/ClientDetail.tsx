@@ -139,8 +139,18 @@ const ClientDetail = () => {
   // Dialog affecter formation
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedFormation, setSelectedFormation] = useState("");
-  const [dateDebut, setDateDebut] = useState("");
-  const [dateFin, setDateFin] = useState("");
+  // Correctif du 04/11/2026 (demande Olivier : "je dois pouvoir choisir le
+  // nombre de dates et selectionner les dates (ex: un formation de 4 jours, je
+  // dois pouvoir la positionner sur 4 demi journée)") — remplace la simple
+  // plage date de début/date de fin par une liste de dates (ou demi-
+  // journées), pas forcément consécutives. sessions.date_debut/date_fin sont
+  // calculés automatiquement (min/max de cette liste) au moment de
+  // l'enregistrement, pour ne rien casser de ce qui lit déjà ces deux colonnes
+  // (automatisations de relance, dashboards, alerte-avant-formation...) — voir
+  // handleAffecterFormation et la table additive session_dates.
+  const [datesSession, setDatesSession] = useState<{ date: string; creneau: "journee" | "matin" | "apres_midi" }[]>([]);
+  const [dateEnCours, setDateEnCours] = useState("");
+  const [creneauEnCours, setCreneauEnCours] = useState<"journee" | "matin" | "apres_midi">("journee");
   const [lieu, setLieu] = useState("");
   const [lienVisio, setLienVisio] = useState("");
   // Nombre de stagiaires estimé, saisi à l'affectation (retour terrain Olivier,
@@ -670,13 +680,41 @@ const ClientDetail = () => {
     init();
   }, [id, navigate, toast, authSession, authLoading]);
 
+  // Ajoute la date/créneau en cours de saisie à la liste des dates de la
+  // formation (voir datesSession ci-dessus). Un doublon exact (même date, même
+  // créneau) est refusé pour éviter deux lignes identiques dans session_dates.
+  const ajouterDateSession = () => {
+    if (!dateEnCours) {
+      toast({ title: "Choisissez une date", variant: "destructive" }); return;
+    }
+    const doublon = datesSession.some(d => d.date === dateEnCours && d.creneau === creneauEnCours);
+    if (doublon) {
+      toast({ title: "Cette date est déjà dans la liste", variant: "destructive" }); return;
+    }
+    setDatesSession(prev => [...prev, { date: dateEnCours, creneau: creneauEnCours }].sort((a, b) => a.date.localeCompare(b.date)));
+    setDateEnCours("");
+  };
+
+  const retirerDateSession = (index: number) => {
+    setDatesSession(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleAffecterFormation = async () => {
     if (!selectedFormation) {
       toast({ title: "Sélectionnez une formation", variant: "destructive" }); return;
     }
-    if (!dateDebut) {
-      toast({ title: "La date de début est obligatoire", variant: "destructive" }); return;
+    if (datesSession.length === 0) {
+      toast({ title: "Ajoutez au moins une date de formation", variant: "destructive" }); return;
     }
+
+    // date_debut/date_fin restent calculés automatiquement (min/max des dates
+    // choisies) : tout ce qui lit déjà ces deux colonnes (relances
+    // automatiques, dashboards, alerte-avant-formation...) continue de
+    // fonctionner sans changement, même sur une formation à dates non
+    // consécutives.
+    const joursTries = datesSession.map(d => d.date).slice().sort();
+    const dateDebutCalc = joursTries[0];
+    const dateFinCalc = joursTries[joursTries.length - 1];
 
     setSaving(true);
     const { data: newSession, error } = await supabase
@@ -684,8 +722,8 @@ const ClientDetail = () => {
       .insert({
         formation_id: selectedFormation,
         client_id: id,
-        date_debut: dateDebut || null,
-        date_fin: dateFin || null,
+        date_debut: dateDebutCalc,
+        date_fin: dateFinCalc,
         lieu: lieu || null,
         lien_visio: lienVisio || null,
         nb_stagiaires_estime: nbStagiairesEstime ? parseInt(nbStagiairesEstime, 10) : null,
@@ -694,15 +732,28 @@ const ClientDetail = () => {
       .select("id")
       .single();
 
-    setSaving(false);
-
     if (error || !newSession) {
+      setSaving(false);
       toast({ title: "Erreur", description: error?.message, variant: "destructive" }); return;
     }
 
+    // Détail des dates/demi-journées choisies (table additive session_dates).
+    // Non bloquant par conception : si cet insert échoue pour une raison
+    // quelconque, la session existe déjà avec date_debut/date_fin corrects et
+    // generer-emargement retombera simplement sur son comportement historique
+    // (une feuille par jour calendaire entre date_debut et date_fin).
+    const { error: datesError } = await supabase.from("session_dates").insert(
+      datesSession.map(d => ({ session_id: newSession.id, date: d.date, creneau: d.creneau }))
+    );
+    if (datesError) {
+      console.error("Erreur insertion session_dates (non bloquant):", datesError.message);
+    }
+
+    setSaving(false);
+
     toast({ title: "✅ Formation affectée", description: "La session a été créée. Le client peut maintenant importer ses stagiaires." });
     setDialogOpen(false);
-    setSelectedFormation(""); setDateDebut(""); setDateFin(""); setLieu(""); setLienVisio(""); setNbStagiairesEstime("");
+    setSelectedFormation(""); setDatesSession([]); setDateEnCours(""); setLieu(""); setLienVisio(""); setNbStagiairesEstime("");
     await fetchSessions(id!);
 
     // Correctif bug audit du 31/07 : prévenir le client par email qu'une session
@@ -1030,6 +1081,11 @@ const ClientDetail = () => {
                             canal="les_deux"
                             formationTitre={(session.formation as Record<string, string>)?.titre || ""}
                             showSynthese={true}
+                            // Correctif du 04/11/2026 : l'import Excel des stagiaires n'existait
+                            // que côté client (EspaceClient.tsx) — le formateur ne pouvait ajouter
+                            // qu'un stagiaire à la fois. Seul ce côté (fiche formateur) active
+                            // l'import, en mode additif (voir le commentaire dans StagiairesList.tsx).
+                            permettreImportExcel={true}
                           />
                         </div>
                       </div>
@@ -1164,15 +1220,39 @@ const ClientDetail = () => {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Date de début <span className="text-red-500">*</span></Label>
-                <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+            <div className="space-y-2">
+              <Label>Dates de la formation <span className="text-red-500">*</span></Label>
+              <p className="text-xs text-gray-500">
+                Ajoutez une ligne par journée (ou demi-journée) — les dates n'ont pas besoin d'être consécutives.
+              </p>
+              <div className="flex gap-2">
+                <Input type="date" value={dateEnCours} onChange={e => setDateEnCours(e.target.value)} className="flex-1" />
+                <Select value={creneauEnCours} onValueChange={(v) => setCreneauEnCours(v as typeof creneauEnCours)}>
+                  <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="journee">Journée complète</SelectItem>
+                    <SelectItem value="matin">Matin</SelectItem>
+                    <SelectItem value="apres_midi">Après-midi</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={ajouterDateSession}>+ Ajouter</Button>
               </div>
-              <div className="space-y-2">
-                <Label>Date de fin</Label>
-                <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
-              </div>
+              {datesSession.length > 0 && (
+                <ul className="space-y-1 mt-2 max-h-40 overflow-y-auto">
+                  {datesSession.map((d, i) => (
+                    <li key={`${d.date}-${d.creneau}-${i}`} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
+                      <span>
+                        📅 {new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                        {" — "}
+                        {d.creneau === "journee" ? "journée complète" : d.creneau === "matin" ? "matin" : "après-midi"}
+                      </span>
+                      <button type="button" onClick={() => retirerDateSession(i)} className="text-red-500 hover:text-red-700 font-medium">
+                        ✕ Retirer
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="space-y-2">
