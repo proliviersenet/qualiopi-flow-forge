@@ -87,26 +87,33 @@ const MfaGuard = () => {
   return null;
 };
 
-// Demande Olivier (23/09, sécurité) : déconnexion automatique après 5 min
-// sans la moindre action, côté formateur ET côté client — un seul garde
-// global (même principe que MfaGuard ci-dessus) puisque le besoin est
-// identique quel que soit l'espace : la session existe ou non, peu importe
-// le rôle derrière. La fermeture d'onglet/navigateur sans déconnexion
-// explicite est couverte séparément par le passage en sessionStorage dans
+// Demande Olivier (23/09, sécurité) : déconnexion automatique après
+// inactivité, côté formateur ET côté client — un seul garde global (même
+// principe que MfaGuard ci-dessus) puisque le besoin est identique quel que
+// soit l'espace : la session existe ou non, peu importe le rôle derrière. La
+// fermeture d'onglet/navigateur sans déconnexion explicite est couverte
+// séparément par le passage en sessionStorage dans
 // integrations/supabase/client.ts.
 //
 // Bug remonté par Olivier (04/10) : en quittant l'onglet QualioFlex (ex.
-// taper une recherche dans la barre d'adresse) puis en y revenant plus de
-// 5 min après, la session était toujours active. Cause : un simple
-// setTimeout ne tourne QUE tant que la page QualioFlex est chargée dans
-// l'onglet — dès qu'on navigue ailleurs dans ce même onglet, le JS (et donc
-// le minuteur) est entièrement déchargé et ne peut plus se déclencher, même
-// si on revient ensuite sur QualioFlex. On stocke donc en plus un horodatage
-// de dernière activité dans sessionStorage (survit à la navigation dans le
-// même onglet, disparaît à sa fermeture comme le reste de la session) et on
-// le vérifie à chaque remontage ET à chaque fois que l'onglet redevient
-// visible, pour rattraper une inactivité qui s'est écoulée hors-page.
-const DELAI_INACTIVITE_MS = 5 * 60 * 1000;
+// taper une recherche dans la barre d'adresse) puis en y revenant plus tard,
+// la session était toujours active. Cause : un simple setTimeout ne tourne
+// QUE tant que la page QualioFlex est chargée dans l'onglet — dès qu'on
+// navigue ailleurs dans ce même onglet, le JS (et donc le minuteur) est
+// entièrement déchargé et ne peut plus se déclencher, même si on revient
+// ensuite sur QualioFlex. On stocke donc en plus un horodatage de dernière
+// activité dans sessionStorage (survit à la navigation dans le même onglet,
+// disparaît à sa fermeture comme le reste de la session) et on le vérifie à
+// chaque remontage ET à chaque fois que l'onglet redevient visible, pour
+// rattraper une inactivité qui s'est écoulée hors-page.
+//
+// Correctif du 06/11/2026 (retour Olivier : 5 minutes, c'est trop court en
+// usage réel) : délai porté à 15 minutes. Le message affiché au moment de la
+// déconnexion (ci-dessous) reprend désormais cette valeur depuis la constante
+// plutôt que de l'avoir en dur, pour que les deux ne puissent plus diverger
+// si ce délai est encore ajusté un jour.
+const DELAI_INACTIVITE_MINUTES = 15;
+const DELAI_INACTIVITE_MS = DELAI_INACTIVITE_MINUTES * 60 * 1000;
 const CLE_DERNIERE_ACTIVITE = "qf_derniere_activite";
 
 const InactivityGuard = () => {
@@ -123,7 +130,7 @@ const InactivityGuard = () => {
       await supabase.auth.signOut();
       toast({
         title: "Déconnecté pour inactivité",
-        description: "Aucune activité détectée depuis 5 minutes — reconnectez-vous pour continuer.",
+        description: `Aucune activité détectée depuis ${DELAI_INACTIVITE_MINUTES} minutes — reconnectez-vous pour continuer.`,
       });
       navigate("/", { replace: true });
     };
