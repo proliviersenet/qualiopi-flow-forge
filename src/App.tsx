@@ -40,6 +40,7 @@ import NotationsFormateur from "./pages/NotationsFormateur";
 import ChatbotEscalades from "./pages/ChatbotEscalades";
 import AvisPublic from "./pages/AvisPublic";
 import ClientDetail from "./pages/ClientDetail";
+import PreuveAuditSession from "./pages/PreuveAuditSession";
 import SessionSousTraitee from "./pages/SessionSousTraitee";
 import Positionnement from "./pages/Positionnement";
 import EvaluationPublic from "./pages/EvaluationPublic";
@@ -255,6 +256,7 @@ const App = () => (
               <Route path="/livret/:token" element={<LivretPublic />} />
               <Route path="/attestation/:token" element={<AttestationPublic />} />
               <Route path="/clients/:id" element={<ClientDetail />} />
+              <Route path="/session/:id/preuve-audit" element={<PreuveAuditSession />} />
               <Route path="/sessions-sous-traitees/:sessionId" element={<SessionSousTraitee />} />
               <Route path="/features" element={<Features />} />
               <Route path="/demo" element={<Demo />} />
