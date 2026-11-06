@@ -1090,6 +1090,18 @@ const ClientDetail = () => {
                         </div>
                       </div>
                       <div className="flex sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
+                        {/* Demande Olivier (06/11/2026, audit Qualiopi) : pouvoir prouver à
+                            un auditeur que chaque signature et chaque envoi de document est
+                            tracé et horodaté — frise de preuve compilée à partir des
+                            horodatages déjà existants en base (voir PreuveAuditSession.tsx). */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-[#25245e] text-[#25245e] hover:bg-gray-50"
+                          onClick={() => navigate(`/session/${session.id}/preuve-audit`)}
+                        >
+                          🛡️ Preuve d'audit Qualiopi
+                        </Button>
                         {soustraitances[session.id] ? (
                           <Button
                             size="sm"
