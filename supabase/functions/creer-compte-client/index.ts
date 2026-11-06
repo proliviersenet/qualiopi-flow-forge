@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+ 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
+ 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-
+ 
   try {
     // site_url (optionnel, retour terrain Olivier 08/10/2026) : même correctif que
     // sur envoyer-invitation — le lien "voir la fiche client" envoyé au formateur
@@ -20,20 +20,20 @@ serve(async (req) => {
     const base = (typeof site_url === "string" && /^https?:\/\/[^\s/]+$/.test(site_url))
       ? site_url.replace(/\/$/, "")
       : "https://qualioflex.fr";
-
+ 
     if (!email || !password || !organisme_id || !token) {
       return new Response(
         JSON.stringify({ error: "Paramètres manquants" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
+ 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
-
+ 
     // 1. Vérifier token invitation
     const { data: invitation, error: invitError } = await supabase
       .from("invitations_clients")
@@ -42,20 +42,44 @@ serve(async (req) => {
       .eq("statut", "en_attente")
       .gte("expires_at", new Date().toISOString())
       .single();
-
+ 
     if (invitError || !invitation) {
       return new Response(
         JSON.stringify({ error: "Lien d'invitation invalide ou expiré" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
+ 
+    // 1bis. Correctif du 04/11/2026 (retour terrain Olivier, confusion après avoir
+    // utilisé une adresse déjà associée à un autre compte) : jusqu'ici, l'email
+    // soumis par le formulaire n'était jamais comparé à invitation.email avant
+    // d'aller chercher/mettre à jour un compte auth.users existant à l'étape 2.
+    // Un client acceptant une invitation pouvait donc saisir n'importe quelle
+    // adresse email déjà utilisée par un AUTRE compte (un autre client, voire un
+    // autre organisme) et en écraser silencieusement le mot de passe et les
+    // métadonnées via auth.admin.updateUserById — prise de contrôle de compte par
+    // erreur de saisie, sans aucun contrôle. Le lien d'invitation porte déjà
+    // l'adresse email prévue (invitations_clients.email) : on exige maintenant
+    // qu'elle corresponde à celle soumise (comparaison insensible à la casse et
+    // aux espaces superflus), sinon on refuse avec un message explicite plutôt
+    // que de laisser passer une invitation détournée vers un autre compte.
+    const emailInvitation = (invitation.email as string | null)?.trim().toLowerCase();
+    const emailSoumis = String(email).trim().toLowerCase();
+    if (emailInvitation && emailInvitation !== emailSoumis) {
+      return new Response(
+        JSON.stringify({
+          error: `Cette invitation a été envoyée à ${invitation.email}. Merci de créer votre compte avec cette adresse email (et non ${email}).`,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+ 
     // 2. Chercher si un compte existe avec cet email
     const { data: existingId } = await supabase.rpc("get_user_id_by_email", { p_email: email });
     console.log("Compte existant trouvé:", existingId);
-
+ 
     let userId: string;
-
+ 
     if (existingId) {
       // Mettre à jour le compte existant au lieu de le recréer
       console.log("Mise à jour du compte existant:", existingId);
@@ -82,7 +106,7 @@ serve(async (req) => {
       if (authError || !authData.user) throw new Error(authError?.message || "Erreur création compte");
       userId = authData.user.id;
     }
-
+ 
     // 3. Créer OU mettre à jour le client en base.
     // Retour terrain Olivier (08/10/2026) : quand l'invitation porte un client_id
     // (fiche déjà créée manuellement par le formateur via "+ Ajouter un client"),
@@ -99,18 +123,18 @@ serve(async (req) => {
       adresse: adresse || null,
       contact_email: email,
     };
-
+ 
     const { data: newClient, error: clientError } = invitation.client_id
       ? await supabase.from("clients").update(clientPayload).eq("id", invitation.client_id).select("id").single()
       : await supabase.from("clients").insert(clientPayload).select("id").single();
-
+ 
     if (clientError) {
       console.error("Erreur création/mise à jour client:", JSON.stringify(clientError));
       throw new Error(`Erreur création client: ${clientError.message}`);
     }
-
+ 
     console.log("Client créé/mis à jour avec succès pour:", email);
-
+ 
     // 3bis. Correctif bug audit du 31/07 : prévenir le formateur par email que
     // son client vient de finaliser la création de son compte — jusqu'ici
     // aucun email n'était envoyé à cette étape. Pour retrouver "le formateur
@@ -128,13 +152,13 @@ serve(async (req) => {
         .select("raison_sociale, email_contact")
         .eq("id", organisme_id)
         .maybeSingle();
-
+ 
       const emailFormateur = organisme?.email_contact as string | undefined;
-
+ 
       if (emailFormateur) {
         const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
         const lienFicheClient = `${base}/clients/${newClient?.id}`;
-
+ 
         const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -200,7 +224,7 @@ serve(async (req) => {
 </html>`,
           }),
         });
-
+ 
         if (!emailRes.ok) {
           console.error("Erreur envoi email formateur:", await emailRes.text());
         }
@@ -211,18 +235,18 @@ serve(async (req) => {
       // On ne bloque jamais la création du compte client si la notification échoue.
       console.error("Erreur notification formateur (non bloquante):", notifErr);
     }
-
+ 
     // 4. Marquer invitation utilisée
     await supabase
       .from("invitations_clients")
       .update({ statut: "utilisee" })
       .eq("token", token);
-
+ 
     return new Response(
       JSON.stringify({ success: true, user_id: userId }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
+ 
   } catch (err) {
     console.error("Erreur creer-compte-client:", err);
     return new Response(
@@ -231,3 +255,4 @@ serve(async (req) => {
     );
   }
 });
+ 
