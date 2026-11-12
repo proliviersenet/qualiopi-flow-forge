@@ -255,6 +255,47 @@ QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
   return r.ok;
 }
 
+// Emails « festifs » du parrainage (12/11/2026, demande Olivier) : bandeau
+// coloré, confettis, grand emoji, ton enjoué. Thèmes : fete (orange QualioFlex),
+// argent, or.
+const THEMES_FESTIFS: Record<string, { fond: string; texte: string; accent: string }> = {
+  fete: { fond: "linear-gradient(135deg,#f2901e 0%,#ffb347 50%,#25245e 100%)", texte: "#ffffff", accent: "#f2901e" },
+  argent: { fond: "linear-gradient(135deg,#8e9eab 0%,#eef2f3 50%,#8e9eab 100%)", texte: "#25245e", accent: "#6b7b8c" },
+  or: { fond: "linear-gradient(135deg,#b8860b 0%,#ffd700 45%,#fff3b0 60%,#d4a017 100%)", texte: "#3d2b00", accent: "#b8860b" },
+};
+
+async function envoyerEmailFestif(to: string, sujet: string, emoji: string, titre: string, corps: string, theme: "fete" | "argent" | "or" = "fete"): Promise<boolean> {
+  if (!BREVO_API_KEY || !to) return false;
+  const t = THEMES_FESTIFS[theme];
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#fff8ef;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fff8ef;padding:32px 0;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(37,36,94,0.12);">
+<tr><td style="background:#25245e;background-image:${t.fond};padding:28px 40px 32px;text-align:center;">
+<p style="margin:0;font-size:22px;letter-spacing:6px;">🎉 ✨ 🎊 ✨ 🎉</p>
+<p style="margin:12px 0 4px;font-size:72px;line-height:1;">${emoji}</p>
+<h1 style="margin:8px 0 0;color:${t.texte};font-size:26px;line-height:1.3;">${titre}</h1>
+<p style="margin:10px 0 0;color:${t.texte};font-size:13px;opacity:0.85;">QualioFlex by ExSenCo</p>
+</td></tr>
+<tr><td style="padding:36px 40px 28px;font-size:15px;">${corps}</td></tr>
+<tr><td style="padding:0 40px 28px;text-align:center;"><p style="margin:0;font-size:20px;letter-spacing:8px;">🎈 🥳 🎈</p></td></tr>
+<tr><td style="background:#f5f5f8;padding:18px 40px;border-top:1px solid #eee;"><p style="margin:0;color:#999;font-size:12px;">
+QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+<a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a></p></td></tr>
+</table></td></tr></table></body></html>`;
+  const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ sender: { name: "QualioFlex by ExSenCo", email: BREVO_SENDER_EMAIL }, to: [{ email: to }], subject: sujet, htmlContent: html }),
+  });
+  if (!r.ok) console.error("email festif: erreur Brevo", await r.text());
+  return r.ok;
+}
+
+// Encadré « récompense » pour les emails festifs
+const cadeau = (texte: string, couleur = "#f2901e") =>
+  `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="background:#fff8ef;border:2px dashed ${couleur};border-radius:12px;padding:18px 20px;text-align:center;color:#25245e;font-size:16px;line-height:1.5;">${texte}</td></tr></table>`;
+
 async function organismeDuClient(admin: SupabaseClient, customer: unknown, meta?: Stripe.Metadata | null): Promise<string | null> {
   if (meta?.organisme_id) return meta.organisme_id;
   const customerId = idDe(customer);
@@ -363,20 +404,22 @@ async function confirmerParrainage(admin: SupabaseClient, facture: Stripe.Invoic
   const parrain = await emailOrganisme(admin, pa.parrain_organisme_id);
   const filleul = await emailOrganisme(admin, filleulId);
   if (await premiereFois(admin, pa.parrain_organisme_id, "parrainage_confirme", pa.id)) {
-    await envoyerEmail(parrain.email, "[QualioFlex] Merci ! Vous avez gagné 1 mois offert",
-      "Votre parrainage est confirmé 🎉",
+    await envoyerEmailFestif(parrain.email, "🎉 Bingo ! Votre filleul vous offre 1 mois QualioFlex",
+      "🎁", "Bingo, un mois offert pour vous !",
       para("Bonjour,") +
-      para(`<strong>${filleul.nom}</strong> a rejoint QualioFlex grâce à vous. Pour vous remercier, <strong>votre prochain mois d'abonnement est offert</strong> : il sera déduit automatiquement de votre prochaine facture.`) +
-      para("Continuez à partager votre lien : chaque nouveau formateur parrainé vous offre un mois de plus.") +
-      bouton(`${SITE_URL}/factures`, "Voir mes parrainages →"));
+      para(`Excellente nouvelle : <strong>${filleul.nom}</strong> vient de rejoindre QualioFlex grâce à vous. Merci de faire grandir la tribu des formateurs sereins face à Qualiopi ! 🙌`) +
+      cadeau("🎁 <strong>1 mois d'abonnement OFFERT</strong><br><span style=\"font-size:13px;color:#666;\">déduit automatiquement de votre prochaine facture</span>") +
+      para("Et ce n'est qu'un début : chaque nouveau filleul vous rapporte un mois de plus, et les badges 🥈 Argent et 🥇 Or vous attendent au bout du chemin !") +
+      bouton(`${SITE_URL}/dashboard`, "Voir ma progression 🚀"));
   }
   if (await premiereFois(admin, filleulId, "bienvenue_filleul", pa.id)) {
-    await envoyerEmail(filleul.email, "[QualioFlex] Votre mois offert de parrainage",
-      "Un mois offert grâce à votre parrain",
+    await envoyerEmailFestif(filleul.email, "🎁 Cadeau de bienvenue : 1 mois QualioFlex offert !",
+      "🥳", "Bienvenue dans la famille QualioFlex !",
       para("Bonjour,") +
-      para(`Bienvenue parmi les abonnés QualioFlex ! Comme vous avez été parrainé par <strong>${parrain.nom}</strong>, <strong>votre prochain mois d'abonnement est offert</strong> : il sera déduit automatiquement de votre prochaine facture.`) +
-      para("Vous aussi, parrainez vos confrères formateurs : un mois offert pour chacun de vous deux.") +
-      bouton(`${SITE_URL}/factures`, "Mon code de parrainage →"));
+      para(`Ravis de vous compter parmi nos abonnés ! Et comme vous êtes arrivé grâce à <strong>${parrain.nom}</strong>, on fête ça dignement :`) +
+      cadeau("🎁 <strong>Votre prochain mois d'abonnement est OFFERT</strong><br><span style=\"font-size:13px;color:#666;\">déduit automatiquement de votre prochaine facture</span>") +
+      para("À votre tour de jouer : recommandez QualioFlex à vos confrères formateurs, et c'est <strong>un mois offert pour chacun de vous deux</strong> à chaque fois. 😉") +
+      bouton(`${SITE_URL}/dashboard`, "Récupérer mon lien de parrainage 🔗"));
   }
 
   await attribuerBadges(admin, pa.parrain_organisme_id);
@@ -401,13 +444,13 @@ async function attribuerBadges(admin: SupabaseClient, parrainId: string) {
     if (badge) {
       await admin.from("mois_offerts").insert({ organisme_id: parrainId, motif: "bonus_badge_argent", commentaire: `Badge Membre Argent (${confirmes} filleuls)` });
       if (await premiereFois(admin, parrainId, "badge_argent", badge.id)) {
-        await envoyerEmail(parrain.email, "[QualioFlex] 🥈 Vous êtes Membre Argent !",
-          "Bravo, vous êtes Membre Argent 🥈",
+        await envoyerEmailFestif(parrain.email, "🥈 Champagne ! Vous êtes Membre Argent QualioFlex",
+          "🥈", "Vous êtes Membre Argent !",
           para("Bonjour,") +
-          para(`Avec <strong>${confirmes} filleuls</strong>, <strong>${parrain.nom}</strong> obtient le badge <strong>Membre Argent</strong> de QualioFlex. Merci de faire grandir la communauté !`) +
-          para("En récompense, <strong>un mois d'abonnement supplémentaire vous est offert</strong>, en plus des mois gagnés pour chaque filleul.") +
-          para(`Prochaine étape : <strong>${seuilOr} filleuls</strong> pour devenir <strong>Membre Or</strong> et profiter de <strong>sessions illimitées offertes pendant un an</strong>.`) +
-          bouton(`${SITE_URL}/dashboard`, "Voir ma progression →"));
+          para(`${confirmes} filleuls ! <strong>${parrain.nom}</strong> décroche officiellement le badge <strong>Membre Argent</strong> de QualioFlex. Toute l'équipe vous applaudit 👏👏👏`) +
+          cadeau("🎁 <strong>BONUS : 1 mois d'abonnement OFFERT</strong><br><span style=\"font-size:13px;color:#666;\">en plus des mois déjà gagnés pour chaque filleul</span>", "#8e9eab") +
+          para(`Et maintenant, cap sur l'Or 🥇 : plus que <strong>${Math.max(seuilOr - confirmes, 1)} filleul${seuilOr - confirmes > 1 ? "s" : ""}</strong> et <strong>toutes vos sessions sont offertes pendant un an</strong>. Vous y êtes presque !`) +
+          bouton(`${SITE_URL}/dashboard`, "Admirer mon badge 🥈"), "argent");
       }
     }
   }
@@ -419,14 +462,14 @@ async function attribuerBadges(admin: SupabaseClient, parrainId: string) {
       .insert({ organisme_id: parrainId, niveau: "or", filleuls_confirmes: confirmes, sessions_offertes_jusqu_au: fin.toISOString() })
       .select("id").maybeSingle();
     if (badge && await premiereFois(admin, parrainId, "badge_or", badge.id)) {
-      await envoyerEmail(parrain.email, "[QualioFlex] 🥇 Vous êtes Membre Or !",
-        "Félicitations, vous êtes Membre Or 🥇",
+      await envoyerEmailFestif(parrain.email, "🥇 Roulements de tambour… Vous êtes Membre OR !",
+        "🏆", "Vous êtes Membre OR !",
         para("Bonjour,") +
-        para(`Avec <strong>${confirmes} filleuls</strong>, <strong>${parrain.nom}</strong> obtient le badge <strong>Membre Or</strong>, le plus haut niveau du parrainage QualioFlex.`) +
-        para(`Votre récompense : <strong>toutes vos sessions sont offertes jusqu'au ${dateFr(fin.toISOString())}</strong>, sans limite. Seul l'abonnement mensuel reste facturé.`) +
-        para("Pendant cette année offerte, votre code de parrainage est mis en pause ; vous pourrez à nouveau parrainer à son issue.") +
-        para("Merci infiniment pour votre confiance et vos recommandations !") +
-        bouton(`${SITE_URL}/dashboard`, "Voir mon badge →"));
+        para(`🥁 Roulements de tambour… Avec <strong>${confirmes} filleuls</strong>, <strong>${parrain.nom}</strong> atteint le sommet : le badge <strong>Membre Or</strong>, la distinction suprême du parrainage QualioFlex. Chapeau bas ! 🎩`) +
+        cadeau(`🎁 <strong>TOUTES VOS SESSIONS OFFERTES</strong><br>sans limite, jusqu'au <strong>${dateFr(fin.toISOString())}</strong><br><span style=\"font-size:13px;color:#666;\">seul l'abonnement mensuel reste facturé</span>`, "#d4a017") +
+        para("Pendant cette année en or, votre code de parrainage fait une petite pause bien méritée : vous pourrez reprendre la chasse aux filleuls à son issue. 😉") +
+        para("Merci du fond du cœur pour votre confiance et vos recommandations. Vous êtes un vrai ambassadeur ! 💛") +
+        bouton(`${SITE_URL}/dashboard`, "Admirer mon badge 🥇"), "or");
     }
   }
 }

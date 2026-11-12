@@ -24,14 +24,36 @@ type Parrainage = {
   sessions_offertes_jusqu_au?: string | null;
   parrainage_en_pause_jusqu_au?: string | null;
   mois_restants?: number;
+  mois_gagnes?: number;
 };
+
+// Célébration (12/11/2026, « plus festif ») : quand un mois offert ou un badge
+// apparaît depuis la dernière visite, la carte affiche des confettis et un
+// message de félicitations, une seule fois (mémorisé dans le navigateur).
+const CLE_VU = "qf_parrainage_vu";
+const CONFETTIS = ["🎉", "🎊", "✨", "🥳", "🎁", "⭐"];
 
 const CarteParrainage = () => {
   const { toast } = useToast();
   const [p, setP] = useState<Parrainage | null>(null);
+  const [fete, setFete] = useState<string | null>(null);
 
   useEffect(() => {
-    (supabase as any).rpc("mon_parrainage").then(({ data }: { data: Parrainage | null }) => setP(data ?? null));
+    (supabase as any).rpc("mon_parrainage").then(({ data }: { data: Parrainage | null }) => {
+      setP(data ?? null);
+      if (!data?.disponible) return;
+      const etat = { badge: data.badge ?? null, mois: data.mois_gagnes ?? 0 };
+      let avant: { badge: string | null; mois: number } | null = null;
+      try { avant = JSON.parse(localStorage.getItem(CLE_VU) ?? "null"); } catch { /* ignoré */ }
+      if (avant) {
+        if (etat.badge === "or" && avant.badge !== "or") setFete("🥇 Félicitations, vous êtes Membre Or ! Toutes vos sessions sont offertes pendant un an.");
+        else if (etat.badge === "argent" && !avant.badge) setFete("🥈 Bravo, vous êtes Membre Argent ! Un mois bonus vient de vous être offert.");
+        else if (etat.mois > avant.mois) setFete(`🎁 Youpi ! ${etat.mois - avant.mois > 1 ? `${etat.mois - avant.mois} nouveaux mois offerts` : "Un nouveau mois offert"} grâce au parrainage !`);
+      } else if (etat.badge || etat.mois > 0) {
+        setFete(etat.badge === "or" ? "🥇 Vous êtes Membre Or : sessions offertes pendant un an !" : etat.badge === "argent" ? "🥈 Vous êtes Membre Argent !" : "🎁 Vous avez gagné des mois offerts grâce au parrainage !");
+      }
+      try { localStorage.setItem(CLE_VU, JSON.stringify(etat)); } catch { /* ignoré */ }
+    });
   }, []);
 
   if (!p?.disponible || !p.code) return null;
@@ -52,7 +74,25 @@ const CarteParrainage = () => {
   };
 
   return (
-    <div className="mb-6 p-4 rounded-lg border bg-white" style={{ borderColor: p.badge === "or" ? "#d4a017" : p.badge === "argent" ? "#a8a9ad" : "#f2901e" }}>
+    <div className="relative overflow-hidden mb-6 p-4 rounded-lg border bg-white" style={{ borderColor: p.badge === "or" ? "#d4a017" : p.badge === "argent" ? "#a8a9ad" : "#f2901e" }}>
+      {fete && (
+        <>
+          <style>{`@keyframes qf-confetti { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(220px) rotate(540deg); opacity: 0; } }`}</style>
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <span key={i} className="absolute text-xl"
+                style={{ left: `${(i * 37) % 100}%`, top: 0, animation: `qf-confetti ${2.2 + (i % 5) * 0.4}s ease-in ${(i % 6) * 0.25}s 2 both` }}>
+                {CONFETTIS[i % CONFETTIS.length]}
+              </span>
+            ))}
+          </div>
+          <div className="relative mb-3 flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-semibold"
+            style={{ background: "linear-gradient(90deg,#fff3e0,#ffe0b2)", color: "#25245e" }}>
+            <span>{fete}</span>
+            <button type="button" className="text-gray-500 hover:text-gray-800" onClick={() => setFete(null)} aria-label="Fermer">✕</button>
+          </div>
+        </>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="text-4xl" aria-hidden>{p.badge === "or" ? "🥇" : p.badge === "argent" ? "🥈" : "🤝"}</span>

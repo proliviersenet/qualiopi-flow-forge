@@ -62,6 +62,47 @@ QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
   return r.ok;
 }
 
+// Emails « festifs » du parrainage (12/11/2026, demande Olivier) : bandeau
+// coloré, confettis, grand emoji, ton enjoué. Thèmes : fete (orange QualioFlex),
+// argent, or.
+const THEMES_FESTIFS: Record<string, { fond: string; texte: string; accent: string }> = {
+  fete: { fond: "linear-gradient(135deg,#f2901e 0%,#ffb347 50%,#25245e 100%)", texte: "#ffffff", accent: "#f2901e" },
+  argent: { fond: "linear-gradient(135deg,#8e9eab 0%,#eef2f3 50%,#8e9eab 100%)", texte: "#25245e", accent: "#6b7b8c" },
+  or: { fond: "linear-gradient(135deg,#b8860b 0%,#ffd700 45%,#fff3b0 60%,#d4a017 100%)", texte: "#3d2b00", accent: "#b8860b" },
+};
+
+async function envoyerEmailFestif(to: string, sujet: string, emoji: string, titre: string, corps: string, theme: "fete" | "argent" | "or" = "fete"): Promise<boolean> {
+  if (!BREVO_API_KEY || !to) return false;
+  const t = THEMES_FESTIFS[theme];
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#fff8ef;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fff8ef;padding:32px 0;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(37,36,94,0.12);">
+<tr><td style="background:#25245e;background-image:${t.fond};padding:28px 40px 32px;text-align:center;">
+<p style="margin:0;font-size:22px;letter-spacing:6px;">🎉 ✨ 🎊 ✨ 🎉</p>
+<p style="margin:12px 0 4px;font-size:72px;line-height:1;">${emoji}</p>
+<h1 style="margin:8px 0 0;color:${t.texte};font-size:26px;line-height:1.3;">${titre}</h1>
+<p style="margin:10px 0 0;color:${t.texte};font-size:13px;opacity:0.85;">QualioFlex by ExSenCo</p>
+</td></tr>
+<tr><td style="padding:36px 40px 28px;font-size:15px;">${corps}</td></tr>
+<tr><td style="padding:0 40px 28px;text-align:center;"><p style="margin:0;font-size:20px;letter-spacing:8px;">🎈 🥳 🎈</p></td></tr>
+<tr><td style="background:#f5f5f8;padding:18px 40px;border-top:1px solid #eee;"><p style="margin:0;color:#999;font-size:12px;">
+QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+<a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a></p></td></tr>
+</table></td></tr></table></body></html>`;
+  const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ sender: { name: "QualioFlex by ExSenCo", email: BREVO_SENDER_EMAIL }, to: [{ email: to }], subject: sujet, htmlContent: html }),
+  });
+  if (!r.ok) console.error("email festif: erreur Brevo", await r.text());
+  return r.ok;
+}
+
+// Encadré « récompense » pour les emails festifs
+const cadeau = (texte: string, couleur = "#f2901e") =>
+  `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="background:#fff8ef;border:2px dashed ${couleur};border-radius:12px;padding:18px 20px;text-align:center;color:#25245e;font-size:16px;line-height:1.5;">${texte}</td></tr></table>`;
+
 async function emailOrganisme(admin: SupabaseClient, organismeId: string) {
   const { data: org } = await admin.from("organismes")
     .select("raison_sociale, email_contact, owner_user_id").eq("id", organismeId).single();
@@ -211,14 +252,14 @@ Deno.serve(async (req: Request) => {
         if (!(siens ?? []).length) {
           // Jamais parrainé : incitation
           bilan.relances_parrainage++;
-          await envoyerEmail(dest.email, "[QualioFlex] Un confrère formateur à recommander ?",
-            "Recommandez QualioFlex, gagnez des mois offerts",
+          await envoyerEmailFestif(dest.email, "🎁 Et si vos confrères vous offraient des mois de QualioFlex ?",
+            "🤝", "Parrainez, gagnez, fêtez !",
             para("Bonjour,") +
-            para("Vous connaissez un formateur ou un organisme qui se bat encore avec ses documents Qualiopi ? Recommandez-lui QualioFlex :") +
-            para(`🎁 <strong>1 mois d'abonnement offert pour vous et 1 pour lui</strong> dès sa première facture.<br>🥈 <strong>${seuilArgent} filleuls</strong> : badge Membre Argent et un mois bonus.<br>🥇 <strong>${seuilOr} filleuls</strong> : badge Membre Or et <strong>toutes vos sessions offertes pendant un an</strong>.`) +
-            para("Il suffit de lui transmettre votre lien : son code est appliqué automatiquement à son inscription.") +
+            para("Vous connaissez un formateur qui se bat encore avec ses classeurs Qualiopi ? 📚😅 Rendez-lui service… et faites-vous plaisir au passage :") +
+            cadeau(`🎁 <strong>1 mois offert pour vous + 1 mois pour lui</strong><br><br>🥈 <strong>${seuilArgent} filleuls</strong> = badge Membre Argent + 1 mois BONUS<br>🥇 <strong>${seuilOr} filleuls</strong> = badge Membre Or + <strong>sessions offertes pendant 1 an</strong>`) +
+            para("C'est simple comme un copier-coller : envoyez-lui votre lien, son code s'applique tout seul à l'inscription. ✨") +
             blocCode +
-            bouton(`${SITE_URL}/dashboard`, "Voir mon tableau de bord →"));
+            bouton(`${SITE_URL}/dashboard`, "Je copie mon lien 🔗"));
           continue;
         }
         const argent = (badges ?? []).some((b) => b.niveau === "argent");
@@ -231,13 +272,14 @@ Deno.serve(async (req: Request) => {
           ? `Plus que <strong>${reste} filleul${reste > 1 ? "s" : ""}</strong> pour devenir <strong>Membre Or 🥇</strong> : toutes vos sessions offertes pendant un an.`
           : `Plus que <strong>${reste} filleul${reste > 1 ? "s" : ""}</strong> pour devenir <strong>Membre Argent 🥈</strong> et gagner un mois offert supplémentaire.`;
         bilan.relances_parrainage++;
-        await envoyerEmail(dest.email, "[QualioFlex] Vos mois offerts vous attendent",
-          "Parrainez, gagnez des mois offerts",
+        await envoyerEmailFestif(dest.email, `🚀 ${confirmes} filleul${confirmes > 1 ? "s" : ""} au compteur… on continue ?`,
+          dejaOr ? "🥇" : argent ? "🥈" : "🚀", "Votre aventure parrainage continue !",
           para("Bonjour,") +
-          para(`Chaque formateur que vous recommandez à QualioFlex vous fait gagner <strong>un mois d'abonnement offert</strong>, et à lui aussi.`) +
-          para(`Où en êtes-vous ? <strong>${confirmes} filleul${confirmes > 1 ? "s" : ""} confirmé${confirmes > 1 ? "s" : ""}</strong>${dejaOr ? " · Membre Or 🥇" : argent ? " · badge Membre Argent 🥈" : ""}. ${objectif}`) +
+          para(`Bravo, vous faites déjà partie des formateurs qui font grandir QualioFlex ! 🙌 Petit point d'étape :`) +
+          cadeau(`<strong>${confirmes} filleul${confirmes > 1 ? "s" : ""} confirmé${confirmes > 1 ? "s" : ""}</strong>${dejaOr ? " · Membre Or 🥇" : argent ? " · Membre Argent 🥈" : ""}<br><br>${objectif}`) +
+          para("Chaque nouveau filleul, c'est <strong>un mois offert pour vous et un pour lui</strong>. Qui sera le prochain ? 😉") +
           blocCode +
-          bouton(`${SITE_URL}/dashboard`, "Voir ma progression →"));
+          bouton(`${SITE_URL}/dashboard`, "Voir ma progression 🚀"), dejaOr ? "or" : argent ? "argent" : "fete");
       } catch (e) {
         bilan.erreurs.push(`${ab.organisme_id} : ${(e as Error).message}`);
       }
