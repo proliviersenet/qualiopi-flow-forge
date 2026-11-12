@@ -95,7 +95,12 @@ Deno.serve(async (req: Request) => {
     const metadata = { paiement_id: paiementId, organisme_id: organisme.id, user_id: user.id, motif: MOTIF, contexte };
     const origin = req.headers.get("origin") || "https://qualioflex.fr";
 
+    // Managed Payments (Stripe « merchant of record ») est activé par défaut
+    // sur le compte : on le désactive explicitement, QualioFlex/ExSenCo reste
+    // le vendeur et émet ses propres factures (décision Olivier du 09/11).
+    // Paramètre récent, absent des types du SDK 17.5 : passé tel quel.
     const session = await stripe.checkout.sessions.create({
+      managed_payments: { enabled: false },
       mode: "payment",
       customer: customerId,
       locale: "fr",
@@ -111,7 +116,7 @@ Deno.serve(async (req: Request) => {
       metadata,
       success_url: `${origin}/settings?paiement=succes&contexte=${contexte}`,
       cancel_url: `${origin}/settings?paiement=annule`,
-    });
+    } as Stripe.Checkout.SessionCreateParams);
 
     const montantTtc = Math.round(tarif.montant_ht_centimes * (1 + Number(tarif.taux_tva) / 100));
     const { error: insertErr } = await admin.from("paiements_stripe").insert({
