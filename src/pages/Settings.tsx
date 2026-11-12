@@ -43,6 +43,10 @@ const Settings = () => {
   const [deleteStep, setDeleteStep] = useState<DeleteStep>("idle");
   const [deleting, setDeleting] = useState(false);
   const [payingStripe, setPayingStripe] = useState(false);
+  // Chantier facturation (12/11/2026) : prix de l'export lu dans la grille
+  // public.tarifs (HT + TVA) au lieu d'être codé en dur. Valeurs par défaut
+  // affichées tant que la grille n'est pas chargée.
+  const [prixExport, setPrixExport] = useState<{ ht: number; ttc: number }>({ ht: 10, ttc: 12 });
 
   // Chantier "2FA" (14/09, point 13 de l'audit) : activation opt-in de la
   // double authentification (TOTP), proposée ici dans la carte "Sécurité"
@@ -85,6 +89,15 @@ const Settings = () => {
       setNotifRelances(u.user_metadata?.notif_relances !== false);
       setNotifSignatures(u.user_metadata?.notif_signatures !== false);
       await chargerFacteursMfa();
+      const { data: tarifExport } = await supabase
+        .from("tarifs")
+        .select("montant_ht_centimes, taux_tva")
+        .eq("code", "export_donnees")
+        .maybeSingle();
+      if (tarifExport) {
+        const ht = tarifExport.montant_ht_centimes / 100;
+        setPrixExport({ ht, ttc: Math.round(ht * (1 + Number(tarifExport.taux_tva) / 100) * 100) / 100 });
+      }
       setLoading(false);
     };
     init();
@@ -246,10 +259,15 @@ const Settings = () => {
   // Conservé pour compatibilité : suppression sans récupération de données
   const handleDeleteNoRecovery = () => demanderSuppression(false, null);
 
-  // Paiement Stripe (10 € de frais de récupération de données)
+  // Paiement Stripe de l'export des données (carte uniquement depuis le
+  // 12/11/2026). L'export est généré et envoyé par email automatiquement à la
+  // confirmation du paiement par Stripe (webhook), même si le formateur ne
+  // revient jamais sur cette page.
   const payerAvecStripe = async () => {
     setPayingStripe(true);
-    const { data, error } = await supabase.functions.invoke("stripe-checkout-recuperation");
+    const { data, error } = await supabase.functions.invoke("stripe-checkout-recuperation", {
+      body: { contexte: "suppression" },
+    });
     if (error || data?.error) {
       let message = data?.error || error?.message;
       const ctx = (error as { context?: Response })?.context;
@@ -278,7 +296,7 @@ const Settings = () => {
     const paiement = params.get("paiement");
     if (paiement === "succes") {
       window.history.replaceState({}, "", "/settings");
-      toast({ title: "Paiement reçu", description: "Merci ! Votre demande de suppression avec récupération de données est enregistrée." });
+      toast({ title: "Paiement reçu", description: "Merci ! Votre export et votre facture vous sont envoyés par email dans quelques minutes." });
       demanderSuppression(true, "stripe");
     } else if (paiement === "annule") {
       window.history.replaceState({}, "", "/settings");
@@ -538,12 +556,15 @@ const Settings = () => {
           <DialogHeader>
             <DialogTitle>Récupérer vos données</DialogTitle>
             <DialogDescription className="pt-2 space-y-3">
-              <p>Vous pouvez recevoir l'export complet de vos données (formations, sessions, clients, stagiaires, BPF, documents) au format ZIP.</p>
+              <p>Vous pouvez recevoir l'export complet de vos données au format ZIP : formations, sessions, clients, stagiaires, BPF, documents générés, conventions signées (PDF) et preuves d'audit Qualiopi horodatées.</p>
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <p className="text-sm font-medium text-orange-800">Frais de récupération technique : <span className="text-lg">10 €</span></p>
-                <p className="text-xs text-orange-600 mt-1">Paiement sécurisé par CB — traitement sous 48h ouvrées</p>
+                <p className="text-sm font-medium text-orange-800">
+                  Frais de récupération technique : <span className="text-lg">{prixExport.ht.toLocaleString("fr-FR")} € HT</span>
+                  <span className="text-xs"> ({prixExport.ttc.toLocaleString("fr-FR")} € TTC)</span>
+                </p>
+                <p className="text-xs text-orange-600 mt-1">Paiement sécurisé par carte — archive et facture envoyées par email en quelques minutes</p>
               </div>
-              <p className="text-sm text-gray-500">Souhaitez-vous payer 10 € pour récupérer l'intégralité de vos données ?</p>
+              <p className="text-sm text-gray-500">Souhaitez-vous récupérer l'intégralité de vos données ?</p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-col gap-2 pt-2 sm:flex-col">
@@ -552,7 +573,7 @@ const Settings = () => {
               className="w-full font-bold"
               onClick={() => setDeleteStep("payment")}
             >
-              Payer 10 € et récupérer
+              Payer {prixExport.ht.toLocaleString("fr-FR")} € HT et récupérer
             </Button>
             <Button
               variant="outline"
@@ -569,14 +590,16 @@ const Settings = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Étape 3 — Paiement (Stripe Checkout, avec virement en repli) */}
+      {/* Étape 3 — Paiement par carte (Stripe Checkout). Virement supprimé le
+          12/11/2026 (décision Olivier) : paiement uniquement par carte, export
+          généré automatiquement à la confirmation du paiement. */}
       <Dialog open={deleteStep === "payment"} onOpenChange={() => setDeleteStep("idle")}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Paiement — 10 €</DialogTitle>
+            <DialogTitle>Paiement — {prixExport.ht.toLocaleString("fr-FR")} € HT</DialogTitle>
             <DialogDescription className="pt-2 space-y-3">
               <p className="text-sm text-gray-600">
-                Réglez les <strong>10 €</strong> de frais de récupération par carte bancaire (paiement sécurisé Stripe).
+                Réglez les frais de récupération de <strong>{prixExport.ht.toLocaleString("fr-FR")} € HT</strong> ({prixExport.ttc.toLocaleString("fr-FR")} € TTC) par carte bancaire, sur la page de paiement sécurisée Stripe.
               </p>
               <Button
                 className="w-full font-bold"
@@ -584,31 +607,15 @@ const Settings = () => {
                 onClick={payerAvecStripe}
                 disabled={payingStripe}
               >
-                {payingStripe ? "Redirection vers Stripe..." : "💳 Payer 10 € par carte"}
+                {payingStripe ? "Redirection vers Stripe..." : `💳 Payer ${prixExport.ttc.toLocaleString("fr-FR")} € TTC par carte`}
               </Button>
-              <div className="relative py-1 text-center">
-                <span className="text-xs text-gray-400 bg-white px-2">ou par virement</span>
-              </div>
-              <p className="text-sm text-gray-600">
-                Envoyez un virement de <strong>10 €</strong> avec la référence <strong>RECUP-{user?.email}</strong> à :
-              </p>
-              <div className="bg-gray-50 rounded-lg p-3 text-sm font-mono">
-                <p>EXSENCO</p>
-                <p>IBAN : FR76 XXXX XXXX XXXX XXXX XXXX XXX</p>
-              </div>
               <p className="text-xs text-gray-400">
-                Votre export sera envoyé à <strong>{user?.email}</strong> sous 48h ouvrées après réception du paiement.
+                Dès le paiement confirmé, votre archive et votre facture sont envoyées à <strong>{user?.email}</strong> en quelques minutes.
+                Votre compte sera ensuite désactivé.
               </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-col gap-2 pt-2 sm:flex-col">
-            <Button
-              className="w-full bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => demanderSuppression(true, "virement")}
-              disabled={deleting}
-            >
-              {deleting ? "Traitement..." : "J'ai payé par virement — supprimer mon compte"}
-            </Button>
             <Button variant="outline" className="w-full" onClick={() => setDeleteStep("idle")}>
               Annuler
             </Button>
