@@ -14,6 +14,11 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 //
 // Refuse si la facturation ne s'applique pas à l'organisme (bêta), si le
 // compte est super ambassadeur, ou si un abonnement est déjà en cours.
+//
+// Lot 5 (parrainage) : body { code_parrainage? }. Le code est vérifié ici
+// (existant, actif, pas le sien, organisme jamais abonné) puis transmis au
+// webhook dans les métadonnées : le parrainage est enregistré à la création
+// de l'abonnement et confirmé au paiement de la première facture.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,12 +69,25 @@ Deno.serve(async (req: Request) => {
     if (!active) return reponse({ error: "L'abonnement n'est pas encore ouvert : QualioFlex est gratuit pendant la bêta." }, 400);
 
     const { data: abonnement } = await admin.from("abonnements_organismes")
-      .select("statut, type_compte").eq("organisme_id", organisme.id).maybeSingle();
+      .select("statut, type_compte, stripe_subscription_id").eq("organisme_id", organisme.id).maybeSingle();
     if (abonnement?.type_compte === "super_ambassadeur") {
       return reponse({ error: "Votre compte ambassadeur est exempté d'abonnement." }, 400);
     }
     if (abonnement && STATUTS_EN_COURS.includes(abonnement.statut)) {
       return reponse({ error: "Un abonnement est déjà en cours pour votre organisme." }, 409);
+    }
+
+    // Code de parrainage facultatif
+    const body = await req.json().catch(() => ({}));
+    const codeSaisi = typeof body?.code_parrainage === "string" ? body.code_parrainage.trim().toUpperCase() : "";
+    let codeParrainage = "";
+    if (codeSaisi) {
+      const { data: code } = await admin.from("codes_parrainage")
+        .select("organisme_id, actif").eq("code", codeSaisi).maybeSingle();
+      if (!code?.actif) return reponse({ error: "Ce code de parrainage n'existe pas. Vérifiez-le ou laissez le champ vide." }, 400);
+      if (code.organisme_id === organisme.id) return reponse({ error: "Vous ne pouvez pas utiliser votre propre code de parrainage." }, 400);
+      if (abonnement?.stripe_subscription_id) return reponse({ error: "Le parrainage est réservé aux nouveaux abonnés : laissez le champ vide." }, 400);
+      codeParrainage = codeSaisi;
     }
 
     const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20", httpClient: Stripe.createFetchHttpClient() });
@@ -99,7 +117,8 @@ Deno.serve(async (req: Request) => {
     const prixHt = (tarif.montant_ht_centimes / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2 });
 
     const origin = req.headers.get("origin") || "https://qualioflex.fr";
-    const metadata = { organisme_id: organisme.id, user_id: user.id, motif: "abonnement" };
+    const metadata: Record<string, string> = { organisme_id: organisme.id, user_id: user.id, motif: "abonnement" };
+    if (codeParrainage) metadata.code_parrainage = codeParrainage;
 
     // Managed Payments désactivé : ExSenCo reste le vendeur (cf. export).
     const session = await stripe.checkout.sessions.create({

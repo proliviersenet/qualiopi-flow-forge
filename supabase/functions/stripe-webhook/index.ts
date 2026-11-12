@@ -25,6 +25,12 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 //    · retour à « active » après un impayé → réactivation (email si coupé) ;
 //    · fin d'abonnement (résiliation effective) → facture finale des sessions
 //      dues non encore facturées + email de fin avec proposition d'export.
+//  - lot 5 (12/11/2026), parrainage :
+//    · création de l'abonnement avec un code → parrainage « en_attente » ;
+//    · première facture payante du filleul réglée → parrainage confirmé,
+//      1 mois offert au parrain et 1 au filleul (registre mois_offerts) ;
+//    · facture du 1er du mois (mois complet) avec un mois offert disponible →
+//      ligne négative du montant de l'abonnement, mois marqué consommé.
 //
 // Idempotent : Stripe peut renvoyer un même événement, rien n'est dupliqué.
 
@@ -287,6 +293,100 @@ async function creerAbonnement(admin: SupabaseClient, stripe: Stripe, session: S
     updated_at: new Date().toISOString(),
   }, { onConflict: "organisme_id" });
   if (error) throw new Error(`Enregistrement abonnement : ${error.message}`);
+
+  if (session.metadata?.code_parrainage) await enregistrerParrainage(admin, organismeId, session.metadata.code_parrainage);
+}
+
+// ───────────────────────── Parrainage (lot 5) ─────────────────────────
+
+async function enregistrerParrainage(admin: SupabaseClient, filleulId: string, code: string) {
+  const { data: c } = await admin.from("codes_parrainage").select("id, organisme_id, actif").eq("code", code).maybeSingle();
+  if (!c?.actif || c.organisme_id === filleulId) return;
+  const { error } = await admin.from("parrainages").insert({
+    code_id: c.id, parrain_organisme_id: c.organisme_id, filleul_organisme_id: filleulId, statut: "en_attente",
+  });
+  if (error && !error.message.includes("duplicate")) console.error("stripe-webhook: parrainage non enregistré:", error.message);
+}
+
+// Première facture payante du filleul réglée → 1 mois offert de chaque côté
+async function confirmerParrainage(admin: SupabaseClient, facture: Stripe.Invoice) {
+  if ((facture.amount_paid ?? 0) <= 0 || facture.billing_reason !== "subscription_cycle") return;
+  const filleulId = await organismeDeLaFacture(admin, facture);
+  if (!filleulId) return;
+  const { data: pa } = await admin.from("parrainages")
+    .update({ statut: "confirme", confirme_le: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("filleul_organisme_id", filleulId).eq("statut", "en_attente")
+    .select("id, parrain_organisme_id").maybeSingle();
+  if (!pa) return; // pas de parrainage, ou déjà confirmé (événement rejoué)
+
+  const { error } = await admin.from("mois_offerts").insert([
+    { organisme_id: pa.parrain_organisme_id, motif: "parrainage_parrain", parrainage_id: pa.id },
+    { organisme_id: filleulId, motif: "parrainage_filleul", parrainage_id: pa.id },
+  ]);
+  if (error) throw new Error(`Mois offerts du parrainage ${pa.id} : ${error.message}`);
+
+  const parrain = await emailOrganisme(admin, pa.parrain_organisme_id);
+  const filleul = await emailOrganisme(admin, filleulId);
+  if (await premiereFois(admin, pa.parrain_organisme_id, "parrainage_confirme", pa.id)) {
+    await envoyerEmail(parrain.email, "[QualioFlex] Merci ! Vous avez gagné 1 mois offert",
+      "Votre parrainage est confirmé 🎉",
+      para("Bonjour,") +
+      para(`<strong>${filleul.nom}</strong> a rejoint QualioFlex grâce à vous. Pour vous remercier, <strong>votre prochain mois d'abonnement est offert</strong> : il sera déduit automatiquement de votre prochaine facture.`) +
+      para("Continuez à partager votre lien : chaque nouveau formateur parrainé vous offre un mois de plus.") +
+      bouton(`${SITE_URL}/factures`, "Voir mes parrainages →"));
+  }
+  if (await premiereFois(admin, filleulId, "bienvenue_filleul", pa.id)) {
+    await envoyerEmail(filleul.email, "[QualioFlex] Votre mois offert de parrainage",
+      "Un mois offert grâce à votre parrain",
+      para("Bonjour,") +
+      para(`Bienvenue parmi les abonnés QualioFlex ! Comme vous avez été parrainé par <strong>${parrain.nom}</strong>, <strong>votre prochain mois d'abonnement est offert</strong> : il sera déduit automatiquement de votre prochaine facture.`) +
+      para("Vous aussi, parrainez vos confrères formateurs : un mois offert pour chacun de vous deux.") +
+      bouton(`${SITE_URL}/factures`, "Mon code de parrainage →"));
+  }
+}
+
+// Facture du 1er du mois : déduit un mois offert si l'abonnement est facturé
+// pour un mois complet (pas sur une facture au prorata, pour ne pas gâcher le mois).
+async function appliquerMoisOffert(admin: SupabaseClient, stripe: Stripe, facture: Stripe.Invoice) {
+  if (facture.status !== "draft" || facture.billing_reason !== "subscription_cycle") return;
+  const organismeId = await organismeDeLaFacture(admin, facture);
+  const customerId = idDe(facture.customer);
+  if (!organismeId || !customerId) return;
+
+  const { data: tarif } = await admin.from("tarifs")
+    .select("montant_ht_centimes, stripe_tax_rate_id").eq("code", "abonnement_mensuel").single();
+  const montantAbonnement = (facture.lines?.data ?? [])
+    .filter((l) => (l as unknown as { type?: string }).type === "subscription" || !!(l as unknown as { parent?: { subscription_item_details?: unknown } }).parent?.subscription_item_details)
+    .reduce((t, l) => t + (l.amount ?? 0), 0);
+  if (montantAbonnement < tarif.montant_ht_centimes) return; // prorata ou rien à déduire
+
+  // Déjà appliqué sur cette facture (événement rejoué) ?
+  const { data: ligneFacture } = await admin.from("factures").select("id, mois_offert").eq("stripe_invoice_id", facture.id).maybeSingle();
+  if (ligneFacture?.mois_offert) return;
+
+  const { data: mois } = await admin.from("mois_offerts")
+    .select("id, motif").eq("organisme_id", organismeId).is("consomme_le", null)
+    .order("accorde_le", { ascending: true }).limit(1).maybeSingle();
+  if (!mois) return;
+
+  await stripe.invoiceItems.create({
+    customer: customerId,
+    invoice: facture.id,
+    amount: -tarif.montant_ht_centimes,
+    currency: "eur",
+    description: mois.motif.startsWith("parrainage") ? "Mois offert — parrainage" : "Mois offert",
+    tax_rates: tarif.stripe_tax_rate_id ? [tarif.stripe_tax_rate_id] : undefined,
+    metadata: { mois_offert_id: mois.id, organisme_id: organismeId },
+  }, { idempotencyKey: `qf-mois-offert-${mois.id}` });
+
+  // Copie locale (brouillon) pour relier le mois consommé à la facture
+  const { data: f, error } = await admin.from("factures").upsert({
+    organisme_id: organismeId, stripe_invoice_id: facture.id, statut: "brouillon", mois_offert: true,
+    montant_ht_centimes: 0, montant_tva_centimes: 0, montant_ttc_centimes: 0, updated_at: new Date().toISOString(),
+  }, { onConflict: "stripe_invoice_id" }).select("id").single();
+  if (error) throw new Error(`Facture locale ${facture.id} : ${error.message}`);
+  await admin.from("mois_offerts").update({ consomme_le: new Date().toISOString(), facture_id: f.id })
+    .eq("id", mois.id).is("consomme_le", null);
 }
 
 function statutLocal(sub: Stripe.Subscription, statutActuel: string | null): string {
@@ -558,10 +658,14 @@ Deno.serve(async (req: Request) => {
       }
       case "invoice.created":
         await ajouterSessionsALaFacture(admin, stripe, event.data.object as Stripe.Invoice);
+        await appliquerMoisOffert(admin, stripe, event.data.object as Stripe.Invoice);
         break;
       case "invoice.finalized":
+        await enregistrerFacture(admin, event.data.object as Stripe.Invoice);
+        break;
       case "invoice.paid":
         await enregistrerFacture(admin, event.data.object as Stripe.Invoice);
+        await confirmerParrainage(admin, event.data.object as Stripe.Invoice);
         break;
       case "invoice.payment_failed":
         await enregistrerFacture(admin, event.data.object as Stripe.Invoice, true);

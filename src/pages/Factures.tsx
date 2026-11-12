@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -46,6 +47,16 @@ type Facture = {
   hosted_url: string | null;
 };
 
+type Parrainage = {
+  disponible: boolean;
+  code?: string;
+  filleuls_en_attente?: number;
+  filleuls_confirmes?: number;
+  mois_gagnes?: number;
+  mois_restants?: number;
+  parrain?: string | null;
+};
+
 type SessionAFacturer = {
   id: string;
   libelle: string;
@@ -80,6 +91,11 @@ const Factures = () => {
   const [redirection, setRedirection] = useState<"souscription" | "portail" | "export" | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
   const [confirmerResiliation, setConfirmerResiliation] = useState(false);
+  const [parrainage, setParrainage] = useState<Parrainage | null>(null);
+  const [codeParrain, setCodeParrain] = useState(() => {
+    try { return localStorage.getItem("qf_parrain") ?? ""; } catch { return ""; }
+  });
+  const [verifParrain, setVerifParrain] = useState<{ valide: boolean; parrain?: string; raison?: string } | null>(null);
   const [attenteActivation, setAttenteActivation] = useState(false);
 
   const activation = new URLSearchParams(window.location.search).get("activation") === "1";
@@ -105,6 +121,8 @@ const Factures = () => {
       // on les masque, sauf les mois offerts (parrainage) qu'on veut montrer.
       setFactures(((lignes ?? []) as Facture[]).filter((f) => f.montant_ttc_centimes > 0 || f.mois_offert));
       setSessionsAFacturer((sessionsDues ?? []) as SessionAFacturer[]);
+      const { data: p } = await (supabase as any).rpc("mon_parrainage");
+      setParrainage((p ?? null) as Parrainage | null);
       const t = Object.fromEntries((tarifs ?? []).map((x: { code: string; montant_ht_centimes: number }) => [x.code, x.montant_ht_centimes]));
       setPrix({ abonnement: t.abonnement_mensuel ?? 3490, session: t.session ?? 300, export: t.export_donnees ?? 1000 });
     };
@@ -152,6 +170,26 @@ const Factures = () => {
     verifier();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Vérification du code de parrainage saisi (nom du parrain affiché)
+  useEffect(() => {
+    const code = codeParrain.trim();
+    if (!code) { setVerifParrain(null); return; }
+    const t = setTimeout(async () => {
+      const { data } = await (supabase as any).rpc("verifier_code_parrainage", { p_code: code });
+      setVerifParrain(data ?? null);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [codeParrain]);
+
+  const copier = async (texte: string, quoi: string) => {
+    try {
+      await navigator.clipboard.writeText(texte);
+      toast({ title: `${quoi} copié`, description: texte });
+    } catch {
+      toast({ title: "Copie impossible", description: texte });
+    }
+  };
 
   const messageErreur = async (data: { error?: string } | null, error: unknown) => {
     let message = data?.error || (error as Error | null)?.message || "Erreur inconnue";
@@ -369,8 +407,19 @@ const Factures = () => {
               </ul>
               <p className="mt-2 text-xs text-gray-500">Votre carte est demandée pour démarrer l'essai. Aucun prélèvement pendant 7 jours ; un rappel vous est envoyé avant la fin de l'essai.</p>
             </div>
+            {s.statut !== "resilie" && (
+              <div className="space-y-1 max-w-sm">
+                <label htmlFor="code-parrain" className="text-sm text-gray-700">Code de parrainage (facultatif)</label>
+                <Input id="code-parrain" value={codeParrain} placeholder="Ex. EXSENC-123"
+                  onChange={(e) => setCodeParrain(e.target.value.toUpperCase())} />
+                {verifParrain?.valide && <p className="text-xs text-green-700">✓ Parrainé par {verifParrain.parrain} : 1 mois offert après votre première facture.</p>}
+                {verifParrain && !verifParrain.valide && <p className="text-xs text-red-600">{verifParrain.raison}</p>}
+              </div>
+            )}
             <Button className="font-bold" style={{ background: "#f2901e", color: "#fff" }}
-              onClick={() => appelerFonction("stripe-abonnement-checkout", "souscription")} disabled={redirection !== null}>
+              onClick={() => appelerFonction("stripe-abonnement-checkout", "souscription",
+                verifParrain?.valide && s.statut !== "resilie" ? { code_parrainage: codeParrain.trim() } : undefined)}
+              disabled={redirection !== null || (!!codeParrain.trim() && verifParrain?.valide === false && s.statut !== "resilie")}>
               {redirection === "souscription" ? "Redirection vers la page de paiement..." : "Démarrer mon essai gratuit"}
             </Button>
           </div>
@@ -452,6 +501,48 @@ const Factures = () => {
                     </div>
                   )}
                   <p className="text-xs text-gray-500">Une session affectée à un client est facturée {prixSession} HT. Elle est gratuite si vous la supprimez ou l'annulez au moins 48 h avant son démarrage.</p>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {parrainage?.disponible && parrainage.code && (() => {
+            const lien = `${window.location.origin}/register?parrain=${parrainage.code}`;
+            const ambassadeur = statut?.type_compte === "super_ambassadeur";
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Parrainage : 1 mois offert pour vous et votre filleul</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-gray-700">
+                    {ambassadeur
+                      ? "Recommandez QualioFlex à vos confrères formateurs : ils bénéficient d'un mois d'abonnement offert après leur première facture."
+                      : "Recommandez QualioFlex à vos confrères formateurs. Dès qu'un filleul règle sa première facture (après son essai gratuit), vous gagnez chacun un mois d'abonnement offert, déduit automatiquement de la facture suivante."}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-600">Votre code :</span>
+                    <span className="font-mono font-bold text-lg" style={{ color: "#25245e" }}>{parrainage.code}</span>
+                    <Button variant="outline" size="sm" onClick={() => copier(parrainage.code!, "Code")}>Copier le code</Button>
+                    <Button variant="outline" size="sm" onClick={() => copier(lien, "Lien d'invitation")}>Copier le lien d'invitation</Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-lg bg-gray-50 p-3">
+                      <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{parrainage.filleuls_confirmes ?? 0}</p>
+                      <p className="text-xs text-gray-500">filleul{(parrainage.filleuls_confirmes ?? 0) > 1 ? "s" : ""} confirmé{(parrainage.filleuls_confirmes ?? 0) > 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 p-3">
+                      <p className="text-2xl font-bold" style={{ color: "#25245e" }}>{parrainage.filleuls_en_attente ?? 0}</p>
+                      <p className="text-xs text-gray-500">en essai</p>
+                    </div>
+                    <div className="rounded-lg bg-orange-50 p-3">
+                      <p className="text-2xl font-bold" style={{ color: "#f2901e" }}>{parrainage.mois_restants ?? 0}</p>
+                      <p className="text-xs text-gray-500">mois offert{(parrainage.mois_restants ?? 0) > 1 ? "s" : ""} à venir</p>
+                    </div>
+                  </div>
+                  {parrainage.parrain && (
+                    <p className="text-xs text-gray-500">Vous avez été parrainé par {parrainage.parrain}.</p>
+                  )}
                 </CardContent>
               </Card>
             );

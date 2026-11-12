@@ -108,6 +108,15 @@ const AbonnementGuard = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Lot 5 (parrainage) : un lien qualioflex.fr/register?parrain=CODE mémorise
+  // le code jusqu'au démarrage de l'essai (pré-rempli sur la page Abonnement).
+  useEffect(() => {
+    const code = new URLSearchParams(location.search).get("parrain");
+    if (code) {
+      try { localStorage.setItem("qf_parrain", code.trim().toUpperCase().slice(0, 20)); } catch { /* stockage indisponible */ }
+    }
+  }, [location.search]);
+
   // Statut relu à CHAQUE arrivée sur une page protégée (retour test Olivier
   // du 12/11 : un statut lu une seule fois à l'ouverture du site devenait
   // périmé — activation de la facturation, souscription, coupure…).
