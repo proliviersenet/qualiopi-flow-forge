@@ -18,7 +18,13 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 //    d'abonnement, une ligne par session.
 //  - invoice.finalized / invoice.paid / invoice.payment_failed : copie locale
 //    de la facture dans public.factures (liste téléchargeable du formateur).
-// Impayés, coupure et réactivation : lot 4.
+//  - lot 4 (12/11/2026) :
+//    · invoice.payment_failed → passage en impayé, coupure programmée à J+10,
+//      email d'alerte (les relances J-2 et la coupure sont faites par la
+//      fonction planifiée facturation-quotidienne) ;
+//    · retour à « active » après un impayé → réactivation (email si coupé) ;
+//    · fin d'abonnement (résiliation effective) → facture finale des sessions
+//      dues non encore facturées + email de fin avec proposition d'export.
 //
 // Idempotent : Stripe peut renvoyer un même événement, rien n'est dupliqué.
 
@@ -33,6 +39,7 @@ const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
 const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "olivier@exsenco.fr";
 const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
 const DUREE_ESSAI_JOURS = 7;
+const DELAI_COUPURE_JOURS = 10;
 
 const STATUTS_FACTURE: Record<string, string> = {
   draft: "brouillon", open: "ouverte", paid: "payee", void: "annulee", uncollectible: "impayee",
@@ -284,7 +291,7 @@ async function creerAbonnement(admin: SupabaseClient, stripe: Stripe, session: S
 
 function statutLocal(sub: Stripe.Subscription, statutActuel: string | null): string {
   switch (sub.status) {
-    case "trialing": return "essai";
+    case "trialing": return sub.cancel_at ? "resiliation_programmee" : "essai";
     case "active": return sub.cancel_at || sub.cancel_at_period_end ? "resiliation_programmee" : "actif";
     case "past_due":
     case "unpaid":
@@ -311,20 +318,168 @@ async function synchroniserAbonnement(admin: SupabaseClient, sub: Stripe.Subscri
     console.log(`stripe-webhook: événement d'un ancien abonnement (${sub.id}) ignoré.`);
     return;
   }
-  const statut = statutLocal(sub, actuel?.statut ?? null);
+  const precedent = actuel?.statut ?? null;
+  const statut = statutLocal(sub, precedent);
   const cancelAt = sub.cancel_at ?? (sub.cancel_at_period_end ? (sub as unknown as { current_period_end?: number }).current_period_end : null);
-  const { error } = await admin.from("abonnements_organismes").upsert({
+  const enRegle = ["essai", "actif", "resiliation_programmee"].includes(statut);
+  const reactive = enRegle && (precedent === "impaye" || precedent === "coupe");
+  const ligne: Record<string, unknown> = {
     organisme_id: organismeId,
     statut,
     stripe_customer_id: idDe(sub.customer),
     stripe_subscription_id: sub.id,
     fin_essai: versIso(sub.trial_end),
-    resiliation_effective_le: cancelAt ? versIso(cancelAt)!.slice(0, 10) : null,
+    // cancel_at = 1er du mois à 00:00 → dernier jour d'accès = la veille
+    resiliation_effective_le: cancelAt ? versIso(cancelAt - 86400)!.slice(0, 10) : null,
     date_resiliation: statut === "resilie" ? (versIso(sub.ended_at ?? sub.canceled_at) ?? new Date().toISOString()).slice(0, 10) : null,
     impaye_depuis: statut === "impaye" || statut === "coupe" ? (actuel?.impaye_depuis ?? new Date().toISOString()) : null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: "organisme_id" });
+  };
+  if (enRegle) { ligne.coupure_prevue_le = null; ligne.coupe_le = null; }
+  if (reactive) ligne.reactive_le = new Date().toISOString();
+  const { error } = await admin.from("abonnements_organismes").upsert(ligne, { onConflict: "organisme_id" });
   if (error) throw new Error(`Synchronisation abonnement ${sub.id} : ${error.message}`);
+
+  if (reactive && precedent === "coupe") await emailReactivation(admin, organismeId, sub.id);
+  if (statut === "resilie" && precedent !== "resilie") await finAbonnement(admin, organismeId, sub);
+}
+
+// ───────────────────────── Cycle de vie (lot 4) ─────────────────────────
+
+async function emailOrganisme(admin: SupabaseClient, organismeId: string) {
+  const { data: org } = await admin.from("organismes")
+    .select("raison_sociale, email_contact, owner_user_id").eq("id", organismeId).single();
+  let email = org?.email_contact as string | null;
+  if (!email && org?.owner_user_id) {
+    const { data: p } = await admin.from("profiles").select("email").eq("id", org.owner_user_id).maybeSingle();
+    email = p?.email ?? null;
+  }
+  return { email: email ?? "", nom: (org?.raison_sociale as string) ?? "votre organisme" };
+}
+
+const para = (t: string) => `<p style="color:#555;line-height:1.6;margin:0 0 16px;">${t}</p>`;
+const bouton = (url: string, texte: string) => `<table cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr><td style="background:#f2901e;border-radius:6px;">
+<a href="${url}" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">${texte}</a>
+</td></tr></table>`;
+
+// Anti-doublon : renvoie true si la notification n'avait pas encore été envoyée
+async function premiereFois(admin: SupabaseClient, organismeId: string, type: string, reference: string) {
+  const { error } = await admin.from("notifications_abonnement").insert({ organisme_id: organismeId, type, reference, canal: "email" });
+  return !error;
+}
+
+// Premier échec de paiement d'une facture d'abonnement : impayé, coupure à J+10
+async function ouvrirImpaye(admin: SupabaseClient, facture: Stripe.Invoice) {
+  const f = facture as unknown as { subscription?: unknown; parent?: { subscription_details?: { subscription?: unknown } } };
+  const abonnementId = idDe(f.subscription ?? f.parent?.subscription_details?.subscription);
+  if (!abonnementId) return; // export de données, facture finale : pas de coupure
+  const organismeId = await organismeDeLaFacture(admin, facture);
+  if (!organismeId) return;
+
+  const { data: ab } = await admin.from("abonnements_organismes")
+    .select("statut, type_compte, stripe_subscription_id, coupure_prevue_le, impaye_depuis").eq("organisme_id", organismeId).maybeSingle();
+  if (!ab || ab.stripe_subscription_id !== abonnementId || ab.type_compte === "super_ambassadeur") return;
+
+  // Base de temps : la facture (cohérent avec les horloges de test Stripe)
+  const base = new Date(Math.max(facture.created * 1000, Date.now() - 365 * 86400_000));
+  let coupure = ab.coupure_prevue_le as string | null;
+  if (!coupure) {
+    coupure = new Date(base.getTime() + DELAI_COUPURE_JOURS * 86400_000).toISOString();
+    await admin.from("abonnements_organismes").update({
+      statut: ab.statut === "coupe" ? "coupe" : "impaye",
+      impaye_depuis: ab.impaye_depuis ?? base.toISOString(),
+      coupure_prevue_le: coupure,
+      updated_at: new Date().toISOString(),
+    }).eq("organisme_id", organismeId);
+  }
+
+  if (!(await premiereFois(admin, organismeId, "impaye_alerte", facture.id))) return;
+  const dest = await emailOrganisme(admin, organismeId);
+  const montant = ((facture.amount_due ?? facture.total ?? 0) / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+  await envoyerEmail(dest.email, "[QualioFlex] Échec de paiement — action requise",
+    "Votre paiement n'a pas abouti",
+    para("Bonjour,") +
+    para(`Le prélèvement de votre facture QualioFlex${facture.number ? ` <strong>${facture.number}</strong>` : ""} (${montant}) pour <strong>${dest.nom}</strong> n'a pas pu aboutir : carte expirée, refusée ou plafond atteint.`) +
+    para(`Sans régularisation, <strong>votre accès à QualioFlex sera suspendu le ${dateFr(coupure)}</strong>. Vos données restent conservées.`) +
+    para("Pour régulariser, mettez à jour votre carte bancaire depuis votre espace : le paiement est relancé automatiquement.") +
+    bouton(`${SITE_URL}/factures`, "Mettre à jour ma carte →") +
+    (facture.hosted_invoice_url ? para(`Vous pouvez aussi <a href="${facture.hosted_invoice_url}" style="color:#25245e;">régler directement la facture en ligne</a>.`) : ""));
+}
+
+async function emailReactivation(admin: SupabaseClient, organismeId: string, abonnementId: string) {
+  if (!(await premiereFois(admin, organismeId, "reactivation", `${abonnementId}:${new Date().toISOString().slice(0, 10)}`))) return;
+  const dest = await emailOrganisme(admin, organismeId);
+  await envoyerEmail(dest.email, "[QualioFlex] Votre accès est rétabli",
+    "Votre accès est rétabli",
+    para("Bonjour,") +
+    para(`Merci ! Votre paiement a bien été reçu et l'accès de <strong>${dest.nom}</strong> à QualioFlex est rétabli. Vous retrouvez toutes vos données.`) +
+    bouton(`${SITE_URL}/dashboard`, "Accéder à QualioFlex →"));
+}
+
+// Résiliation effective : dernière facture des sessions dues non facturées,
+// les sessions futures sont libérées (plus de service après la fin).
+async function finAbonnement(admin: SupabaseClient, organismeId: string, sub: Stripe.Subscription) {
+  const fin = new Date(((sub.ended_at ?? sub.canceled_at) ?? Math.floor(Date.now() / 1000)) * 1000);
+  const customerId = idDe(sub.customer);
+
+  const { data: lignes } = await admin.from("sessions_facturables")
+    .select("id, libelle, montant_ht_centimes, facturable_le")
+    .eq("organisme_id", organismeId).eq("statut", "en_attente").is("stripe_invoice_item_id", null)
+    .order("date_debut_session", { ascending: true });
+  const dues = (lignes ?? []).filter((l) => new Date(l.facturable_le) <= fin);
+  const liberees = (lignes ?? []).filter((l) => new Date(l.facturable_le) > fin);
+
+  if (liberees.length) {
+    await admin.from("sessions_facturables").update({ statut: "annulee_sans_frais", updated_at: new Date().toISOString() })
+      .in("id", liberees.map((l) => l.id));
+  }
+
+  if (dues.length && customerId && STRIPE_SECRET_KEY) {
+    const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20", httpClient: Stripe.createFetchHttpClient() });
+    const { data: tarif } = await admin.from("tarifs").select("stripe_tax_rate_id").eq("code", "session").single();
+    const facture = await stripe.invoices.create({
+      customer: customerId,
+      collection_method: "charge_automatically",
+      auto_advance: true,
+      pending_invoice_items_behavior: "exclude",
+      description: "Dernière facture : sessions réalisées avant la fin de votre abonnement QualioFlex.",
+      metadata: { organisme_id: organismeId, motif: "facture_finale", abonnement: sub.id },
+    }, { idempotencyKey: `qf-facture-finale-${sub.id}` });
+    const periode = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth(), 1)).toISOString().slice(0, 10);
+    for (const l of dues) {
+      const item = await stripe.invoiceItems.create({
+        customer: customerId,
+        invoice: facture.id,
+        amount: l.montant_ht_centimes,
+        currency: "eur",
+        description: l.libelle,
+        tax_rates: tarif?.stripe_tax_rate_id ? [tarif.stripe_tax_rate_id] : undefined,
+        metadata: { session_facturable_id: l.id, organisme_id: organismeId },
+      }, { idempotencyKey: `qf-session-${l.id}` });
+      await admin.from("sessions_facturables").update({
+        statut: "facturee", stripe_invoice_item_id: item.id, stripe_invoice_id: facture.id,
+        periode_facturation: periode, updated_at: new Date().toISOString(),
+      }).eq("id", l.id);
+    }
+    try {
+      await stripe.invoices.finalizeInvoice(facture.id);
+      await stripe.invoices.pay(facture.id);
+    } catch (e) {
+      console.warn(`stripe-webhook: facture finale ${facture.id} non réglée immédiatement:`, (e as Error).message);
+    }
+  }
+
+  if (!(await premiereFois(admin, organismeId, "resiliation_confirmee", `fin:${sub.id}`))) return;
+  const dest = await emailOrganisme(admin, organismeId);
+  const { data: tarifExport } = await admin.from("tarifs").select("montant_ht_centimes").eq("code", "export_donnees").maybeSingle();
+  const prixExport = ((tarifExport?.montant_ht_centimes ?? 1000) / 100).toLocaleString("fr-FR");
+  await envoyerEmail(dest.email, "[QualioFlex] Votre abonnement est terminé",
+    "Votre abonnement est terminé",
+    para("Bonjour,") +
+    para(`Votre abonnement QualioFlex pour <strong>${dest.nom}</strong> a pris fin. Merci pour votre confiance !`) +
+    (dues.length ? para(`Une dernière facture de ${dues.length} session${dues.length > 1 ? "s" : ""} vous a été adressée ; elle est disponible dans votre espace.`) : "") +
+    para(`Vos données restent conservées. Vous pouvez à tout moment <strong>récupérer l'ensemble de vos données</strong> (formations, sessions, documents, conventions signées, preuves d'audit) pour ${prixExport} € HT, ou réactiver votre abonnement.`) +
+    bouton(`${SITE_URL}/factures`, "Accéder à mon espace →"));
 }
 
 async function rappelFinEssai(admin: SupabaseClient, sub: Stripe.Subscription) {
@@ -410,6 +565,7 @@ Deno.serve(async (req: Request) => {
         break;
       case "invoice.payment_failed":
         await enregistrerFacture(admin, event.data.object as Stripe.Invoice, true);
+        await ouvrirImpaye(admin, event.data.object as Stripe.Invoice);
         break;
       case "customer.subscription.created":
       case "customer.subscription.updated":
@@ -420,7 +576,6 @@ Deno.serve(async (req: Request) => {
         await rappelFinEssai(admin, event.data.object as Stripe.Subscription);
         break;
       default:
-        // Carte expirée, impayés, coupure : lot 4.
         break;
     }
   } catch (e) {

@@ -92,7 +92,9 @@ Deno.serve(async (req: Request) => {
       customer: organisme.stripe_customer_id,
       configuration: configurationId,
       locale: "fr",
-      return_url: `${origin}/factures`,
+      // ?retour=portail : la page relance le paiement des factures en attente
+      // si le compte est en impayé (carte mise à jour → régularisation)
+      return_url: `${origin}/factures?retour=portail`,
     });
 
     return reponse({ url: session.url });

@@ -114,8 +114,11 @@ Deno.serve(async (req: Request) => {
       },
       payment_intent_data: { metadata },
       metadata,
-      success_url: `${origin}/settings?paiement=succes&contexte=${contexte}`,
-      cancel_url: `${origin}/settings?paiement=annule`,
+      // Résiliation : retour sur la page Abonnement (seule page accessible après la fin)
+      success_url: contexte === "resiliation"
+        ? `${origin}/factures?paiement=succes&contexte=resiliation`
+        : `${origin}/settings?paiement=succes&contexte=${contexte}`,
+      cancel_url: contexte === "resiliation" ? `${origin}/factures?paiement=annule` : `${origin}/settings?paiement=annule`,
     } as Stripe.Checkout.SessionCreateParams);
 
     const montantTtc = Math.round(tarif.montant_ht_centimes * (1 + Number(tarif.taux_tva) / 100));

@@ -10,6 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStatutAbonnement, StatutAbonnement } from "@/hooks/useStatutAbonnement";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Chantier facturation, lot 2 (12/11/2026) : la page « Factures » (jusqu'ici
 // un simple « Bientôt disponible ») devient « Abonnement et factures » :
@@ -18,6 +22,15 @@ import { useStatutAbonnement, StatutAbonnement } from "@/hooks/useStatutAbonneme
 // - portail Stripe : changer de carte, coordonnées de facturation
 // - liste des factures QualioFlex avec téléchargement du PDF
 // Les montants affichés viennent de la grille public.tarifs (jamais en dur).
+// Lot 4 (12/11/2026) : résiliation (préavis 30 jours, fin de mois) et son
+// annulation, récupération des données à la résiliation, impayé et accès
+// suspendu (régler la facture / mettre à jour la carte → régularisation).
+
+// Même règle que le serveur : J+30, puis dernier jour du mois atteint
+const finResiliation = (depuis = new Date()) => {
+  const preavis = new Date(depuis.getTime() + 30 * 86400000);
+  return new Date(preavis.getFullYear(), preavis.getMonth() + 1, 0);
+};
 
 type Facture = {
   id: string;
@@ -63,8 +76,10 @@ const Factures = () => {
 
   const [factures, setFactures] = useState<Facture[]>([]);
   const [sessionsAFacturer, setSessionsAFacturer] = useState<SessionAFacturer[]>([]);
-  const [prix, setPrix] = useState<{ abonnement: number; session: number }>({ abonnement: 3490, session: 300 });
-  const [redirection, setRedirection] = useState<"souscription" | "portail" | null>(null);
+  const [prix, setPrix] = useState<{ abonnement: number; session: number; export: number }>({ abonnement: 3490, session: 300, export: 1000 });
+  const [redirection, setRedirection] = useState<"souscription" | "portail" | "export" | null>(null);
+  const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const [confirmerResiliation, setConfirmerResiliation] = useState(false);
   const [attenteActivation, setAttenteActivation] = useState(false);
 
   const activation = new URLSearchParams(window.location.search).get("activation") === "1";
@@ -79,7 +94,7 @@ const Factures = () => {
           .select("id, numero, emise_le, periode_debut, periode_fin, montant_ht_centimes, montant_ttc_centimes, statut, mois_offert, pdf_url, hosted_url")
           .neq("statut", "brouillon")
           .order("emise_le", { ascending: false }),
-        supabase.from("tarifs").select("code, montant_ht_centimes").in("code", ["abonnement_mensuel", "session"]),
+        supabase.from("tarifs").select("code, montant_ht_centimes").in("code", ["abonnement_mensuel", "session", "export_donnees"]),
         // Lot 3 : sessions affectées pas encore facturées (RLS : organisme payeur)
         (supabase as any).from("sessions_facturables")
           .select("id, libelle, facturable_le, montant_ht_centimes")
@@ -91,7 +106,7 @@ const Factures = () => {
       setFactures(((lignes ?? []) as Facture[]).filter((f) => f.montant_ttc_centimes > 0 || f.mois_offert));
       setSessionsAFacturer((sessionsDues ?? []) as SessionAFacturer[]);
       const t = Object.fromEntries((tarifs ?? []).map((x: { code: string; montant_ht_centimes: number }) => [x.code, x.montant_ht_centimes]));
-      setPrix({ abonnement: t.abonnement_mensuel ?? 3490, session: t.session ?? 300 });
+      setPrix({ abonnement: t.abonnement_mensuel ?? 3490, session: t.session ?? 300, export: t.export_donnees ?? 1000 });
     };
     charger();
   }, [session, role, navigate]);
@@ -100,6 +115,21 @@ const Factures = () => {
   // secondes plus tard, on relit le statut jusqu'à le voir apparaître.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    // Retour du paiement de l'export (résiliation)
+    const paiement = params.get("paiement");
+    if (paiement) {
+      window.history.replaceState({}, "", "/factures");
+      if (paiement === "succes") {
+        toast({ title: "Paiement reçu", description: "Votre export est en cours de préparation : vous recevrez le lien de téléchargement par email dans quelques minutes." });
+      }
+      return;
+    }
+    // Retour du portail Stripe : si un paiement est en échec, on le relance
+    if (params.get("retour") === "portail") {
+      window.history.replaceState({}, "", "/factures");
+      rafraichir().then((s) => { if (s && ["impaye", "coupe"].includes(s.statut)) regulariser(true); });
+      return;
+    }
     const retour = params.get("abonnement");
     if (!retour) return;
     window.history.replaceState({}, "", "/factures");
@@ -123,9 +153,80 @@ const Factures = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const appelerFonction = async (nom: string, type: "souscription" | "portail") => {
+  const messageErreur = async (data: { error?: string } | null, error: unknown) => {
+    let message = data?.error || (error as Error | null)?.message || "Erreur inconnue";
+    const ctx = (error as { context?: Response })?.context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const corps = await ctx.clone().json();
+        if (corps?.error) message = corps.error;
+      } catch { /* corps non-JSON */ }
+    }
+    return message;
+  };
+
+  const actionAbonnement = async (action: "resilier" | "annuler_resiliation" | "regulariser") => {
+    setActionEnCours(action);
+    const { data, error } = await supabase.functions.invoke("stripe-abonnement-actions", { body: { action } });
+    setActionEnCours(null);
+    if (error || data?.error) {
+      toast({ title: "Action impossible", description: await messageErreur(data, error), variant: "destructive" });
+      return false;
+    }
+    return data;
+  };
+
+  const rechargerFactures = async () => {
+    const { data: lignes } = await (supabase as any).from("factures")
+      .select("id, numero, emise_le, periode_debut, periode_fin, montant_ht_centimes, montant_ttc_centimes, statut, mois_offert, pdf_url, hosted_url")
+      .neq("statut", "brouillon").order("emise_le", { ascending: false });
+    setFactures(((lignes ?? []) as Facture[]).filter((f) => f.montant_ttc_centimes > 0 || f.mois_offert));
+  };
+
+  const resilier = async () => {
+    const r = await actionAbonnement("resilier");
+    setConfirmerResiliation(false);
+    if (!r) return;
+    toast({ title: "Résiliation enregistrée", description: `Votre abonnement prendra fin le ${dateFr(r.fin)}. Un email de confirmation vous a été envoyé.` });
+    await rafraichir();
+  };
+
+  const annulerResiliation = async () => {
+    if (!(await actionAbonnement("annuler_resiliation"))) return;
+    toast({ title: "Résiliation annulée", description: "Votre abonnement continue normalement." });
+    await rafraichir();
+  };
+
+  // Relance le paiement des factures en attente avec la carte enregistrée.
+  // Le statut repasse « actif » via le webhook Stripe : on le relit quelques fois.
+  const regulariser = async (silencieux = false) => {
+    setActionEnCours("regulariser");
+    const { data, error } = await supabase.functions.invoke("stripe-abonnement-actions", { body: { action: "regulariser" } });
+    if (error || data?.error) {
+      setActionEnCours(null);
+      if (!silencieux || data?.echecs) {
+        toast({ title: "Paiement refusé", description: await messageErreur(data, error), variant: "destructive" });
+      }
+      return;
+    }
+    let essais = 0;
+    const verifier = async () => {
+      const s = await rafraichir();
+      if (s && !["impaye", "coupe"].includes(s.statut)) {
+        setActionEnCours(null);
+        await rechargerFactures();
+        toast({ title: "Paiement reçu, merci !", description: "Votre abonnement est à jour." });
+        return;
+      }
+      if (++essais < 8) setTimeout(verifier, 2000);
+      else { setActionEnCours(null); await rechargerFactures(); }
+    };
+    verifier();
+  };
+
+  const appelerFonction = async (nom: string, type: "souscription" | "portail" | "export", corps?: Record<string, unknown>) => {
     setRedirection(type);
-    const { data, error } = await supabase.functions.invoke(nom);
+    const { data, error } = await supabase.functions.invoke(nom, corps ? { body: corps } : undefined);
     if (error || data?.error) {
       let message = data?.error || error?.message;
       const ctx = (error as { context?: Response })?.context;
@@ -145,6 +246,45 @@ const Factures = () => {
 
   const prixAbonnement = euros(prix.abonnement);
   const prixSession = euros(prix.session);
+  const prixExportTtc = euros(Math.round(prix.export * 1.2));
+  const factureEnAttente = factures.find((f) => ["impayee", "ouverte"].includes(f.statut) && f.hosted_url);
+
+  const boutonPortail = (texte = "Gérer ma carte bancaire") => (
+    <Button variant="outline" onClick={() => appelerFonction("stripe-portail-client", "portail")} disabled={redirection !== null}>
+      {redirection === "portail" ? "Ouverture..." : texte}
+    </Button>
+  );
+
+  const lienResilier = (
+    <button type="button" className="block text-xs text-gray-500 underline hover:text-gray-700"
+      onClick={() => setConfirmerResiliation(true)}>
+      Résilier mon abonnement
+    </button>
+  );
+
+  const blocExport = (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+      <p className="text-sm text-gray-700"><strong>Récupérez vos données</strong> : formations, sessions, clients, stagiaires, documents, conventions signées et preuves d'audit, dans une archive ZIP envoyée par email ({prixExportTtc} TTC).</p>
+      <Button variant="outline" size="sm" disabled={redirection !== null}
+        onClick={() => appelerFonction("stripe-checkout-recuperation", "export", { contexte: "resiliation" })}>
+        {redirection === "export" ? "Redirection vers le paiement..." : "Récupérer mes données"}
+      </Button>
+    </div>
+  );
+
+  const blocRegularisation = (s: StatutAbonnement) => (
+    <div className="flex flex-wrap gap-2">
+      {factureEnAttente && (
+        <Button asChild style={{ background: "#f2901e", color: "#fff" }}>
+          <a href={factureEnAttente.hosted_url!} target="_blank" rel="noopener noreferrer">Régler la facture en ligne</a>
+        </Button>
+      )}
+      {boutonPortail("Mettre à jour ma carte")}
+      <Button variant="ghost" onClick={() => regulariser()} disabled={actionEnCours !== null}>
+        {actionEnCours === "regulariser" ? "Paiement en cours..." : s.statut === "coupe" ? "J'ai mis à jour ma carte : réactiver" : "Réessayer le paiement"}
+      </Button>
+    </div>
+  );
 
   const carteStatut = (s: StatutAbonnement | null) => {
     if (!s) return null;
@@ -173,9 +313,8 @@ const Factures = () => {
           <div className="space-y-3">
             <Badge className="bg-blue-100 text-blue-800">Essai gratuit</Badge>
             <p className="text-gray-700">Votre essai gratuit se termine le <strong>{dateFr(s.fin_essai)}</strong>. Ensuite, votre abonnement démarre automatiquement : <strong>{prixAbonnement} HT par mois</strong>, facturé le 1er du mois (le premier mois au prorata), plus <strong>{prixSession} HT par session</strong>. Sans engagement.</p>
-            <Button variant="outline" onClick={() => appelerFonction("stripe-portail-client", "portail")} disabled={redirection !== null}>
-              {redirection === "portail" ? "Ouverture..." : "Gérer ma carte bancaire"}
-            </Button>
+            {boutonPortail()}
+            {lienResilier}
           </div>
         );
       case "actif":
@@ -183,34 +322,43 @@ const Factures = () => {
           <div className="space-y-3">
             <Badge className="bg-green-100 text-green-800">Abonnement actif</Badge>
             <p className="text-gray-700"><strong>{prixAbonnement} HT par mois</strong> + <strong>{prixSession} HT par session</strong>, facturés le 1er de chaque mois. Sans engagement.</p>
-            <Button variant="outline" onClick={() => appelerFonction("stripe-portail-client", "portail")} disabled={redirection !== null}>
-              {redirection === "portail" ? "Ouverture..." : "Gérer ma carte bancaire"}
-            </Button>
+            {boutonPortail()}
+            {lienResilier}
           </div>
         );
       case "impaye":
         return (
           <div className="space-y-3">
             <Badge className="bg-red-100 text-red-800">Paiement en échec</Badge>
-            <p className="text-gray-700">Le dernier prélèvement n'a pas pu aboutir. Mettez à jour votre moyen de paiement pour éviter la suspension de votre accès{s.coupure_prevue_le ? <> prévue le <strong>{dateFr(s.coupure_prevue_le)}</strong></> : null}.</p>
-            <Button style={{ background: "#f2901e", color: "#fff" }} onClick={() => appelerFonction("stripe-portail-client", "portail")} disabled={redirection !== null}>
-              {redirection === "portail" ? "Ouverture..." : "Mettre à jour ma carte"}
-            </Button>
+            <p className="text-gray-700">Le dernier prélèvement n'a pas pu aboutir. Mettez à jour votre moyen de paiement pour éviter la suspension de votre accès{s.coupure_prevue_le ? <> prévue le <strong>{dateFr(s.coupure_prevue_le)}</strong></> : null}. Le paiement est relancé dès votre retour.</p>
+            {blocRegularisation(s)}
+          </div>
+        );
+      case "coupe":
+        return (
+          <div className="space-y-3">
+            <Badge className="bg-red-100 text-red-800">Accès suspendu</Badge>
+            <p className="text-gray-700">Votre accès à QualioFlex est suspendu suite à un impayé. <strong>Vos données sont conservées</strong> : réglez la facture en attente (ou mettez à jour votre carte) pour retrouver immédiatement votre espace.</p>
+            {blocRegularisation(s)}
           </div>
         );
       case "resiliation_programmee":
         return (
           <div className="space-y-3">
             <Badge className="bg-orange-100 text-orange-800">Résiliation programmée</Badge>
-            <p className="text-gray-700">Votre abonnement prendra fin le <strong>{dateFr(s.resiliation_effective_le)}</strong>. Vous gardez l'accès complet à QualioFlex jusqu'à cette date.</p>
+            <p className="text-gray-700">Votre abonnement prendra fin le <strong>{dateFr(s.resiliation_effective_le)}</strong>. Vous gardez l'accès complet à QualioFlex jusqu'à cette date. Les sessions dues d'ici là figureront sur une dernière facture.</p>
+            <Button variant="outline" onClick={annulerResiliation} disabled={actionEnCours !== null}>
+              {actionEnCours === "annuler_resiliation" ? "Annulation..." : "Annuler la résiliation"}
+            </Button>
+            {blocExport}
           </div>
         );
       default:
-        // aucun, résilié, coupé : proposer de (re)démarrer
+        // aucun, résilié : proposer de (re)démarrer
         return (
           <div className="space-y-4">
             {s.statut === "resilie" && <Badge className="bg-gray-100 text-gray-700">Abonnement terminé</Badge>}
-            {s.statut === "coupe" && <Badge className="bg-red-100 text-red-800">Accès suspendu</Badge>}
+            {s.statut === "resilie" && blocExport}
             <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
               <p className="font-semibold text-gray-800">Essai gratuit de 7 jours, puis {prixAbonnement} HT par mois</p>
               <ul className="mt-2 text-sm text-gray-700 list-disc list-inside space-y-1">
@@ -240,7 +388,11 @@ const Factures = () => {
 
           {activation && statut?.acces_requis && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-              Pour accéder à votre espace formateur, démarrez votre essai gratuit de 7 jours.
+              {statut.statut === "coupe"
+                ? "Votre accès est suspendu suite à un impayé : réglez votre facture pour retrouver votre espace formateur."
+                : statut.statut === "resilie"
+                  ? "Votre abonnement est terminé. Réactivez-le pour retrouver votre espace formateur."
+                  : "Pour accéder à votre espace formateur, démarrez votre essai gratuit de 7 jours."}
             </div>
           )}
 
@@ -352,6 +504,28 @@ const Factures = () => {
         </div>
       </main>
       <Footer />
+
+      <AlertDialog open={confirmerResiliation} onOpenChange={setConfirmerResiliation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Résilier votre abonnement ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>Avec le préavis de 30 jours, votre abonnement prendra fin le <strong>{dateFr(finResiliation().toISOString())}</strong>. Vous gardez l'accès complet à QualioFlex jusqu'à cette date.</p>
+                <p>Les sessions dues d'ici là restent facturées (gratuites si supprimées au moins 48 h avant leur démarrage) et figureront sur une dernière facture.</p>
+                <p>Vous pourrez récupérer toutes vos données ({prixExportTtc} TTC) et annuler la résiliation à tout moment avant la date de fin.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Garder mon abonnement</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => { e.preventDefault(); resilier(); }} disabled={actionEnCours !== null}>
+              {actionEnCours === "resilier" ? "Résiliation..." : "Confirmer la résiliation"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

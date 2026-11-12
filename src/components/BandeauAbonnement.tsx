@@ -30,6 +30,10 @@ const BandeauAbonnement = () => {
     message = `Le dernier paiement a échoué${statut.coupure_prevue_le ? ` : votre accès sera suspendu le ${dateFr(statut.coupure_prevue_le)} sans mise à jour de votre carte` : ""}.`;
     style = "bg-red-50 text-red-900 border-red-200";
     lien = "Mettre à jour ma carte";
+  } else if (statut.statut === "coupe") {
+    message = "Votre accès est suspendu suite à un impayé. Vos données sont conservées.";
+    style = "bg-red-50 text-red-900 border-red-200";
+    lien = "Réactiver mon accès";
   } else if (statut.statut === "resiliation_programmee" && statut.resiliation_effective_le) {
     message = `Votre abonnement prendra fin le ${dateFr(statut.resiliation_effective_le)}.`;
     style = "bg-orange-50 text-orange-900 border-orange-200";
