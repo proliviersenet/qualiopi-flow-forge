@@ -104,23 +104,24 @@ const ZONES_ABONNEMENT = [
 ];
 
 const AbonnementGuard = () => {
-  const { statut, loading, rafraichir } = useStatutAbonnement();
+  const { loading, rafraichir } = useStatutAbonnement();
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Statut relu à CHAQUE arrivée sur une page protégée (retour test Olivier
+  // du 12/11 : un statut lu une seule fois à l'ouverture du site devenait
+  // périmé — activation de la facturation, souscription, coupure…).
   useEffect(() => {
-    if (loading || !statut?.acces_requis) return;
+    if (loading) return;
     const protegee = ZONES_ABONNEMENT.some((z) => location.pathname.startsWith(z));
     if (!protegee) return;
-    // Statut relu avant de rediriger : l'abonnement vient peut-être d'être
-    // souscrit (retour de Stripe), il ne faut pas renvoyer en boucle.
     let annule = false;
     rafraichir().then((frais) => {
       if (!annule && frais?.acces_requis) navigate("/factures?activation=1", { replace: true });
     });
     return () => { annule = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statut?.acces_requis, loading, location.pathname]);
+  }, [loading, location.pathname]);
 
   return null;
 };

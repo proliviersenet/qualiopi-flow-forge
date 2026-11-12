@@ -16,6 +16,7 @@ import { User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import Logo from '@/components/Logo';
+import BandeauAbonnement from '@/components/BandeauAbonnement';
 
 interface HeaderProps {
   user?: {
@@ -250,6 +251,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
           </nav>
         )}
       </div>
+      {isAuthenticated && role !== "client" && <BandeauAbonnement />}
     </header>
   );
 };
