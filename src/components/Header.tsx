@@ -135,7 +135,7 @@ const Header = ({ user: userProp, onLogout, logoHref }: HeaderProps) => {
                   </DropdownMenuItem>
                   {role !== "client" && (
                     <DropdownMenuItem asChild>
-                      <Link to="/factures">Factures</Link>
+                      <Link to="/factures">Abonnement et factures</Link>
                     </DropdownMenuItem>
                   )}
                   {role !== "client" && (

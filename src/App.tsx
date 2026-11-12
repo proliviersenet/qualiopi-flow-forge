@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useStatutAbonnement } from "@/hooks/useStatutAbonnement";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Index from "./pages/Index";
@@ -84,6 +85,42 @@ const MfaGuard = () => {
       navigate("/verification-2fa", { replace: true });
     }
   }, [mfaRequired, mfaLoading, loading, location.pathname, navigate]);
+
+  return null;
+};
+
+// Chantier facturation, lot 2 (12/11/2026) : abonnement obligatoire pour
+// utiliser l'espace formateur UNE FOIS la facturation activée (interrupteur
+// parametres_plateforme.facturation_active, coupé pendant la bêta). Un
+// formateur sans abonnement en cours (et non exempté ambassadeur) est
+// renvoyé vers /factures pour démarrer son essai gratuit de 7 jours (carte
+// demandée). Seules les pages de travail sont protégées : profil,
+// paramètres, factures, pages légales et liens publics restent accessibles.
+// Une erreur de lecture du statut ne bloque jamais (cf. useStatutAbonnement).
+const ZONES_ABONNEMENT = [
+  "/dashboard", "/formations", "/clients", "/documents", "/bpf", "/pre-audit",
+  "/notations-formateur", "/qualiopi-statut", "/session/", "/sessions-sous-traitees",
+  "/chatbot-escalades",
+];
+
+const AbonnementGuard = () => {
+  const { statut, loading, rafraichir } = useStatutAbonnement();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (loading || !statut?.acces_requis) return;
+    const protegee = ZONES_ABONNEMENT.some((z) => location.pathname.startsWith(z));
+    if (!protegee) return;
+    // Statut relu avant de rediriger : l'abonnement vient peut-être d'être
+    // souscrit (retour de Stripe), il ne faut pas renvoyer en boucle.
+    let annule = false;
+    rafraichir().then((frais) => {
+      if (!annule && frais?.acces_requis) navigate("/factures?activation=1", { replace: true });
+    });
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statut?.acces_requis, loading, location.pathname]);
 
   return null;
 };
@@ -202,6 +239,7 @@ const App = () => (
           <BrowserRouter>
             <MfaGuard />
             <InactivityGuard />
+            <AbonnementGuard />
             {/* Utilise useLocation (bulles pas-à-pas déclenchées par la page
                 courante) : doit impérativement rester à l'intérieur du
                 BrowserRouter, contrairement à OnboardingChecklist ci-dessus

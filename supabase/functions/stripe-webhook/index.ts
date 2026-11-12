@@ -6,11 +6,17 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 // le navigateur — verify_jwt=false obligatoire (même piège que DocuSign).
 //
 // Traité à ce jour :
-//  - checkout.session.completed : paiement de l'export des données →
-//    paiement marqué payé, ligne exports créée, génération lancée.
+//  - checkout.session.completed (mode payment) : paiement de l'export des
+//    données → paiement marqué payé, ligne exports créée, génération lancée.
+//  - checkout.session.completed (mode setup, motif abonnement) : la carte est
+//    enregistrée → création de l'abonnement (lot 2, 12/11/2026) : 7 jours
+//    d'essai, prorata jusqu'à la fin du mois, puis facture le 1er du mois.
+//  - customer.subscription.created / updated / deleted : statut local de
+//    l'abonnement (abonnements_organismes) aligné sur Stripe.
+//  - customer.subscription.trial_will_end : email de rappel de fin d'essai.
 //  - invoice.finalized / invoice.paid / invoice.payment_failed : copie locale
 //    de la facture dans public.factures (liste téléchargeable du formateur).
-// Les événements d'abonnement sont acceptés (200) et seront traités au lot 2.
+// Impayés, coupure et réactivation : lot 4.
 //
 // Idempotent : Stripe peut renvoyer un même événement, rien n'est dupliqué.
 
@@ -21,6 +27,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
+const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "olivier@exsenco.fr";
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://qualioflex.fr").replace(/\/$/, "");
+const DUREE_ESSAI_JOURS = 7;
 
 const STATUTS_FACTURE: Record<string, string> = {
   draft: "brouillon", open: "ouverte", paid: "payee", void: "annulee", uncollectible: "impayee",
@@ -127,6 +137,180 @@ async function paiementExportConfirme(admin: SupabaseClient, session: Stripe.Che
   if (etat && ["en_attente", "erreur"].includes(etat.statut)) lancerExport(exportId!);
 }
 
+// ───────────────────────── Abonnement (lot 2) ─────────────────────────
+
+const dateFr = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", year: "numeric" }) : "—";
+
+async function envoyerEmail(to: string, sujet: string, titre: string, corps: string): Promise<boolean> {
+  if (!BREVO_API_KEY || !to) return false;
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f8;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f8;padding:40px 0;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:#25245e;padding:32px 40px;"><h1 style="margin:0;color:#fff;font-size:24px;">QualioFlex</h1>
+<p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">by ExSenCo</p></td></tr>
+<tr><td style="padding:40px;"><h2 style="color:#25245e;font-size:20px;margin:0 0 16px;">${titre}</h2>${corps}</td></tr>
+<tr><td style="background:#f5f5f8;padding:20px 40px;border-top:1px solid #eee;"><p style="margin:0;color:#999;font-size:12px;">
+QualioFlex by SARL EXSENCO · 80 rue du Nouveau Bois, 37550 Saint-Avertin<br>
+<a href="https://qualioflex.fr" style="color:#25245e;">qualioflex.fr</a></p></td></tr>
+</table></td></tr></table></body></html>`;
+  const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ sender: { name: "QualioFlex by ExSenCo", email: BREVO_SENDER_EMAIL }, to: [{ email: to }], subject: sujet, htmlContent: html }),
+  });
+  if (!r.ok) console.error("stripe-webhook: erreur Brevo", await r.text());
+  return r.ok;
+}
+
+async function organismeDuClient(admin: SupabaseClient, customer: unknown, meta?: Stripe.Metadata | null): Promise<string | null> {
+  if (meta?.organisme_id) return meta.organisme_id;
+  const customerId = idDe(customer);
+  if (!customerId) return null;
+  const { data } = await admin.from("organismes").select("id").eq("stripe_customer_id", customerId).maybeSingle();
+  return data?.id ?? null;
+}
+
+// Carte enregistrée (Checkout mode setup) → création de l'abonnement
+async function creerAbonnement(admin: SupabaseClient, stripe: Stripe, session: Stripe.Checkout.Session) {
+  const organismeId = session.metadata?.organisme_id;
+  const customerId = idDe(session.customer);
+  if (!organismeId || !customerId) throw new Error(`Session ${session.id} sans organisme ou client`);
+
+  const { data: existant } = await admin.from("abonnements_organismes")
+    .select("statut, stripe_subscription_id").eq("organisme_id", organismeId).maybeSingle();
+  if (existant?.stripe_subscription_id && ["essai", "actif", "impaye", "resiliation_programmee"].includes(existant.statut)) {
+    console.log(`stripe-webhook: abonnement déjà en cours pour ${organismeId}, rien à créer.`);
+    return;
+  }
+
+  const setupIntent = await stripe.setupIntents.retrieve(idDe(session.setup_intent)!);
+  const paymentMethod = idDe(setupIntent.payment_method);
+  if (!paymentMethod) throw new Error(`Aucun moyen de paiement sur ${session.id}`);
+  await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethod } });
+
+  const { data: tarif } = await admin.from("tarifs")
+    .select("montant_ht_centimes, stripe_price_id, stripe_tax_rate_id").eq("code", "abonnement_mensuel").single();
+
+  const finEssai = Math.floor(Date.now() / 1000) + DUREE_ESSAI_JOURS * 86400;
+  const d = new Date(finEssai * 1000);
+  const ancrage = Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000);
+
+  const abonnement = await stripe.subscriptions.create({
+    customer: customerId,
+    items: [{ price: tarif.stripe_price_id }],
+    default_tax_rates: [tarif.stripe_tax_rate_id],
+    default_payment_method: paymentMethod,
+    trial_end: finEssai,
+    billing_cycle_anchor: ancrage,
+    proration_behavior: "create_prorations",
+    metadata: { organisme_id: organismeId },
+  }, { idempotencyKey: `qf-abonnement-${session.id}` });
+
+  const { error } = await admin.from("abonnements_organismes").upsert({
+    organisme_id: organismeId,
+    montant_centimes: tarif.montant_ht_centimes,
+    periodicite: "mensuel",
+    statut: "essai",
+    date_debut: new Date().toISOString().slice(0, 10),
+    stripe_customer_id: customerId,
+    stripe_subscription_id: abonnement.id,
+    debut_essai: new Date().toISOString(),
+    fin_essai: new Date(finEssai * 1000).toISOString(),
+    date_resiliation: null,
+    resiliation_demandee_le: null,
+    resiliation_effective_le: null,
+    impaye_depuis: null,
+    coupure_prevue_le: null,
+    coupe_le: null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "organisme_id" });
+  if (error) throw new Error(`Enregistrement abonnement : ${error.message}`);
+}
+
+function statutLocal(sub: Stripe.Subscription, statutActuel: string | null): string {
+  switch (sub.status) {
+    case "trialing": return "essai";
+    case "active": return sub.cancel_at || sub.cancel_at_period_end ? "resiliation_programmee" : "actif";
+    case "past_due":
+    case "unpaid":
+    case "incomplete":
+      // Une coupure décidée par QualioFlex (lot 4) n'est pas écrasée tant que l'impayé dure
+      return statutActuel === "coupe" ? "coupe" : "impaye";
+    case "paused": return "coupe";
+    case "canceled":
+    case "incomplete_expired": return "resilie";
+    default: return statutActuel ?? "actif";
+  }
+}
+
+async function synchroniserAbonnement(admin: SupabaseClient, sub: Stripe.Subscription) {
+  const organismeId = await organismeDuClient(admin, sub.customer, sub.metadata);
+  if (!organismeId) {
+    console.warn(`stripe-webhook: abonnement ${sub.id} sans organisme QualioFlex, ignoré.`);
+    return;
+  }
+  const { data: actuel } = await admin.from("abonnements_organismes")
+    .select("statut, stripe_subscription_id, impaye_depuis, type_compte").eq("organisme_id", organismeId).maybeSingle();
+  // Un événement tardif d'un ancien abonnement ne doit pas écraser le nouveau
+  if (actuel?.stripe_subscription_id && actuel.stripe_subscription_id !== sub.id) {
+    console.log(`stripe-webhook: événement d'un ancien abonnement (${sub.id}) ignoré.`);
+    return;
+  }
+  const statut = statutLocal(sub, actuel?.statut ?? null);
+  const cancelAt = sub.cancel_at ?? (sub.cancel_at_period_end ? (sub as unknown as { current_period_end?: number }).current_period_end : null);
+  const { error } = await admin.from("abonnements_organismes").upsert({
+    organisme_id: organismeId,
+    statut,
+    stripe_customer_id: idDe(sub.customer),
+    stripe_subscription_id: sub.id,
+    fin_essai: versIso(sub.trial_end),
+    resiliation_effective_le: cancelAt ? versIso(cancelAt)!.slice(0, 10) : null,
+    date_resiliation: statut === "resilie" ? (versIso(sub.ended_at ?? sub.canceled_at) ?? new Date().toISOString()).slice(0, 10) : null,
+    impaye_depuis: statut === "impaye" || statut === "coupe" ? (actuel?.impaye_depuis ?? new Date().toISOString()) : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "organisme_id" });
+  if (error) throw new Error(`Synchronisation abonnement ${sub.id} : ${error.message}`);
+}
+
+async function rappelFinEssai(admin: SupabaseClient, sub: Stripe.Subscription) {
+  const organismeId = await organismeDuClient(admin, sub.customer, sub.metadata);
+  if (!organismeId || !sub.trial_end) return;
+
+  // Anti-doublon : une seule notification par abonnement
+  const { error: dejaEnvoye } = await admin.from("notifications_abonnement")
+    .insert({ organisme_id: organismeId, type: "fin_essai_rappel", reference: sub.id, canal: "email" });
+  if (dejaEnvoye) return;
+
+  const { data: org } = await admin.from("organismes")
+    .select("raison_sociale, email_contact, owner_user_id").eq("id", organismeId).single();
+  let email = org?.email_contact as string | null;
+  if (!email && org?.owner_user_id) {
+    const { data: p } = await admin.from("profiles").select("email").eq("id", org.owner_user_id).maybeSingle();
+    email = p?.email ?? null;
+  }
+  const { data: tarif } = await admin.from("tarifs").select("montant_ht_centimes").eq("code", "abonnement_mensuel").single();
+  const prix = (tarif.montant_ht_centimes / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2 });
+  const fin = dateFr(versIso(sub.trial_end));
+
+  await envoyerEmail(email ?? "", "[QualioFlex] Votre essai gratuit se termine bientôt",
+    "Votre essai gratuit se termine bientôt",
+    `<p style="color:#555;line-height:1.6;margin:0 0 16px;">Bonjour,</p>
+<p style="color:#555;line-height:1.6;margin:0 0 16px;">Votre période d'essai gratuite de QualioFlex pour <strong>${org?.raison_sociale ?? "votre organisme"}</strong>
+se termine le <strong>${fin}</strong>.</p>
+<p style="color:#555;line-height:1.6;margin:0 0 16px;">Vous n'avez rien à faire : votre abonnement démarrera automatiquement à cette date
+(${prix} € HT par mois, facturé le 1er du mois, le premier mois au prorata) et vous continuerez à utiliser QualioFlex sans interruption.</p>
+<p style="color:#555;line-height:1.6;margin:0 0 24px;">QualioFlex est sans engagement : vous pouvez arrêter à tout moment depuis votre espace.</p>
+<table cellpadding="0" cellspacing="0"><tr><td style="background:#f2901e;border-radius:6px;">
+<a href="${SITE_URL}/factures" style="display:inline-block;padding:14px 32px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;">Voir mon abonnement →</a>
+</td></tr></table>`);
+
+  await admin.from("abonnements_organismes").update({ rappel_fin_essai_envoye_le: new Date().toISOString() }).eq("organisme_id", organismeId);
+}
+
+// ───────────────────────── point d'entrée ─────────────────────────
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
@@ -153,7 +337,9 @@ Deno.serve(async (req: Request) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        if (session.metadata?.motif === "recuperation_donnees" && session.payment_status === "paid") {
+        if (session.mode === "setup" && session.metadata?.motif === "abonnement") {
+          await creerAbonnement(admin, stripe, session);
+        } else if (session.metadata?.motif === "recuperation_donnees" && session.payment_status === "paid") {
           await paiementExportConfirme(admin, session);
         } else {
           await admin.from("paiements_stripe")
@@ -169,8 +355,16 @@ Deno.serve(async (req: Request) => {
       case "invoice.payment_failed":
         await enregistrerFacture(admin, event.data.object as Stripe.Invoice, true);
         break;
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await synchroniserAbonnement(admin, event.data.object as Stripe.Subscription);
+        break;
+      case "customer.subscription.trial_will_end":
+        await rappelFinEssai(admin, event.data.object as Stripe.Subscription);
+        break;
       default:
-        // Abonnements, fin d'essai, carte expirée… : traités au lot 2.
+        // Carte expirée, impayés, coupure : lot 4.
         break;
     }
   } catch (e) {
