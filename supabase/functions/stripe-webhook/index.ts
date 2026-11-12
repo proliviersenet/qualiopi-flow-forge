@@ -31,6 +31,10 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 //      1 mois offert au parrain et 1 au filleul (registre mois_offerts) ;
 //    · facture du 1er du mois (mois complet) avec un mois offert disponible →
 //      ligne négative du montant de l'abonnement, mois marqué consommé.
+//  - lot 6 (12/11/2026) : quota de 5 filleuls par an et par parrain ; badges
+//    Membre Argent (3 filleuls confirmés : +1 mois offert) et Membre Or
+//    (5 filleuls : sessions offertes pendant 1 an, marquées « offerte »).
+//    Un Membre Or ne peut plus parrainer tant que ses sessions sont offertes.
 //
 // Idempotent : Stripe peut renvoyer un même événement, rien n'est dupliqué.
 
@@ -116,18 +120,20 @@ async function ajouterSessionsALaFacture(admin: SupabaseClient, stripe: Stripe, 
   if (!organismeId || !customerId) return;
 
   const limite = new Date(facture.created * 1000);
-  const { data: lignes, error } = await admin.from("sessions_facturables")
-    .select("id, libelle, montant_ht_centimes")
+  const { data: toutes, error } = await admin.from("sessions_facturables")
+    .select("id, libelle, montant_ht_centimes, facturable_le")
     .eq("organisme_id", organismeId)
     .eq("statut", "en_attente")
     .is("stripe_invoice_item_id", null)
     .lte("facturable_le", limite.toISOString())
     .order("date_debut_session", { ascending: true });
   if (error) throw new Error(`Lecture des sessions à facturer : ${error.message}`);
-  if (!lignes?.length) return;
+  if (!toutes?.length) return;
 
-  const { data: tarif } = await admin.from("tarifs").select("stripe_tax_rate_id").eq("code", "session").single();
   const periode = new Date(Date.UTC(limite.getUTCFullYear(), limite.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  const lignes = await retirerSessionsOffertes(admin, organismeId, toutes, periode);
+  if (!lignes.length) return;
+  const { data: tarif } = await admin.from("tarifs").select("stripe_tax_rate_id").eq("code", "session").single();
 
   for (const l of lignes) {
     const ligne = await stripe.invoiceItems.create({
@@ -148,6 +154,25 @@ async function ajouterSessionsALaFacture(admin: SupabaseClient, stripe: Stripe, 
     }).eq("id", l.id);
     if (majErr) throw new Error(`Mise à jour session ${l.id} : ${majErr.message}`);
   }
+}
+
+// Badge Or (lot 6) : les sessions devenues dues pendant l'année offerte ne sont
+// pas facturées (statut « offerte »). Renvoie les sessions restant à facturer.
+async function retirerSessionsOffertes<T extends { id: string; facturable_le: string }>(
+  admin: SupabaseClient, organismeId: string, lignes: T[], periode: string,
+): Promise<T[]> {
+  const { data: badge } = await admin.from("badges_parrainage")
+    .select("obtenu_le, sessions_offertes_jusqu_au").eq("organisme_id", organismeId).eq("niveau", "or").maybeSingle();
+  if (!badge?.sessions_offertes_jusqu_au) return lignes;
+  const debut = new Date(badge.obtenu_le);
+  const fin = new Date(badge.sessions_offertes_jusqu_au);
+  const offertes = lignes.filter((l) => { const d = new Date(l.facturable_le); return d >= debut && d < fin; });
+  if (offertes.length) {
+    await admin.from("sessions_facturables").update({
+      statut: "offerte", periode_facturation: periode, updated_at: new Date().toISOString(),
+    }).in("id", offertes.map((l) => l.id));
+  }
+  return lignes.filter((l) => !offertes.includes(l));
 }
 
 function lancerExport(exportId: string) {
@@ -302,6 +327,16 @@ async function creerAbonnement(admin: SupabaseClient, stripe: Stripe, session: S
 async function enregistrerParrainage(admin: SupabaseClient, filleulId: string, code: string) {
   const { data: c } = await admin.from("codes_parrainage").select("id, organisme_id, actif").eq("code", code).maybeSingle();
   if (!c?.actif || c.organisme_id === filleulId) return;
+  // Quota annuel et pause « Membre Or » du parrain (vérifiés aussi au démarrage de l'essai)
+  const [{ data: dejaCetteAnnee }, { data: max }, { data: enPause }] = await Promise.all([
+    admin.rpc("fn_parrainages_annee", { p_parrain: c.organisme_id }),
+    admin.rpc("fn_regle_parrainage", { p_cle: "max_filleuls_par_an" }),
+    admin.rpc("fn_parrainage_en_pause_jusqu_au", { p_organisme_id: c.organisme_id }),
+  ]);
+  if (enPause || (dejaCetteAnnee ?? 0) >= (max ?? 5)) {
+    console.log(`stripe-webhook: parrain ${c.organisme_id} en pause ou quota atteint, parrainage non enregistré.`);
+    return;
+  }
   const { error } = await admin.from("parrainages").insert({
     code_id: c.id, parrain_organisme_id: c.organisme_id, filleul_organisme_id: filleulId, statut: "en_attente",
   });
@@ -342,6 +377,57 @@ async function confirmerParrainage(admin: SupabaseClient, facture: Stripe.Invoic
       para(`Bienvenue parmi les abonnés QualioFlex ! Comme vous avez été parrainé par <strong>${parrain.nom}</strong>, <strong>votre prochain mois d'abonnement est offert</strong> : il sera déduit automatiquement de votre prochaine facture.`) +
       para("Vous aussi, parrainez vos confrères formateurs : un mois offert pour chacun de vous deux.") +
       bouton(`${SITE_URL}/factures`, "Mon code de parrainage →"));
+  }
+
+  await attribuerBadges(admin, pa.parrain_organisme_id);
+}
+
+// Lot 6 : badges Membre Argent (+1 mois offert) et Membre Or (sessions offertes 1 an)
+async function attribuerBadges(admin: SupabaseClient, parrainId: string) {
+  const { count } = await admin.from("parrainages").select("id", { count: "exact", head: true })
+    .eq("parrain_organisme_id", parrainId).eq("statut", "confirme");
+  const confirmes = count ?? 0;
+  const regle = async (cle: string, defaut: number) =>
+    ((await admin.rpc("fn_regle_parrainage", { p_cle: cle })).data as number | null) ?? defaut;
+  const [seuilArgent, seuilOr, dureeMois] = await Promise.all([
+    regle("seuil_argent", 3), regle("seuil_or", 5), regle("duree_sessions_offertes_mois", 12),
+  ]);
+  const parrain = await emailOrganisme(admin, parrainId);
+
+  if (confirmes >= seuilArgent) {
+    const { data: badge } = await admin.from("badges_parrainage")
+      .insert({ organisme_id: parrainId, niveau: "argent", filleuls_confirmes: confirmes })
+      .select("id").maybeSingle(); // null si déjà obtenu (contrainte unique)
+    if (badge) {
+      await admin.from("mois_offerts").insert({ organisme_id: parrainId, motif: "bonus_badge_argent", commentaire: `Badge Membre Argent (${confirmes} filleuls)` });
+      if (await premiereFois(admin, parrainId, "badge_argent", badge.id)) {
+        await envoyerEmail(parrain.email, "[QualioFlex] 🥈 Vous êtes Membre Argent !",
+          "Bravo, vous êtes Membre Argent 🥈",
+          para("Bonjour,") +
+          para(`Avec <strong>${confirmes} filleuls</strong>, <strong>${parrain.nom}</strong> obtient le badge <strong>Membre Argent</strong> de QualioFlex. Merci de faire grandir la communauté !`) +
+          para("En récompense, <strong>un mois d'abonnement supplémentaire vous est offert</strong>, en plus des mois gagnés pour chaque filleul.") +
+          para(`Prochaine étape : <strong>${seuilOr} filleuls</strong> pour devenir <strong>Membre Or</strong> et profiter de <strong>sessions illimitées offertes pendant un an</strong>.`) +
+          bouton(`${SITE_URL}/dashboard`, "Voir ma progression →"));
+      }
+    }
+  }
+
+  if (confirmes >= seuilOr) {
+    const fin = new Date();
+    fin.setMonth(fin.getMonth() + dureeMois);
+    const { data: badge } = await admin.from("badges_parrainage")
+      .insert({ organisme_id: parrainId, niveau: "or", filleuls_confirmes: confirmes, sessions_offertes_jusqu_au: fin.toISOString() })
+      .select("id").maybeSingle();
+    if (badge && await premiereFois(admin, parrainId, "badge_or", badge.id)) {
+      await envoyerEmail(parrain.email, "[QualioFlex] 🥇 Vous êtes Membre Or !",
+        "Félicitations, vous êtes Membre Or 🥇",
+        para("Bonjour,") +
+        para(`Avec <strong>${confirmes} filleuls</strong>, <strong>${parrain.nom}</strong> obtient le badge <strong>Membre Or</strong>, le plus haut niveau du parrainage QualioFlex.`) +
+        para(`Votre récompense : <strong>toutes vos sessions sont offertes jusqu'au ${dateFr(fin.toISOString())}</strong>, sans limite. Seul l'abonnement mensuel reste facturé.`) +
+        para("Pendant cette année offerte, votre code de parrainage est mis en pause ; vous pourrez à nouveau parrainer à son issue.") +
+        para("Merci infiniment pour votre confiance et vos recommandations !") +
+        bouton(`${SITE_URL}/dashboard`, "Voir mon badge →"));
+    }
   }
 }
 
@@ -526,7 +612,8 @@ async function finAbonnement(admin: SupabaseClient, organismeId: string, sub: St
     .select("id, libelle, montant_ht_centimes, facturable_le")
     .eq("organisme_id", organismeId).eq("statut", "en_attente").is("stripe_invoice_item_id", null)
     .order("date_debut_session", { ascending: true });
-  const dues = (lignes ?? []).filter((l) => new Date(l.facturable_le) <= fin);
+  const periodeFin = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  const dues = await retirerSessionsOffertes(admin, organismeId, (lignes ?? []).filter((l) => new Date(l.facturable_le) <= fin), periodeFin);
   const liberees = (lignes ?? []).filter((l) => new Date(l.facturable_le) > fin);
 
   if (liberees.length) {

@@ -180,6 +180,9 @@ const SuperAdmin = () => {
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h1 className="text-2xl font-bold" style={{ color: "#25245e" }}>🛠️ Superadmin — Vue plateforme</h1>
             <div className="flex gap-2 flex-wrap">
+              <Link to="/superadmin/facturation">
+                <Button variant="outline" size="sm">💳 Abonnements & parrainage</Button>
+              </Link>
               <Link to="/superadmin/explorer">
                 <Button variant="outline" size="sm">🔎 Explorateur SAV (organismes, sessions, docs)</Button>
               </Link>

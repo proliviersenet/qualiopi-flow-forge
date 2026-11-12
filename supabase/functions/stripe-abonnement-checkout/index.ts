@@ -87,6 +87,15 @@ Deno.serve(async (req: Request) => {
       if (!code?.actif) return reponse({ error: "Ce code de parrainage n'existe pas. Vérifiez-le ou laissez le champ vide." }, 400);
       if (code.organisme_id === organisme.id) return reponse({ error: "Vous ne pouvez pas utiliser votre propre code de parrainage." }, 400);
       if (abonnement?.stripe_subscription_id) return reponse({ error: "Le parrainage est réservé aux nouveaux abonnés : laissez le champ vide." }, 400);
+      const [{ data: dejaCetteAnnee }, { data: max }, { data: enPause }] = await Promise.all([
+        admin.rpc("fn_parrainages_annee", { p_parrain: code.organisme_id }),
+        admin.rpc("fn_regle_parrainage", { p_cle: "max_filleuls_par_an" }),
+        admin.rpc("fn_parrainage_en_pause_jusqu_au", { p_organisme_id: code.organisme_id }),
+      ]);
+      if (enPause) return reponse({ error: "Ce parrain (Membre Or) ne peut pas parrainer pour le moment : laissez le champ vide." }, 400);
+      if ((dejaCetteAnnee ?? 0) >= (max ?? 5)) {
+        return reponse({ error: "Ce parrain a atteint son nombre maximum de filleuls pour cette année : laissez le champ vide." }, 400);
+      }
       codeParrainage = codeSaisi;
     }
 

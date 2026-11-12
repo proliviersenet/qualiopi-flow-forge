@@ -55,6 +55,13 @@ type Parrainage = {
   mois_gagnes?: number;
   mois_restants?: number;
   parrain?: string | null;
+  badge?: "argent" | "or" | null;
+  filleuls_annee?: number;
+  max_filleuls_par_an?: number;
+  sessions_offertes_jusqu_au?: string | null;
+  parrainage_en_pause_jusqu_au?: string | null;
+  seuil_argent?: number;
+  seuil_or?: number;
 };
 
 type SessionAFacturer = {
@@ -540,6 +547,12 @@ const Factures = () => {
                       <p className="text-xs text-gray-500">mois offert{(parrainage.mois_restants ?? 0) > 1 ? "s" : ""} à venir</p>
                     </div>
                   </div>
+                  <p className="text-xs text-gray-500">
+                    {parrainage.parrainage_en_pause_jusqu_au ? "🥇 Membre Or : sessions offertes et parrainage en pause jusqu'au " + dateFr(parrainage.parrainage_en_pause_jusqu_au) + ". "
+                      : parrainage.badge === "or" ? "🥇 Membre Or. "
+                      : parrainage.badge === "argent" ? "🥈 Membre Argent. " : ""}
+                    {parrainage.seuil_argent ?? 3} filleuls confirmés : badge Argent et 1 mois bonus · {parrainage.seuil_or ?? 5} filleuls : badge Or et sessions offertes pendant un an · {parrainage.filleuls_annee ?? 0}/{parrainage.max_filleuls_par_an ?? 5} filleuls cette année.
+                  </p>
                   {parrainage.parrain && (
                     <p className="text-xs text-gray-500">Vous avez été parrainé par {parrainage.parrain}.</p>
                   )}

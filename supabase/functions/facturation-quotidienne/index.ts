@@ -12,6 +12,10 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 // 2. Carte bientôt expirée : à partir du 15 du mois, si la carte de
 //    l'abonnement expire avant le prochain prélèvement (le 1er), un email
 //    invite à la mettre à jour (une fois par mois).
+// 3. Animation du parrainage (lot 6) : le 10 de chaque mois, deux relances
+//    pour les abonnés actifs (hors Membres Or en pause et quota atteint) :
+//    - ceux qui parrainent déjà : leur progression vers le badge suivant ;
+//    - ceux qui n'ont jamais parrainé : une incitation (ce qu'ils peuvent gagner).
 //
 // Recette : body { "maintenant": "2026-12-12T08:00:00Z" } simule une date,
 // accepté uniquement avec une clé Stripe de test.
@@ -86,7 +90,7 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20", httpClient: Stripe.createFetchHttpClient() });
-  const bilan = { relances_j2: 0, coupures: 0, coupures_evitees: 0, alertes_carte: 0, erreurs: [] as string[] };
+  const bilan = { relances_j2: 0, coupures: 0, coupures_evitees: 0, alertes_carte: 0, relances_parrainage: 0, erreurs: [] as string[] };
 
   // ─── 1. Impayés : relance J-2 et coupure ───
   let q = admin.from("abonnements_organismes")
@@ -171,6 +175,69 @@ Deno.serve(async (req: Request) => {
           para(`La carte bancaire enregistrée pour l'abonnement QualioFlex de <strong>${dest.nom}</strong> (${carte.brand.toUpperCase()} se terminant par ${carte.last4}) expire fin ${String(carte.exp_month).padStart(2, "0")}/${carte.exp_year}.`) +
           para(`Pour éviter un échec de paiement lors du prochain prélèvement, le ${dateFr(prochain.toISOString())}, pensez à la mettre à jour.`) +
           bouton(`${SITE_URL}/factures`, "Mettre à jour ma carte →"));
+      } catch (e) {
+        bilan.erreurs.push(`${ab.organisme_id} : ${(e as Error).message}`);
+      }
+    }
+  }
+
+  // ─── 3. Relance mensuelle du parrainage ───
+  if (jourParis === 10 || body?.forcer_relance_parrainage === true && modeTest) {
+    const mois = maintenant.toISOString().slice(0, 7);
+    const regle = async (cle: string, defaut: number) =>
+      ((await admin.rpc("fn_regle_parrainage", { p_cle: cle })).data as number | null) ?? defaut;
+    const [seuilArgent, seuilOr, maxAn] = await Promise.all([regle("seuil_argent", 3), regle("seuil_or", 5), regle("max_filleuls_par_an", 5)]);
+    let q3 = admin.from("abonnements_organismes").select("organisme_id").eq("statut", "actif");
+    if (seulement) q3 = q3.eq("organisme_id", seulement);
+    const { data: abonnes } = await q3;
+
+    for (const ab of abonnes ?? []) {
+      try {
+        const { data: badges } = await admin.from("badges_parrainage").select("niveau").eq("organisme_id", ab.organisme_id);
+        const { data: enPause } = await admin.rpc("fn_parrainage_en_pause_jusqu_au", { p_organisme_id: ab.organisme_id });
+        if (enPause) continue; // Membre Or pendant ses sessions offertes
+        const { data: annee } = await admin.rpc("fn_parrainages_annee", { p_parrain: ab.organisme_id });
+        if ((annee ?? 0) >= maxAn) continue; // quota de l'année atteint : rien à proposer
+        if (!(await premiereFois(admin, ab.organisme_id, "parrainage_relance", mois))) continue;
+
+        const { data: code } = await admin.rpc("fn_code_parrainage", { p_organisme_id: ab.organisme_id });
+        const { data: siens } = await admin.from("parrainages").select("statut")
+          .eq("parrain_organisme_id", ab.organisme_id).neq("statut", "annule");
+        const confirmes = (siens ?? []).filter((x) => x.statut === "confirme").length;
+        const lien = `${SITE_URL}/register?parrain=${code}`;
+        const dest = await emailOrganisme(admin, ab.organisme_id);
+        const blocCode = para(`Votre code : <strong style="font-family:monospace;font-size:16px;color:#25245e;">${code}</strong><br>Votre lien d'invitation : <a href="${lien}" style="color:#25245e;">${lien}</a>`);
+
+        if (!(siens ?? []).length) {
+          // Jamais parrainé : incitation
+          bilan.relances_parrainage++;
+          await envoyerEmail(dest.email, "[QualioFlex] Un confrère formateur à recommander ?",
+            "Recommandez QualioFlex, gagnez des mois offerts",
+            para("Bonjour,") +
+            para("Vous connaissez un formateur ou un organisme qui se bat encore avec ses documents Qualiopi ? Recommandez-lui QualioFlex :") +
+            para(`🎁 <strong>1 mois d'abonnement offert pour vous et 1 pour lui</strong> dès sa première facture.<br>🥈 <strong>${seuilArgent} filleuls</strong> : badge Membre Argent et un mois bonus.<br>🥇 <strong>${seuilOr} filleuls</strong> : badge Membre Or et <strong>toutes vos sessions offertes pendant un an</strong>.`) +
+            para("Il suffit de lui transmettre votre lien : son code est appliqué automatiquement à son inscription.") +
+            blocCode +
+            bouton(`${SITE_URL}/dashboard`, "Voir mon tableau de bord →"));
+          continue;
+        }
+        const argent = (badges ?? []).some((b) => b.niveau === "argent");
+        const prochain = argent ? seuilOr : seuilArgent;
+        const reste = Math.max(prochain - confirmes, 1);
+        const dejaOr = (badges ?? []).some((b) => b.niveau === "or"); // année offerte terminée
+        const objectif = dejaOr
+          ? "Chaque nouveau filleul vous offre un mois de plus."
+          : argent
+          ? `Plus que <strong>${reste} filleul${reste > 1 ? "s" : ""}</strong> pour devenir <strong>Membre Or 🥇</strong> : toutes vos sessions offertes pendant un an.`
+          : `Plus que <strong>${reste} filleul${reste > 1 ? "s" : ""}</strong> pour devenir <strong>Membre Argent 🥈</strong> et gagner un mois offert supplémentaire.`;
+        bilan.relances_parrainage++;
+        await envoyerEmail(dest.email, "[QualioFlex] Vos mois offerts vous attendent",
+          "Parrainez, gagnez des mois offerts",
+          para("Bonjour,") +
+          para(`Chaque formateur que vous recommandez à QualioFlex vous fait gagner <strong>un mois d'abonnement offert</strong>, et à lui aussi.`) +
+          para(`Où en êtes-vous ? <strong>${confirmes} filleul${confirmes > 1 ? "s" : ""} confirmé${confirmes > 1 ? "s" : ""}</strong>${dejaOr ? " · Membre Or 🥇" : argent ? " · badge Membre Argent 🥈" : ""}. ${objectif}`) +
+          blocCode +
+          bouton(`${SITE_URL}/dashboard`, "Voir ma progression →"));
       } catch (e) {
         bilan.erreurs.push(`${ab.organisme_id} : ${(e as Error).message}`);
       }

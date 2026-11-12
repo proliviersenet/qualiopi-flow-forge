@@ -61,6 +61,7 @@ import GlobalErrorLogger from "./components/GlobalErrorLogger";
 import SignalerBugButton from "./components/SignalerBugButton";
 import SuperAdmin from "./pages/SuperAdmin";
 import SuperAdminExplorer from "./pages/SuperAdminExplorer";
+import SuperAdminFacturation from "./pages/SuperAdminFacturation";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
@@ -293,6 +294,7 @@ const App = () => (
               <Route path="/admin/suppressions" element={<AdminSuppressions />} />
               <Route path="/superadmin" element={<SuperAdmin />} />
               <Route path="/superadmin/explorer" element={<SuperAdminExplorer />} />
+              <Route path="/superadmin/facturation" element={<SuperAdminFacturation />} />
               <Route path="/pre-audit" element={<PreAudit />} />
               <Route path="/notations-formateur" element={<NotationsFormateur />} />
               <Route path="/chatbot-escalades" element={<ChatbotEscalades />} />

@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import DashboardCard from '@/components/DashboardCard';
+import CarteParrainage from '@/components/CarteParrainage';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -617,6 +618,9 @@ const Dashboard = () => {
               </div>
             </div>
           )}
+
+          {/* Lot 6 facturation : progression parrainage et badge (masqué pendant la bêta) */}
+          <CarteParrainage />
 
           {/* Cartes stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
