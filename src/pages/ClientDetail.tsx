@@ -782,6 +782,24 @@ const ClientDetail = () => {
   // que depuis le bouton de la boîte de dialogue ci-dessous (cf. rendu).
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<Session | null>(null);
 
+  // Facturation lot 3 : avant de supprimer, on indique au formateur si la session
+  // est encore supprimable sans frais (avant J-48h) ou si elle reste facturée.
+  // Lecture de la ligne sessions_facturables (RLS : visible par l'organisme payeur
+  // uniquement). Pas de ligne → facturation inactive / ambassadeur → rien affiché.
+  const [ligneFacturable, setLigneFacturable] = useState<{ statut: string; facturable_le: string; montant_ht_centimes: number } | null>(null);
+  useEffect(() => {
+    setLigneFacturable(null);
+    if (!confirmDeleteSession) return;
+    let annule = false;
+    (supabase as any)
+      .from("sessions_facturables")
+      .select("statut, facturable_le, montant_ht_centimes")
+      .eq("session_id", confirmDeleteSession.id)
+      .maybeSingle()
+      .then(({ data }: any) => { if (!annule) setLigneFacturable(data ?? null); });
+    return () => { annule = true; };
+  }, [confirmDeleteSession]);
+
   const supprimerSession = async (sessionId: string) => {
     const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
     if (error) { toast({ title: "Erreur", description: error.message, variant: "destructive" }); return; }
@@ -1158,6 +1176,28 @@ const ClientDetail = () => {
                 </>
               )}
             </AlertDialogDescription>
+            {ligneFacturable && ligneFacturable.statut !== "exemptee" && (() => {
+              const prix = (ligneFacturable.montant_ht_centimes / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+              const dejaFacturee = ligneFacturable.statut === "facturee";
+              const gratuite = ligneFacturable.statut === "en_attente" && new Date(ligneFacturable.facturable_le) > new Date();
+              if (gratuite) {
+                return (
+                  <div className="mt-3 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                    ✅ Suppression gratuite : la session ne sera pas facturée (suppression possible sans frais jusqu'au{" "}
+                    {new Date(ligneFacturable.facturable_le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}).
+                  </div>
+                );
+              }
+              if (ligneFacturable.statut === "en_attente" || dejaFacturee) {
+                return (
+                  <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+                    ⚠️ Moins de 48 h avant le démarrage : cette session reste facturée {prix} HT
+                    {dejaFacturee ? " (déjà incluse dans une facture)" : " sur votre prochaine facture"}.
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>

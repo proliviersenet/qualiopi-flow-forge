@@ -33,6 +33,13 @@ type Facture = {
   hosted_url: string | null;
 };
 
+type SessionAFacturer = {
+  id: string;
+  libelle: string;
+  facturable_le: string;
+  montant_ht_centimes: number;
+};
+
 const euros = (centimes: number) =>
   (centimes / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -55,6 +62,7 @@ const Factures = () => {
   const { statut, loading, rafraichir } = useStatutAbonnement();
 
   const [factures, setFactures] = useState<Facture[]>([]);
+  const [sessionsAFacturer, setSessionsAFacturer] = useState<SessionAFacturer[]>([]);
   const [prix, setPrix] = useState<{ abonnement: number; session: number }>({ abonnement: 3490, session: 300 });
   const [redirection, setRedirection] = useState<"souscription" | "portail" | null>(null);
   const [attenteActivation, setAttenteActivation] = useState(false);
@@ -66,14 +74,22 @@ const Factures = () => {
     if (role === "client") { navigate("/espace-client"); return; }
 
     const charger = async () => {
-      const [{ data: lignes }, { data: tarifs }] = await Promise.all([
+      const [{ data: lignes }, { data: tarifs }, { data: sessionsDues }] = await Promise.all([
         supabase.from("factures")
           .select("id, numero, emise_le, periode_debut, periode_fin, montant_ht_centimes, montant_ttc_centimes, statut, mois_offert, pdf_url, hosted_url")
           .neq("statut", "brouillon")
           .order("emise_le", { ascending: false }),
         supabase.from("tarifs").select("code, montant_ht_centimes").in("code", ["abonnement_mensuel", "session"]),
+        // Lot 3 : sessions affectées pas encore facturées (RLS : organisme payeur)
+        (supabase as any).from("sessions_facturables")
+          .select("id, libelle, facturable_le, montant_ht_centimes")
+          .eq("statut", "en_attente")
+          .order("facturable_le", { ascending: true }),
       ]);
-      setFactures((lignes ?? []) as Facture[]);
+      // Les factures à 0 € (ouverture de l'essai) n'apportent rien au formateur :
+      // on les masque, sauf les mois offerts (parrainage) qu'on veut montrer.
+      setFactures(((lignes ?? []) as Facture[]).filter((f) => f.montant_ttc_centimes > 0 || f.mois_offert));
+      setSessionsAFacturer((sessionsDues ?? []) as SessionAFacturer[]);
       const t = Object.fromEntries((tarifs ?? []).map((x: { code: string; montant_ht_centimes: number }) => [x.code, x.montant_ht_centimes]));
       setPrix({ abonnement: t.abonnement_mensuel ?? 3490, session: t.session ?? 300 });
     };
@@ -238,6 +254,56 @@ const Factures = () => {
               ) : carteStatut(statut)}
             </CardContent>
           </Card>
+
+          {statut?.facturation_active && statut.type_compte !== "super_ambassadeur" && statut.statut !== "exempte" && sessionsAFacturer.length > 0 && (() => {
+            // Prochaine facture : le 1er du mois suivant. Une session y figure si
+            // elle devient facturable (J-48h) avant cette date.
+            const maintenant = new Date();
+            const prochaineFacture = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1);
+            const surProchaine = sessionsAFacturer.filter((x) => new Date(x.facturable_le) <= prochaineFacture);
+            const plusTard = sessionsAFacturer.filter((x) => new Date(x.facturable_le) > prochaineFacture);
+            const total = surProchaine.reduce((t, x) => t + x.montant_ht_centimes, 0);
+            const ligne = (x: SessionAFacturer) => {
+              const annulable = new Date(x.facturable_le) > maintenant;
+              return (
+                <li key={x.id} className="flex items-start justify-between gap-3 py-2 border-b last:border-0">
+                  <div>
+                    <p className="text-sm text-gray-800">{x.libelle.replace(/^Session : /, "")}</p>
+                    <p className="text-xs text-gray-500">
+                      {annulable
+                        ? <>Supprimable sans frais jusqu'au {new Date(x.facturable_le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</>
+                        : "Moins de 48 h avant le démarrage : facturée"}
+                    </p>
+                  </div>
+                  <span className="text-sm font-medium whitespace-nowrap">{euros(x.montant_ht_centimes)} HT</span>
+                </li>
+              );
+            };
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Sessions à facturer</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {surProchaine.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">
+                        Sur la facture du {dateFr(prochaineFacture.toISOString())} : {surProchaine.length} session{surProchaine.length > 1 ? "s" : ""}, {euros(total)} HT
+                      </p>
+                      <ul className="mt-1">{surProchaine.map(ligne)}</ul>
+                    </div>
+                  )}
+                  {plusTard.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Sur les factures suivantes</p>
+                      <ul className="mt-1">{plusTard.map(ligne)}</ul>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">Une session affectée à un client est facturée {prixSession} HT. Elle est gratuite si vous la supprimez ou l'annulez au moins 48 h avant son démarrage.</p>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           <Card>
             <CardHeader>
