@@ -14,6 +14,8 @@ import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
 //  - customer.subscription.created / updated / deleted : statut local de
 //    l'abonnement (abonnements_organismes) aligné sur Stripe.
 //  - customer.subscription.trial_will_end : email de rappel de fin d'essai.
+//  - invoice.created (lot 3) : sessions dues (3 € HT) ajoutées à la facture
+//    d'abonnement, une ligne par session.
 //  - invoice.finalized / invoice.paid / invoice.payment_failed : copie locale
 //    de la facture dans public.factures (liste téléchargeable du formateur).
 // Impayés, coupure et réactivation : lot 4.
@@ -82,6 +84,57 @@ async function enregistrerFacture(admin: SupabaseClient, facture: Stripe.Invoice
   if (error) throw new Error(`Enregistrement facture ${facture.id} : ${error.message}`);
 
   await admin.from("paiements_stripe").update({ facture_id: data.id }).eq("stripe_invoice_id", facture.id);
+  await admin.from("sessions_facturables").update({ facture_id: data.id }).eq("stripe_invoice_id", facture.id);
+}
+
+// Lot 3 (12/11/2026) : à la création d'une facture d'abonnement (fin d'essai,
+// puis chaque 1er du mois), Stripe la laisse environ une heure en brouillon.
+// On y ajoute une ligne par session due (J-48h passé, non annulée à temps).
+// Si la facture n'est plus modifiable, les sessions restent « en_attente » et
+// partent sur la facture du mois suivant : rien n'est perdu ni facturé deux fois.
+async function ajouterSessionsALaFacture(admin: SupabaseClient, stripe: Stripe, facture: Stripe.Invoice) {
+  if (facture.status !== "draft") return;
+  const f = facture as unknown as { subscription?: unknown; parent?: { subscription_details?: { subscription?: unknown } } };
+  const abonnementId = idDe(f.subscription ?? f.parent?.subscription_details?.subscription);
+  if (!abonnementId || facture.billing_reason !== "subscription_cycle") return;
+
+  const organismeId = await organismeDeLaFacture(admin, facture);
+  const customerId = idDe(facture.customer);
+  if (!organismeId || !customerId) return;
+
+  const limite = new Date(facture.created * 1000);
+  const { data: lignes, error } = await admin.from("sessions_facturables")
+    .select("id, libelle, montant_ht_centimes")
+    .eq("organisme_id", organismeId)
+    .eq("statut", "en_attente")
+    .is("stripe_invoice_item_id", null)
+    .lte("facturable_le", limite.toISOString())
+    .order("date_debut_session", { ascending: true });
+  if (error) throw new Error(`Lecture des sessions à facturer : ${error.message}`);
+  if (!lignes?.length) return;
+
+  const { data: tarif } = await admin.from("tarifs").select("stripe_tax_rate_id").eq("code", "session").single();
+  const periode = new Date(Date.UTC(limite.getUTCFullYear(), limite.getUTCMonth(), 1)).toISOString().slice(0, 10);
+
+  for (const l of lignes) {
+    const ligne = await stripe.invoiceItems.create({
+      customer: customerId,
+      invoice: facture.id,
+      amount: l.montant_ht_centimes,
+      currency: "eur",
+      description: l.libelle,
+      tax_rates: tarif?.stripe_tax_rate_id ? [tarif.stripe_tax_rate_id] : undefined,
+      metadata: { session_facturable_id: l.id, organisme_id: organismeId },
+    }, { idempotencyKey: `qf-session-${l.id}` });
+    const { error: majErr } = await admin.from("sessions_facturables").update({
+      statut: "facturee",
+      stripe_invoice_item_id: ligne.id,
+      stripe_invoice_id: facture.id,
+      periode_facturation: periode,
+      updated_at: new Date().toISOString(),
+    }).eq("id", l.id);
+    if (majErr) throw new Error(`Mise à jour session ${l.id} : ${majErr.message}`);
+  }
 }
 
 function lancerExport(exportId: string) {
@@ -348,6 +401,9 @@ Deno.serve(async (req: Request) => {
         }
         break;
       }
+      case "invoice.created":
+        await ajouterSessionsALaFacture(admin, stripe, event.data.object as Stripe.Invoice);
+        break;
       case "invoice.finalized":
       case "invoice.paid":
         await enregistrerFacture(admin, event.data.object as Stripe.Invoice);
