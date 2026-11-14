@@ -40,75 +40,47 @@ export const BandeauExsenco = () => (
   </div>
 );
 
-// ─────────────────────────── Hero + facture interactive ───────────────────────────
-const FactureSimulee = () => {
-  const [sessions, setSessions] = useState(4);
-  const totalHt = OFFRE.abonnementHt + sessions * OFFRE.sessionHt;
-  const premier = new Date();
-  premier.setMonth(premier.getMonth() + 1, 1);
-  return (
-    <div className="relative mx-3 sm:mx-0">
-      <div aria-hidden className="absolute -inset-2 sm:-inset-3 rotate-2 rounded-2xl" style={{ background: ORANGE, opacity: 0.9 }} />
-      <figure className="relative rounded-2xl bg-white p-6 sm:p-7 shadow-2xl text-gray-800" aria-label="Simulation de votre facture mensuelle">
-        <div className="flex items-start justify-between gap-4 border-b border-dashed border-gray-300 pb-4">
-          <div>
-            <p className="text-xs text-gray-500">Votre facture QualioFlex</p>
-            <p className="text-lg font-bold" style={{ ...TITRE, color: INDIGO }}>
-              du 1<sup>er</sup> {premier.toLocaleDateString("fr-FR", { month: "long" })}
-            </p>
-          </div>
-          <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ background: "#eef6ee", color: "#2f7a3b" }}>Sans engagement</span>
-        </div>
-
-        <dl className="mt-4 space-y-2 text-sm">
-          <div className="flex justify-between"><dt>Abonnement mensuel</dt><dd className="tabular-nums">{euros(OFFRE.abonnementHt)}</dd></div>
-          <div className="flex justify-between"><dt>{sessions} session{sessions > 1 ? "s" : ""} × {euros(OFFRE.sessionHt)}</dt><dd className="tabular-nums">{euros(sessions * OFFRE.sessionHt)}</dd></div>
-          <div className="flex justify-between text-gray-500"><dt>TVA 20 %</dt><dd className="tabular-nums">{euros(ttc(totalHt) - totalHt)}</dd></div>
-        </dl>
-
-        <label htmlFor="simu-sessions" className="mt-5 block text-sm font-medium text-gray-700">
-          Combien de sessions animez-vous par mois ?
-        </label>
-        <input id="simu-sessions" type="range" min={0} max={20} value={sessions}
-          onChange={(e) => setSessions(Number(e.target.value))}
-          className="mt-2 w-full h-2 cursor-pointer appearance-auto rounded-full accent-[#f2901e]"
-          style={{ background: `linear-gradient(to right, ${ORANGE} ${(sessions / 20) * 100}%, #e5e4ef ${(sessions / 20) * 100}%)` }} />
-
-        <div className="mt-4 flex items-end justify-between border-t border-gray-200 pt-4">
-          <span className="text-sm text-gray-600">Total HT</span>
-          <span className="text-4xl font-extrabold tabular-nums" style={{ ...TITRE, color: INDIGO }}>{euros(totalHt)}</span>
-        </div>
-        <figcaption className="mt-3 text-xs text-gray-500">
-          {euros(ttc(totalHt))} TTC. Une session n'est facturée que si elle est maintenue 48 h avant son démarrage.
-        </figcaption>
-      </figure>
+// ─────────────────────────── Hero ───────────────────────────
+// Retour Olivier du 14/11 : accroche courte et simple, prix psychologique de
+// 34,90 € HT mis en avant ; le coût par session reste mentionné (transparence
+// tarifaire) mais en petit, sans simulateur.
+const CarteprixHero = () => (
+  <div className="relative mx-3 sm:mx-0">
+    <div aria-hidden className="absolute -inset-2 sm:-inset-3 rotate-2 rounded-2xl" style={{ background: ORANGE, opacity: 0.9 }} />
+    <div className="relative rounded-2xl bg-white p-7 sm:p-8 shadow-2xl text-gray-800">
+      <p className="text-sm font-semibold" style={{ color: ORANGE }}>{OFFRE.essaiJours} jours gratuits, puis</p>
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
+        <span className="text-5xl sm:text-6xl font-extrabold tabular-nums tracking-tight" style={{ ...TITRE, color: INDIGO }}>{euros(OFFRE.abonnementHt)}</span>
+        <span className="whitespace-nowrap text-lg font-semibold text-gray-500">HT / mois</span>
+      </p>
+      <p className="mt-1 text-sm text-gray-500">Sans engagement · toutes les fonctionnalités incluses</p>
+      <ul className="mt-6 space-y-2.5 text-[15px]">
+        {["Conventions signées en ligne", "Émargements et évaluations automatiques", "Pré-audit et preuves Qualiopi", "BPF prêt à déclarer"].map((t) => (
+          <li key={t} className="flex gap-2"><Check className="h-5 w-5 shrink-0 text-green-600" aria-hidden />{t}</li>
+        ))}
+      </ul>
+      <div className="mt-7"><CtaEssai /></div>
+      <p className="mt-4 text-xs text-gray-400">{euros(OFFRE.sessionHt, 0)} HT par session animée. Aucun prélèvement pendant l'essai.</p>
     </div>
-  );
-};
+  </div>
+);
 
 export const HeroAccueil = () => (
   <section style={{ background: `linear-gradient(160deg, ${INDIGO} 0%, ${NUIT} 100%)` }} className="text-white">
-    <div className="container mx-auto px-4 py-16 md:py-24 grid md:grid-cols-[1.1fr_0.9fr] gap-12 md:gap-16 items-center">
+    <div className="container mx-auto px-4 py-16 md:py-24 grid md:grid-cols-[1.15fr_0.85fr] gap-12 md:gap-16 items-center">
       <div>
-        <p className="text-base mb-5" style={{ color: SABLE }}>Logiciel de conformité Qualiopi pour formateurs et organismes de formation</p>
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05] tracking-tight" style={TITRE}>
-          Vos dossiers Qualiopi prêts pour l'audit, sans y passer vos soirées.
+        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-[1.02] tracking-tight" style={TITRE}>
+          Qualiopi,<br />enfin simple.
         </h1>
-        <p className="mt-6 text-lg text-white/80 max-w-xl leading-relaxed">
-          Conventions signées en ligne, émargements, évaluations, attestations, BPF et preuves d'audit :
-          QualioFlex prépare et relance pour vous, session après session.
+        <p className="mt-6 text-xl text-white/80 max-w-lg leading-relaxed">
+          Vos formations, vos documents et vos preuves d'audit, au même endroit.
         </p>
-        <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="mt-9 flex flex-col sm:flex-row sm:items-center gap-4">
           <CtaEssai />
-          <a href="#tarifs" className="text-white/85 underline underline-offset-4 hover:text-white">Voir les tarifs</a>
+          <a href="#fonctionnalites" className="text-white/85 underline underline-offset-4 hover:text-white">Voir ce qui est inclus</a>
         </div>
-        <ul className="mt-8 grid sm:grid-cols-3 gap-3 text-sm text-white/80">
-          <li className="flex gap-2"><Check className="h-5 w-5 shrink-0" style={{ color: ORANGE }} aria-hidden />{OFFRE.essaiJours} jours d'essai gratuit</li>
-          <li className="flex gap-2"><Check className="h-5 w-5 shrink-0" style={{ color: ORANGE }} aria-hidden />Sans engagement</li>
-          <li className="flex gap-2"><Check className="h-5 w-5 shrink-0" style={{ color: ORANGE }} aria-hidden />Données hébergées en UE</li>
-        </ul>
       </div>
-      <FactureSimulee />
+      <CarteprixHero />
     </div>
   </section>
 );
@@ -230,23 +202,20 @@ export const TarifsAccueil = () => (
       <div className="grid lg:grid-cols-[1fr_1.1fr] gap-12 items-start">
         <div>
           <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight" style={{ ...TITRE, color: INDIGO }}>
-            Un prix simple, qui suit votre activité
+            Un seul prix, tout compris
           </h2>
           <p className="mt-4 text-lg text-gray-600">
-            Un abonnement unique, et quelques euros par session réellement animée. Vous ne payez pas pour les mois creux.
+            Pas de formule à choisir, pas d'option cachée. Vous essayez gratuitement, puis vous restez si ça vous fait gagner du temps.
           </p>
-          <dl className="mt-8 space-y-5">
-            <div>
-              <dt className="text-sm text-gray-500">Abonnement</dt>
-              <dd className="text-4xl font-extrabold" style={{ ...TITRE, color: INDIGO }}>{euros(OFFRE.abonnementHt)} <span className="text-lg font-semibold text-gray-500">HT / mois</span></dd>
-              <dd className="text-sm text-gray-500">soit {euros(ttc(OFFRE.abonnementHt))} TTC, facturé le 1er du mois (le premier mois au prorata)</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-gray-500">Par session</dt>
-              <dd className="text-4xl font-extrabold" style={{ ...TITRE, color: INDIGO }}>{euros(OFFRE.sessionHt, 0)} <span className="text-lg font-semibold text-gray-500">HT</span></dd>
-              <dd className="text-sm text-gray-500">uniquement pour les sessions affectées à un client et maintenues 48 h avant leur démarrage</dd>
-            </div>
-          </dl>
+          <div className="mt-8">
+            <p className="text-5xl sm:text-6xl font-extrabold tabular-nums tracking-tight" style={{ ...TITRE, color: INDIGO }}>
+              {euros(OFFRE.abonnementHt)} <span className="whitespace-nowrap text-xl font-semibold text-gray-500">HT / mois</span>
+            </p>
+            <p className="mt-2 text-gray-600">Sans engagement, toutes les fonctionnalités incluses.</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Facturé le 1<sup>er</sup> du mois ({euros(ttc(OFFRE.abonnementHt))} TTC), plus {euros(OFFRE.sessionHt, 0)} HT par session animée.
+            </p>
+          </div>
           <div className="mt-8"><CtaEssai libelle={`Essayer gratuitement pendant ${OFFRE.essaiJours} jours`} /></div>
           <p className="mt-3 text-sm text-gray-500">Carte bancaire demandée à l'inscription, aucun prélèvement pendant l'essai. Résiliable à tout moment avec un préavis de 30 jours.</p>
         </div>
