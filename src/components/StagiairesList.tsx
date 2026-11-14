@@ -1093,6 +1093,7 @@ const StagiairesList = ({
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Email</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium">Mobile</th>
               <th className="text-left py-2 pr-3 text-gray-500 font-medium" title="Consentement RGPD opt-in email et SMS donné par le stagiaire">Opt-in ✉️/📱</th>
+              <th className="text-left py-2 pr-2 text-gray-500 font-medium" title="Livret d'accueil (moyens pédagogiques, infos pratiques...) envoyé au stagiaire">Livret</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Avant</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Émargement</th>
               <th className="text-left py-2 pr-2 text-gray-500 font-medium">Q. Après</th>
@@ -1104,6 +1105,7 @@ const StagiairesList = ({
           </thead>
           <tbody>
             {stagiaires.map((s) => {
+              const livret = docStatus(s.doc_livret);
               const questAvant = docStatus(s.doc_questionnaire_avant);
               const emargement = docStatus(s.doc_emargement);
               const questApres = docStatus(s.doc_questionnaire_apres);
@@ -1141,6 +1143,20 @@ const StagiairesList = ({
                         📱{consentInfo(s.consentement_sms, s.consentement_sms_date).symbol}
                       </span>
                     </div>
+                  </td>
+                  <td className="py-2 pr-2">
+                    {canRelance ? (
+                      <button
+                        className="disabled:cursor-default disabled:opacity-60"
+                        disabled={relancing !== null}
+                        onClick={() => handleRelance(s, "livret")}
+                        title="Cliquer pour (ré)envoyer le livret d'accueil au stagiaire"
+                      >
+                        <Badge className={`text-xs px-1.5 py-0.5 ${livret.color} cursor-pointer hover:opacity-75`}>{livret.label}</Badge>
+                      </button>
+                    ) : (
+                      <Badge className={`text-xs px-1.5 py-0.5 ${livret.color}`}>{livret.label}</Badge>
+                    )}
                   </td>
                   <td className="py-2 pr-2">
                     {s.doc_questionnaire_avant === "signe" ? (
@@ -1310,7 +1326,7 @@ const StagiairesList = ({
                 {/* Formulaire édition inline */}
                 {editingId === s.id && (
                   <tr>
-                    <td colSpan={10} className="py-2 px-0">
+                    <td colSpan={11} className="py-2 px-0">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-yellow-700">Modifier le stagiaire</p>
                         <div className="grid grid-cols-2 gap-2">
@@ -1339,6 +1355,7 @@ const StagiairesList = ({
           doc_programme, un champ jamais écrit nulle part : il affichait "en
           attente" en permanence quel que soit l'état réel. */}
       <div className="mt-3 flex gap-4 text-xs text-gray-500 flex-wrap">
+        <span>📘 Livret envoyé : {stagiaires.filter(s => s.doc_livret === "envoye").length}/{stagiaires.length}</span>
         <span>📝 Q. avant complété : {stagiaires.filter(s => s.doc_questionnaire_avant === "signe").length}/{stagiaires.length}</span>
         <span>✍️ Émargement signé : {stagiaires.filter(s => s.doc_emargement === "signe").length}/{stagiaires.length}</span>
         <span>📝 Q. après complété : {stagiaires.filter(s => s.doc_questionnaire_apres === "signe").length}/{stagiaires.length}</span>

@@ -749,6 +749,32 @@ const ClientDetail = () => {
       console.error("Erreur insertion session_dates (non bloquant):", datesError.message);
     }
 
+    // Correctif du 14/11/2026 (retour terrain Olivier, incident Nicolas Juvigny /
+    // "Le Plan d'Actions Commerciales") : formation_competences (liste de
+    // compétences/objectifs du questionnaire de positionnement) ne se générait
+    // jusqu'ici QUE si le formateur ouvrait la fiche formation après avoir
+    // uploadé son support/programme — rien ne le garantissait à la création
+    // d'une session. Résultat constaté en prod : un questionnaire vide envoyé
+    // au stagiaire, marqué "signé" sans aucune vraie réponse. On génère
+    // désormais automatiquement la liste (à partir du programme/support de la
+    // formation, cf. generer-competences) dès la création de la session, si
+    // elle n'existe pas encore pour cette formation — non bloquant : un échec
+    // ici ne doit pas empêcher la session d'être créée, le formateur pourra
+    // toujours régénérer/ajuster depuis la fiche formation.
+    const { data: compExistantes } = await supabase
+      .from("formation_competences")
+      .select("id")
+      .eq("formation_id", selectedFormation)
+      .maybeSingle();
+    if (!compExistantes) {
+      const { error: genCompErr } = await supabase.functions.invoke("generer-competences", {
+        body: { formation_id: selectedFormation },
+      });
+      if (genCompErr) {
+        console.error("Erreur génération automatique des compétences (non bloquant):", genCompErr.message);
+      }
+    }
+
     setSaving(false);
 
     toast({ title: "✅ Formation affectée", description: "La session a été créée. Le client peut maintenant importer ses stagiaires." });
