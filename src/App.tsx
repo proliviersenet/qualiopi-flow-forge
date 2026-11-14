@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStatutAbonnement } from "@/hooks/useStatutAbonnement";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Register from "./pages/Register";
@@ -49,7 +49,6 @@ import EmargementPublic from "./pages/EmargementPublic";
 import SupportPublic from "./pages/SupportPublic";
 import LivretPublic from "./pages/LivretPublic";
 import AttestationPublic from "./pages/AttestationPublic";
-import Features from "./pages/Features";
 import Demo from "./pages/Demo";
 import Mockup from "./pages/Mockup";
 import NotFound from "./pages/NotFound";
@@ -308,7 +307,9 @@ const App = () => (
               <Route path="/clients/:id" element={<ClientDetail />} />
               <Route path="/session/:id/preuve-audit" element={<PreuveAuditSession />} />
               <Route path="/sessions-sous-traitees/:sessionId" element={<SessionSousTraitee />} />
-              <Route path="/features" element={<Features />} />
+              {/* 14/11/2026 : l'ancienne page Fonctionnalités affichait une grille tarifaire
+                  obsolète (39 / 99 €) : redirigée vers la section de la page d'accueil. */}
+              <Route path="/features" element={<Navigate to="/#fonctionnalites" replace />} />
               <Route path="/demo" element={<Demo />} />
               <Route path="/mockup" element={<Mockup />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

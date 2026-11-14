@@ -124,8 +124,8 @@ const Contact = () => {
               <div className="space-y-4">
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
                   <p className="text-xs text-gray-400 uppercase font-semibold mb-2">Email direct</p>
-                  <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline text-sm break-all">
-                    olivier.senet@prospactive.com
+                  <a href="mailto:olivier@exsenco.fr" className="text-exsenco-blue hover:underline text-sm break-all">
+                    olivier@exsenco.fr
                   </a>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">

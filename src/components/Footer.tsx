@@ -1,6 +1,7 @@
 
 import { Link } from 'react-router-dom';
 import Logo from '@/components/Logo';
+import { CONTACT_EMAIL, EXSENCO_URL } from '@/lib/offre';
 
 // Profil LinkedIn personnel d'Olivier, en attendant la création d'une page
 // LinkedIn dédiée à QualioFlex (juillet 2026).
@@ -19,7 +20,7 @@ const Footer = () => {
             </Link>
             <p className="mt-2 text-sm text-gray-600 max-w-md">
               La plateforme qui simplifie la gestion administrative des formations
-              et garantit la conformité avec le référentiel Qualiopi.
+              et vous aide à réunir les preuves attendues par le référentiel Qualiopi.
             </p>
           </div>
           
@@ -27,6 +28,9 @@ const Footer = () => {
             <div>
               <h2 className="mb-6 text-sm font-semibold text-gray-900 uppercase">Ressources</h2>
               <ul className="text-gray-600 space-y-2">
+                <li>
+                  <Link to="/#tarifs" className="hover:underline">Tarifs</Link>
+                </li>
                 <li>
                   <Link to="/aide" className="hover:underline">Centre d'aide</Link>
                 </li>
@@ -45,10 +49,13 @@ const Footer = () => {
                   <Link to="/confidentialite" className="hover:underline">Politique de confidentialité</Link>
                 </li>
                 <li>
-                  <Link to="/conditions" className="hover:underline">Conditions d'utilisation</Link>
+                  <Link to="/conditions" className="hover:underline">Conditions générales</Link>
                 </li>
                 <li>
                   <Link to="/rgpd" className="hover:underline">RGPD</Link>
+                </li>
+                <li>
+                  <Link to="/mentions-legales" className="hover:underline">Mentions légales</Link>
                 </li>
               </ul>
             </div>
@@ -56,10 +63,13 @@ const Footer = () => {
               <h2 className="mb-6 text-sm font-semibold text-gray-900 uppercase">Contact</h2>
               <ul className="text-gray-600 space-y-2">
                 <li>
-                  <a href="mailto:olivier.senet@prospactive.com" className="hover:underline">Email</a>
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="hover:underline">{CONTACT_EMAIL}</a>
                 </li>
                 <li>
                   <Link to="/contact" className="hover:underline">Formulaire de contact</Link>
+                </li>
+                <li>
+                  <a href={EXSENCO_URL} target="_blank" rel="noopener noreferrer" className="hover:underline">ExSenCo</a>
                 </li>
               </ul>
             </div>
@@ -67,7 +77,7 @@ const Footer = () => {
         </div>
         <hr className="my-6 border-gray-200" />
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <span className="text-sm text-gray-500">© {currentYear} QualioFlex by SARL EXSENCO. Tous droits réservés.</span>
+          <span className="text-sm text-gray-500">© {currentYear} QualioFlex, un produit <a href={EXSENCO_URL} target="_blank" rel="noopener noreferrer" className="hover:underline">SARL EXSENCO</a>. Tous droits réservés.</span>
           <div className="flex gap-4 mt-2 md:mt-0">
             <Link to="/mentions-legales" className="text-xs text-gray-400 hover:underline">Mentions légales</Link>
             <Link to="/confidentialite" className="text-xs text-gray-400 hover:underline">Confidentialité</Link>

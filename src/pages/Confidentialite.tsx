@@ -1,84 +1,128 @@
 import { Link } from "react-router-dom";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import { useAuth } from "@/contexts/AuthContext";
+import PageLegale, { H2, H3 } from "@/components/PageLegale";
+import { SOUS_TRAITANTS } from "@/lib/sousTraitants";
+import { CONTACT_EMAIL } from "@/lib/offre";
 
-const Confidentialite = () => {
-  const { session, user: authUser } = useAuth();
-  const role = authUser?.user_metadata?.role;
-  const retourHref = session ? (role === "client" ? "/espace-client" : "/dashboard") : "/";
-  return (
-  <div className="flex flex-col min-h-screen">
-    <Header />
-    <main className="flex-grow bg-gray-50 py-12">
-      <div className="container mx-auto px-4 max-w-3xl">
-        <Link to={retourHref} className="text-exsenco-blue hover:text-blue-800 text-sm">&larr; Retour</Link>
-        <h1 className="text-3xl font-bold mt-4 mb-8" style={{ color: "#25245e" }}>Politique de confidentialité</h1>
-        <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
-          <p className="text-sm text-gray-400">Dernière mise à jour : 4 juillet 2026</p>
+// Politique de confidentialité — refonte du 14/11/2026 : abonnement et paiement
+// (Stripe), parrainage, IA (Anthropic), emails (Brevo, Resend), signature
+// (DocuSign), connexion Google, durées de conservation, transferts hors UE.
+// À faire relire par un conseil juridique avant publication.
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>1. Responsable du traitement</h2>
-            <p>QualioFlex est édité par <strong>SARL EXSENCO</strong>, dont le siège social est situé au 80 rue du Nouveau Bois, 37550 Saint-Avertin. SIRET : 892 787 458 000 17. Contact : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
-          </section>
+const SOMMAIRE = [
+  { id: "responsable", titre: "Responsable du traitement" },
+  { id: "roles", titre: "Nos deux rôles" },
+  { id: "donnees", titre: "Données collectées" },
+  { id: "finalites", titre: "Finalités et bases légales" },
+  { id: "conservation", titre: "Durées de conservation" },
+  { id: "destinataires", titre: "Destinataires et sous-traitants" },
+  { id: "transferts", titre: "Transferts hors Union européenne" },
+  { id: "securite", titre: "Sécurité" },
+  { id: "stockage", titre: "Cookies et stockage local" },
+  { id: "droits", titre: "Vos droits" },
+];
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>2. Données collectées</h2>
-            <p>Dans le cadre de l'utilisation de QualioFlex, nous collectons :</p>
-            <ul className="list-disc list-inside space-y-1 mt-2">
-              <li>Données d'identification : nom, prénom, adresse email, numéro de téléphone</li>
-              <li>Données professionnelles : raison sociale, SIRET, NDA, adresse de l'organisme</li>
-              <li>Données de formation : formations, sessions, stagiaires, BPF</li>
-              <li>Données de connexion : adresse IP, logs d'accès, cookies de session</li>
-            </ul>
-          </section>
+const Ligne = ({ f, b }: { f: string; b: string }) => (
+  <tr className="border-b border-gray-100 align-top"><td className="py-2 pr-4">{f}</td><td className="py-2 text-gray-600">{b}</td></tr>
+);
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>3. Finalités du traitement</h2>
-            <p>Vos données sont traitées pour :</p>
-            <ul className="list-disc list-inside space-y-1 mt-2">
-              <li>Fournir et améliorer les services QualioFlex</li>
-              <li>Assurer la gestion de votre compte utilisateur</li>
-              <li>Garantir la conformité avec le référentiel Qualiopi</li>
-              <li>Envoyer des notifications liées à votre activité (relances, signatures)</li>
-              <li>Respecter nos obligations légales et réglementaires</li>
-            </ul>
-          </section>
+const Confidentialite = () => (
+  <PageLegale titre="Politique de confidentialité" miseAJour="14 novembre 2026" sommaire={SOMMAIRE}>
+    <H2 id="responsable">1. Responsable du traitement</H2>
+    <p>
+      QualioFlex est édité par <strong>SARL EXSENCO</strong>, 80 rue du Nouveau Bois, 37550 Saint-Avertin, SIRET 892 787 458 00017.
+      Référent données personnelles : Olivier Senet, <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+    </p>
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>4. Base légale</h2>
-            <p>Le traitement repose sur l'exécution du contrat (conditions d'utilisation acceptées lors de l'inscription) et, le cas échéant, sur votre consentement explicite ou nos obligations légales.</p>
-          </section>
+    <H2 id="roles">2. Nos deux rôles</H2>
+    <ul>
+      <li><strong>Responsable de traitement</strong> pour les données de nos abonnés (formateurs, organismes de formation) : compte, abonnement, facturation, parrainage, support.</li>
+      <li><strong>Sous-traitant</strong> pour les données que nos abonnés saisissent sur leurs entreprises clientes et leurs stagiaires. L'abonné reste responsable de ce traitement et de l'information de ses stagiaires ; nous traitons ces données uniquement sur ses instructions, pour fournir le service. Le détail figure sur la page <Link to="/rgpd">RGPD</Link>.</li>
+    </ul>
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>5. Hébergement et sécurité</h2>
-            <p>Vos données sont hébergées sur les serveurs <strong>Supabase (Union Européenne)</strong>, conformes au RGPD. La plateforme est déployée via <strong>Vercel</strong>. Les communications sont chiffrées en TLS. Les mots de passe sont hachés (bcrypt).</p>
-          </section>
+    <H2 id="donnees">3. Données collectées</H2>
+    <ul>
+      <li><strong>Identification</strong> : nom, prénom, email, téléphone.</li>
+      <li><strong>Organisme</strong> : raison sociale, SIRET, numéro de déclaration d'activité, adresse, logo. Le SIRET est vérifié auprès de l'annuaire public des entreprises (API Recherche d'entreprises de l'État).</li>
+      <li><strong>Activité de formation</strong> : formations, sessions, entreprises clientes, stagiaires, documents, émargements, évaluations, BPF.</li>
+      <li><strong>Abonnement</strong> : statut, factures, sessions facturées, mois offerts, parrainages. Les données de carte bancaire sont collectées et conservées par Stripe ; nous ne voyons que la marque, les 4 derniers chiffres et la date d'expiration.</li>
+      <li><strong>Assistance</strong> : conversations avec l'assistant Qualios, messages envoyés au support.</li>
+      <li><strong>Connexion et sécurité</strong> : adresse IP, journaux d'accès, journal des modifications des données sensibles, double authentification.</li>
+    </ul>
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>6. Durée de conservation</h2>
-            <p>Vos données sont conservées pendant toute la durée de votre abonnement actif, puis 3 ans après la résiliation de votre compte, sauf obligation légale contraire.</p>
-          </section>
+    <H2 id="finalites">4. Finalités et bases légales</H2>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="text-left border-b border-gray-200"><th className="py-2 pr-4">Finalité</th><th className="py-2">Base légale</th></tr></thead>
+        <tbody>
+          <Ligne f="Fournir le service, gérer votre compte, envoyer les documents et relances" b="Exécution du contrat" />
+          <Ligne f="Gérer l'essai, l'abonnement, les paiements, les impayés et la facturation" b="Exécution du contrat" />
+          <Ligne f="Conserver les factures et pièces comptables" b="Obligation légale (Code de commerce)" />
+          <Ligne f="Programme de parrainage (codes, mois offerts, badges)" b="Exécution du contrat" />
+          <Ligne f="Emails d'information sur le parrainage et les nouveautés aux abonnés" b="Intérêt légitime (vous pouvez vous y opposer à tout moment)" />
+          <Ligne f="Fonctions d'intelligence artificielle et assistant Qualios" b="Exécution du contrat" />
+          <Ligne f="Sécurité, prévention de la fraude, journal des modifications" b="Intérêt légitime" />
+          <Ligne f="Répondre à vos demandes de support" b="Exécution du contrat ou intérêt légitime" />
+        </tbody>
+      </table>
+    </div>
+    <p className="text-sm text-gray-500">Nous ne vendons aucune donnée et n'effectuons aucune publicité ciblée.</p>
 
-          <section>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: "#25245e" }}>7. Vos droits</h2>
-            <p>Conformément au RGPD (Règlement 2016/679), vous disposez des droits suivants :</p>
-            <ul className="list-disc list-inside space-y-1 mt-2">
-              <li><strong>Accès</strong> : obtenir une copie de vos données personnelles</li>
-              <li><strong>Rectification</strong> : corriger des données inexactes</li>
-              <li><strong>Effacement</strong> : demander la suppression de vos données</li>
-              <li><strong>Portabilité</strong> : recevoir vos données dans un format structuré</li>
-              <li><strong>Opposition</strong> : vous opposer à certains traitements</li>
-            </ul>
-            <p className="mt-2">Pour exercer ces droits : <a href="mailto:olivier.senet@prospactive.com" className="text-exsenco-blue hover:underline">olivier.senet@prospactive.com</a></p>
-            <p className="mt-2">En cas de litige non résolu, vous pouvez saisir la <strong>CNIL</strong> : <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="text-exsenco-blue hover:underline">www.cnil.fr</a></p>
-          </section>
+    <H2 id="conservation">5. Durées de conservation</H2>
+    <ul>
+      <li><strong>Données du compte et d'activité</strong> : pendant toute la durée de l'abonnement, puis 3 ans après sa fin, afin de permettre la réactivation du compte et la récupération des preuves Qualiopi, sauf demande de suppression.</li>
+      <li><strong>Suppression de compte</strong> : après votre demande, les données sont conservées 30 jours (délai pendant lequel vous pouvez changer d'avis), puis supprimées définitivement.</li>
+      <li><strong>Factures et données de facturation</strong> : 10 ans, conformément au Code de commerce, y compris après la suppression du compte.</li>
+      <li><strong>Archive de récupération des données</strong> : lien de téléchargement valable 30 jours.</li>
+      <li><strong>Journaux de connexion</strong> : 12 mois au maximum.</li>
+    </ul>
+
+    <H2 id="destinataires">6. Destinataires et sous-traitants</H2>
+    <p>Vos données sont accessibles à ExSenCo pour les besoins du service et du support, ainsi qu'aux prestataires techniques suivants, liés par contrat :</p>
+    <div className="space-y-3 mt-3">
+      {SOUS_TRAITANTS.map((s) => (
+        <div key={s.nom} className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+          <p className="font-semibold text-gray-900">{s.nom} <span className="font-normal text-gray-500">· {s.usage}</span></p>
+          <p className="mt-1 text-gray-600">Données : {s.donnees}</p>
+          <p className="text-gray-600">Localisation : {s.localisation}</p>
+          <p className="text-gray-600">Garanties : {s.garanties} · <a href={s.lien} target="_blank" rel="noopener noreferrer">politique de confidentialité</a></p>
         </div>
-      </div>
-    </main>
-    <Footer />
-  </div>
-  );
-};
+      ))}
+    </div>
+    <p className="mt-3">Les entreprises clientes et stagiaires que vous invitez accèdent uniquement aux informations de leurs propres sessions.</p>
+
+    <H2 id="transferts">7. Transferts hors Union européenne</H2>
+    <p>
+      La base de données est hébergée dans l'Union européenne. Certains prestataires (Vercel, Stripe, Resend, Anthropic,
+      Google) peuvent traiter des données aux États-Unis. Ces transferts sont encadrés par les clauses contractuelles types
+      de la Commission européenne et, le cas échéant, par le Data Privacy Framework UE–États-Unis.
+    </p>
+
+    <H2 id="securite">8. Sécurité</H2>
+    <ul>
+      <li>Échanges chiffrés (HTTPS/TLS), mots de passe hachés, double authentification disponible.</li>
+      <li>Cloisonnement des données par organisme, contrôlé au niveau de la base de données.</li>
+      <li>Journal des modifications des données sensibles, accessible uniquement à l'administrateur.</li>
+      <li>Liens publics (émargement, évaluations) à jeton unique, sans accès au reste du compte.</li>
+    </ul>
+
+    <H2 id="stockage">9. Cookies et stockage local</H2>
+    <p>
+      QualioFlex n'utilise <strong>aucun cookie publicitaire ni outil de mesure d'audience</strong>. Seuls des éléments
+      strictement nécessaires sont enregistrés dans votre navigateur : session de connexion, conversation en cours avec
+      Qualios, code de parrainage reçu par lien, préférences d'affichage. Ils ne nécessitent pas de consentement. Les polices
+      de caractères sont hébergées sur nos propres serveurs.
+    </p>
+
+    <H2 id="droits">10. Vos droits</H2>
+    <p>Vous disposez des droits d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition, ainsi que du droit de définir des directives sur le sort de vos données après votre décès.</p>
+    <ul>
+      <li>La plupart des informations se modifient directement depuis votre profil.</li>
+      <li>Pour exercer vos droits : <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. Nous répondons sous un mois.</li>
+      <li>Si vous estimez que vos droits ne sont pas respectés, vous pouvez saisir la CNIL : <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener noreferrer">www.cnil.fr/fr/plaintes</a>.</li>
+    </ul>
+    <H3>Vous êtes stagiaire ou entreprise cliente ?</H3>
+    <p>Adressez d'abord votre demande à l'organisme de formation qui vous a invité : il est responsable du traitement de vos données. Nous l'aiderons à y répondre.</p>
+  </PageLegale>
+);
 
 export default Confidentialite;
